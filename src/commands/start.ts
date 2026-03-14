@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
-import { allTaskIds } from "../lib/task.js";
+import { allTaskIds, loadTaskMeta } from "../lib/task.js";
 import { writeDaemonState, logDaemon } from "../lib/logging.js";
 import { workers } from "../workers/index.js";
 import { POLL_INTERVAL_MS } from "../lib/constants.js";
@@ -11,11 +11,13 @@ import { loadResolvedProjectConfig } from "../lib/config.js";
 import { providerHealthToHuman } from "../lib/human-messages.js";
 import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
+import { createStartProgressRenderer } from "../lib/start-progress.js";
 
 export const startCommand = new Command("start")
   .description("Start the engine, recover unfinished work, and keep processing tasks")
   .option("--force", "start even when readiness checks fail")
-  .action(async (options) => {
+  .option("--no-progress", "disable live progress indicator")
+  .action(async (options: { force?: boolean; progress?: boolean }) => {
     await ensureGlobalInitialized();
     await ensureProjectInitialized();
 
@@ -55,25 +57,42 @@ export const startCommand = new Command("start")
     console.log(`Tip: in another terminal, run \`${commandExample("new")}\` and \`${commandExample("status")}\`.`);
     await logDaemon("Engine started.");
 
+    const engineStartedAtMs = Date.now();
+    const progress = createStartProgressRenderer({ enabled: options.progress !== false });
+
     let loop = 0;
-    while (true) {
-      loop += 1;
-      const taskIds = await allTaskIds();
+    try {
+      while (true) {
+        loop += 1;
+        const taskIds = await allTaskIds();
 
-      for (const taskId of taskIds) {
-        for (const worker of workers) {
-          await worker.tryProcess(taskId);
+        for (const taskId of taskIds) {
+          for (const worker of workers) {
+            await worker.tryProcess(taskId);
+          }
         }
+
+        await writeDaemonState({
+          pid: process.pid,
+          lastHeartbeatAt: nowIso(),
+          loop,
+          taskCount: taskIds.length,
+          workerCount: workers.length,
+        });
+
+        const metaResults = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
+        const metas = metaResults
+          .filter((item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof loadTaskMeta>>> => item.status === "fulfilled")
+          .map((item) => item.value);
+        progress.render({
+          loop,
+          engineStartedAtMs,
+          metas,
+        });
+
+        await sleep(POLL_INTERVAL_MS);
       }
-
-      await writeDaemonState({
-        pid: process.pid,
-        lastHeartbeatAt: nowIso(),
-        loop,
-        taskCount: taskIds.length,
-        workerCount: workers.length,
-      });
-
-      await sleep(POLL_INTERVAL_MS);
+    } finally {
+      progress.stop();
     }
   });
