@@ -147,6 +147,8 @@ This works well with:
 - If E2E infrastructure is missing, implementation agents are instructed to add an E2E script/test path as part of remediation.
 - `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
+- QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
+- QA return context is cumulative across retries and is passed forward again on each new remediation loop.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
 
@@ -157,6 +159,7 @@ This works well with:
   - `.ai-agents/tasks/<task-id>/done/04-implementation.done.json`
   - `.ai-agents/tasks/<task-id>/done/04b-bug-fixer.done.json` (bug path)
   - `.ai-agents/tasks/<task-id>/done/06-qa.done.json`
+  - `.ai-agents/tasks/<task-id>/artifacts/qa-return-context-history.json` (cumulative QA return context)
 
 ## Provider stability controls
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
