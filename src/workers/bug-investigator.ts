@@ -23,7 +23,7 @@ export class BugInvestigatorWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "nextAgent": "Feature Builder" }',
+        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "nextAgent": "Bug Fixer" }',
     });
     const output = bugInvestigatorOutputSchema.parse(result.parsed);
 
@@ -48,7 +48,7 @@ ${output.investigationSteps.length ? output.investigationSteps.map((x, index) =>
 ${output.unknowns.length ? output.unknowns.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Next
-Feature Builder
+Bug Fixer
 `;
 
     await this.finishStage({
@@ -58,9 +58,9 @@ Feature Builder
       viewFileName: "02b-bug-investigator.md",
       viewContent: view,
       output,
-      nextAgent: "Feature Builder",
-      nextStage: "builder",
-      nextRequestFileName: STAGE_FILE_NAMES.builder,
+      nextAgent: "Bug Fixer",
+      nextStage: "bug-fixer",
+      nextRequestFileName: STAGE_FILE_NAMES.bugFixer,
       nextInputRef: `done/${DONE_FILE_NAMES.bugInvestigator}`,
       startedAt,
       provider: result.provider,

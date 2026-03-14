@@ -44,6 +44,7 @@ const WORKING_TO_REQUEST_FILE: Record<string, string> = {
   "00-dispatcher.working.json": STAGE_FILE_NAMES.dispatcher,
   "02-planner.working.json": STAGE_FILE_NAMES.planner,
   "02b-bug-investigator.working.json": STAGE_FILE_NAMES.bugInvestigator,
+  "04b-bug-fixer.working.json": STAGE_FILE_NAMES.bugFixer,
   "04-builder.working.json": STAGE_FILE_NAMES.builder,
   "05-reviewer.working.json": STAGE_FILE_NAMES.reviewer,
   "06-qa.working.json": STAGE_FILE_NAMES.qa,
@@ -138,7 +139,31 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
         inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
         agent: "Bug Investigator",
       };
+    case "Bug Fixer":
+      if (await exists(done(DONE_FILE_NAMES.qa))) {
+        return {
+          stage: "bug-fixer",
+          requestFileName: STAGE_FILE_NAMES.bugFixer,
+          inputRef: `done/${DONE_FILE_NAMES.qa}`,
+          agent: "Bug Fixer",
+        };
+      }
+      if (!(await exists(done(DONE_FILE_NAMES.bugInvestigator)))) return null;
+      return {
+        stage: "bug-fixer",
+        requestFileName: STAGE_FILE_NAMES.bugFixer,
+        inputRef: `done/${DONE_FILE_NAMES.bugInvestigator}`,
+        agent: "Bug Fixer",
+      };
     case "Feature Builder":
+      if (await exists(done(DONE_FILE_NAMES.qa))) {
+        return {
+          stage: "builder",
+          requestFileName: STAGE_FILE_NAMES.builder,
+          inputRef: `done/${DONE_FILE_NAMES.qa}`,
+          agent: "Feature Builder",
+        };
+      }
       if (await exists(done(DONE_FILE_NAMES.bugInvestigator))) {
         return {
           stage: "builder",
@@ -157,6 +182,14 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
       }
       return null;
     case "Reviewer":
+      if (await exists(done(DONE_FILE_NAMES.bugFixer))) {
+        return {
+          stage: "reviewer",
+          requestFileName: STAGE_FILE_NAMES.reviewer,
+          inputRef: `done/${DONE_FILE_NAMES.bugFixer}`,
+          agent: "Reviewer",
+        };
+      }
       if (!(await exists(done(DONE_FILE_NAMES.builder)))) return null;
       return {
         stage: "reviewer",

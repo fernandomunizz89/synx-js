@@ -56,7 +56,7 @@ export async function ensureProjectInitialized(): Promise<void> {
   if (!(await exists(routingConfig))) {
     await writeJson(routingConfig, {
       Feature: ["Dispatcher", "Spec Planner", "Feature Builder", "Reviewer", "QA Validator", "PR Writer"],
-      Bug: ["Dispatcher", "Bug Investigator", "Feature Builder", "Reviewer", "QA Validator", "PR Writer"]
+      Bug: ["Dispatcher", "Bug Investigator", "Bug Fixer", "Reviewer", "QA Validator", "PR Writer"]
     });
   }
 
@@ -68,6 +68,9 @@ export async function ensureProjectInitialized(): Promise<void> {
 
   const bugInvestigatorPrompt = path.join(promptsDir(), "bug-investigator.md");
   if (!(await exists(bugInvestigatorPrompt))) await writeText(bugInvestigatorPrompt, BUG_INVESTIGATOR_PROMPT.trim() + "\n");
+
+  const bugFixerPrompt = path.join(promptsDir(), "bug-fixer.md");
+  if (!(await exists(bugFixerPrompt))) await writeText(bugFixerPrompt, BUG_FIXER_PROMPT.trim() + "\n");
 
   const builderPrompt = path.join(promptsDir(), "feature-builder.md");
   if (!(await exists(builderPrompt))) await writeText(builderPrompt, BUILDER_PROMPT.trim() + "\n");
@@ -173,7 +176,43 @@ Return exactly:
   "likelyCauses": ["string"],
   "investigationSteps": ["string"],
   "unknowns": ["string"],
-  "nextAgent": "Feature Builder"
+  "nextAgent": "Bug Fixer"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const BUG_FIXER_PROMPT = `
+You are the Bug Fixer agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You must be conservative and evidence-driven.
+Fix the root cause using real code edits in relevant files.
+It is allowed to edit multiple related files when needed for a complete bug fix.
+Do not claim code changes that were not actually proposed as file edits.
+When test infra exists, add or update unit tests that cover the bug and happy path.
+If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
+Only use paths that are valid for the workspace and avoid protected folders.
+
+Return exactly:
+{
+  "implementationSummary": "string",
+  "filesChanged": ["string"],
+  "changesMade": ["string"],
+  "unitTestsAdded": ["string"],
+  "testsToRun": ["string"],
+  "risks": ["string"],
+  "edits": [
+    {
+      "path": "relative/path.ext",
+      "action": "create | replace | replace_snippet | delete",
+      "content": "required for create/replace",
+      "find": "required for replace_snippet",
+      "replace": "required for replace_snippet"
+    }
+  ],
+  "nextAgent": "Reviewer"
 }
 
 Input JSON:
@@ -186,7 +225,10 @@ Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
 
 You must be conservative.
 Apply real code changes in the target workspace.
+It is allowed to edit multiple related files when needed for a complete feature/refactor implementation.
 Do not claim code changes that were not actually proposed as file edits.
+When unit test infrastructure exists, add or update unit tests for the delivered behavior.
+If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
 Only use paths that are valid for the workspace and avoid protected folders.
 Keep edits minimal and implementation-oriented.
 
@@ -195,6 +237,7 @@ Return exactly:
   "implementationSummary": "string",
   "filesChanged": ["string"],
   "changesMade": ["string"],
+  "unitTestsAdded": ["string"],
   "testsToRun": ["string"],
   "risks": ["string"],
   "edits": [
@@ -250,6 +293,7 @@ Return exactly:
   "acceptanceChecklist": ["string"],
   "failures": ["string"],
   "verdict": "pass | fail",
+  "e2ePlan": ["string"],
   "changedFiles": ["string"],
   "executedChecks": [
     {
@@ -262,7 +306,7 @@ Return exactly:
       "stderrPreview": "string"
     }
   ],
-  "nextAgent": "PR Writer"
+  "nextAgent": "PR Writer | Feature Builder | Bug Fixer"
 }
 
 Input JSON:

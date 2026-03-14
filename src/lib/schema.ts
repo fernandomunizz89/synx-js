@@ -65,7 +65,7 @@ export const bugInvestigatorOutputSchema = z.object({
   likelyCauses: z.array(z.string()),
   investigationSteps: z.array(z.string()),
   unknowns: z.array(z.string()),
-  nextAgent: z.literal("Feature Builder"),
+  nextAgent: z.literal("Bug Fixer"),
 });
 
 export const builderEditSchema = z.object({
@@ -105,6 +105,18 @@ export const builderOutputSchema = z.object({
   implementationSummary: z.string(),
   filesChanged: z.array(z.string()),
   changesMade: z.array(z.string()),
+  unitTestsAdded: z.array(z.string()).optional().default([]),
+  testsToRun: z.array(z.string()),
+  risks: z.array(z.string()),
+  edits: z.array(builderEditSchema).min(1),
+  nextAgent: z.literal("Reviewer"),
+});
+
+export const bugFixerOutputSchema = z.object({
+  implementationSummary: z.string(),
+  filesChanged: z.array(z.string()),
+  changesMade: z.array(z.string()),
+  unitTestsAdded: z.array(z.string()).optional().default([]),
   testsToRun: z.array(z.string()),
   risks: z.array(z.string()),
   edits: z.array(builderEditSchema).min(1),
@@ -134,9 +146,10 @@ export const qaOutputSchema = z.object({
   acceptanceChecklist: z.array(z.string()),
   failures: z.array(z.string()),
   verdict: z.enum(["pass", "fail"]),
+  e2ePlan: z.array(z.string()).optional().default([]),
   changedFiles: z.array(z.string()).optional().default([]),
   executedChecks: z.array(validationCheckResultSchema).optional().default([]),
-  nextAgent: z.literal("PR Writer"),
+  nextAgent: z.union([z.literal("PR Writer"), z.literal("Feature Builder"), z.literal("Bug Fixer")]),
 });
 
 export const prWriterOutputSchema = z.object({

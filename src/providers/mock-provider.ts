@@ -53,7 +53,30 @@ export class MockProvider implements LlmProvider {
           likelyCauses: ["Implementation does not match expected behavior."],
           investigationSteps: ["Locate relevant files.", "Apply minimal correction.", "Validate changes."],
           unknowns: ["Precise root cause before file inspection."],
-          nextAgent: "Feature Builder",
+          nextAgent: "Bug Fixer",
+        };
+        break;
+      case "Bug Fixer":
+        parsed = {
+          implementationSummary: "Applied a minimal bug-fix mock change to prove end-to-end execution.",
+          filesChanged: ["mock-change.txt"],
+          changesMade: ["Wrote a marker file with bug-fix summary."],
+          unitTestsAdded: ["mock-change.test.txt"],
+          testsToRun: ["npm run --if-present check", "npm run --if-present test"],
+          risks: ["Mock provider does not reason over real code semantics."],
+          edits: [
+            {
+              path: "mock-change.txt",
+              action: "replace",
+              content: `mock bug fix generated at ${new Date().toISOString()}\n`,
+            },
+            {
+              path: "mock-change.test.txt",
+              action: "replace",
+              content: `mock unit test placeholder generated at ${new Date().toISOString()}\n`,
+            },
+          ],
+          nextAgent: "Reviewer",
         };
         break;
       case "Feature Builder":
@@ -61,6 +84,7 @@ export class MockProvider implements LlmProvider {
           implementationSummary: "Applied a minimal mock change to prove end-to-end execution.",
           filesChanged: ["mock-change.txt"],
           changesMade: ["Wrote a marker file with task summary."],
+          unitTestsAdded: ["mock-change.test.txt"],
           testsToRun: ["npm run --if-present check", "npm run --if-present test"],
           risks: ["Mock provider does not reason over real code semantics."],
           edits: [
@@ -68,6 +92,11 @@ export class MockProvider implements LlmProvider {
               path: "mock-change.txt",
               action: "replace",
               content: `mock change generated at ${new Date().toISOString()}\n`,
+            },
+            {
+              path: "mock-change.test.txt",
+              action: "replace",
+              content: `mock unit test placeholder generated at ${new Date().toISOString()}\n`,
             },
           ],
           nextAgent: "Reviewer",
@@ -88,6 +117,7 @@ export class MockProvider implements LlmProvider {
           acceptanceChecklist: ["Change exists in git diff."],
           failures: [],
           verdict: "pass",
+          e2ePlan: ["Run main user flow end-to-end if project has an e2e script."],
           changedFiles: ["mock-change.txt"],
           executedChecks: [],
           nextAgent: "PR Writer",

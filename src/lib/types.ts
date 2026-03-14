@@ -13,6 +13,7 @@ export type AgentName =
   | "Dispatcher"
   | "Spec Planner"
   | "Bug Investigator"
+  | "Bug Fixer"
   | "Feature Builder"
   | "Reviewer"
   | "QA Validator"

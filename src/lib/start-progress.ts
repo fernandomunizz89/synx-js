@@ -17,14 +17,17 @@ function formatDuration(ms: number): string {
 
 function stageRoute(meta: TaskMeta): string[] {
   const stagesInHistory = new Set(meta.history.map((x) => x.stage));
+  if (stagesInHistory.has("bug-fixer")) {
+    return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
+  }
   if (stagesInHistory.has("bug-investigator")) {
-    return ["dispatcher", "bug-investigator", "builder", "reviewer", "qa", "pr"];
+    return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
   }
   if (stagesInHistory.has("planner")) {
     return ["dispatcher", "planner", "builder", "reviewer", "qa", "pr"];
   }
   if (meta.type === "Bug") {
-    return ["dispatcher", "bug-investigator", "builder", "reviewer", "qa", "pr"];
+    return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
   }
   return ["dispatcher", "planner", "builder", "reviewer", "qa", "pr"];
 }
@@ -39,6 +42,8 @@ function stageLabel(stage: string): string {
       return "Bug Investigator";
     case "builder":
       return "Feature Builder";
+    case "bug-fixer":
+      return "Bug Fixer";
     case "reviewer":
       return "Reviewer";
     case "qa":
@@ -99,11 +104,23 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
   readonly enabled = true;
   private linesRendered = 0;
   private tick = 0;
+  private cursorHidden = false;
+
+  private terminalWidth(): number {
+    return Math.max(60, process.stdout.columns || 120);
+  }
+
+  private clipLine(line: string, width: number): string {
+    if (line.length <= width) return line;
+    if (width <= 4) return line.slice(0, width);
+    return `${line.slice(0, width - 3)}...`;
+  }
 
   render(snapshot: StartProgressSnapshot): void {
     this.tick += 1;
     const spinner = SPINNER_FRAMES[this.tick % SPINNER_FRAMES.length];
     const now = Date.now();
+    const width = this.terminalWidth() - 1;
 
     const counts = {
       active: snapshot.metas.filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status)).length,
@@ -140,17 +157,28 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       }
     }
 
+    const clippedLines = lines.map((line) => this.clipLine(line, width));
+
+    if (!this.cursorHidden) {
+      process.stdout.write("\x1b[?25l");
+      this.cursorHidden = true;
+    }
+
     if (this.linesRendered > 0) {
       process.stdout.write(`\x1b[${this.linesRendered}A`);
     }
     process.stdout.write("\x1b[0J");
-    process.stdout.write(`${lines.join("\n")}\n`);
-    this.linesRendered = lines.length;
+    process.stdout.write(`${clippedLines.join("\n")}\n`);
+    this.linesRendered = clippedLines.length;
   }
 
   stop(): void {
-    if (!this.linesRendered) return;
+    if (!this.linesRendered && !this.cursorHidden) return;
     process.stdout.write("\x1b[0m");
+    if (this.cursorHidden) {
+      process.stdout.write("\x1b[?25h");
+      this.cursorHidden = false;
+    }
     this.linesRendered = 0;
   }
 }
