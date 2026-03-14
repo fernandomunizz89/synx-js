@@ -70,6 +70,11 @@ Or:
 ai-agents new "Add dark mode toggle" --type Feature
 ```
 
+You can also set human QA direction for E2E in the task itself:
+```bash
+ai-agents new "Fix timer import/export + Cypress failures" --type Bug --e2e required --e2e-framework cypress --qa-objective "Fazer os testes E2E do Cypress passarem."
+```
+
 Supported task types:
 - `Feature`
 - `Bug`
@@ -83,6 +88,7 @@ Routing summary:
 - Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
 - QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
 - QA captures compact diagnostics from failed checks (including Cypress/E2E) and sends expected-vs-received evidence in the handoff
+- QA/implementation now follow human per-task E2E preferences (`--e2e`, `--e2e-framework`, `--qa-objective`)
 - QA fail handoff includes structured context per blocker: expected result, received result, evidence, and recommended action
 - QA return context is cumulative and updated on each loop so the next implementation attempt sees prior QA findings
 - QA now emits explicit test cases with expected vs actual results (real QA mindset)

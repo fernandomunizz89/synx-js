@@ -5,6 +5,7 @@
 - Dynamic command hints that match how the CLI was invoked.
 - Human-friendly next-step guidance after key commands.
 - Explicit task type support in `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
+- Per-task human QA preferences in `new` for E2E policy/framework/objective (`--e2e`, `--e2e-framework`, `--qa-objective`).
 - Live `start` terminal indicator with spinner, elapsed time, stage-based per-task progress bars, and task counters (`--no-progress` available).
 - `status` now defaults to a focused view (current task or latest completed), with `status --all` for full history.
 
@@ -42,6 +43,7 @@
 - Bug tasks now route through `Bug Investigator -> Bug Fixer`.
 - QA can send failed tasks back to the correct implementation agent (`Bug Fixer` for bugs, `Feature Builder` for non-bugs).
 - QA now converts failed check output into compact, actionable remediation context (expected vs received + evidence + recommended action).
+- QA and implementation stages now honor human-defined E2E quality gates from task input.
 - QA failure now carries structured blocker context (`expectedResult` vs `receivedResult`, evidence, and recommended action).
 - QA return context is cumulative across retries and is refreshed on every new return.
 - QA output now includes concrete test cases (`expectedResult` vs `actualResult`) to emulate real QA validation.

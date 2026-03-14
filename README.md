@@ -33,6 +33,19 @@ Supported values for `ai-agents new --type <type>`:
 - `Documentation`
 - `Mixed`
 
+## Human QA Input Per Task
+`ai-agents new` now captures human QA preferences for E2E:
+- `--e2e auto|required|skip`
+- `--e2e-framework auto|cypress|playwright|other`
+- `--qa-objective "<goal>"`
+
+Example:
+```bash
+ai-agents new "Fix timer import/export + Cypress failures" --type Bug --e2e required --e2e-framework cypress --qa-objective "Fazer os testes E2E do Cypress passarem."
+```
+
+These preferences are passed to QA, Feature Builder, and Bug Fixer as explicit quality gates.
+
 ## Feature summary
 - See [FEATURES.md](./FEATURES.md) for the initial feature set included in this baseline commit.
 
@@ -152,6 +165,7 @@ This works well with:
 - QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
 - QA now enriches failed checks (especially Cypress/E2E) with compact diagnostics, artifacts, and runtime QA config notes.
 - Cypress QA runs use low-noise runtime overrides (e.g., reduced screenshot/video noise) to prioritize actionable failure context.
+- QA honors human per-task E2E preferences (policy/framework/objective) and validates against that target.
 - On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
