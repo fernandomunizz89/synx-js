@@ -9,8 +9,8 @@ import type { AgentName, StageEnvelope } from "../lib/types.js";
 import {
   buildFallbackQaReturnContextItems,
   buildQaCumulativeFindings,
-  mergeQaReturnContextItems,
-  normalizeQaReturnContextItems,
+  compactQaReturnContextItems,
+  compactQaReturnHistoryEntries,
   normalizeQaReturnHistoryEntries,
   type QaHandoffContext,
   type QaReturnHistoryEntry,
@@ -30,6 +30,12 @@ function resolveQaMaxRetries(): number {
   return DEFAULT_QA_MAX_RETRIES;
 }
 
+function trimText(value: string, maxChars = 240): string {
+  const next = value.trim();
+  if (next.length <= maxChars) return next;
+  return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
 function qaReturnHistoryPath(taskId: string): string {
   return path.join(taskDir(taskId), "artifacts", "qa-return-context-history.json");
 }
@@ -39,7 +45,7 @@ async function loadQaReturnHistory(taskId: string): Promise<QaReturnHistoryEntry
   if (!(await exists(historyPath))) return [];
   try {
     const payload = await readJson<{ entries?: unknown }>(historyPath);
-    return normalizeQaReturnHistoryEntries(payload.entries);
+    return compactQaReturnHistoryEntries(normalizeQaReturnHistoryEntries(payload.entries));
   } catch {
     return [];
   }
@@ -81,6 +87,123 @@ function formatReturnHistoryForView(history: QaReturnHistoryEntry[]): string {
       const summary = entry.summary || "[no summary]";
       return `- Attempt ${entry.attempt} -> ${entry.returnedTo} | findings=${entry.findings.length} | ${summary}`;
     })
+    .join("\n");
+}
+
+function compactChecksForModel(
+  checks: Array<{
+    command: string;
+    status: "passed" | "failed" | "skipped";
+    exitCode: number | null;
+    timedOut: boolean;
+    durationMs: number;
+    stdoutPreview: string;
+    stderrPreview: string;
+  }>,
+): Array<{
+  command: string;
+  status: "passed" | "failed" | "skipped";
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  stdoutPreview: string;
+  stderrPreview: string;
+}> {
+  return checks.map((x) => ({
+    ...x,
+    stdoutPreview: trimText(x.stdoutPreview, 500),
+    stderrPreview: trimText(x.stderrPreview, 500),
+  }));
+}
+
+interface QaTestCaseLike {
+  id: string;
+  title: string;
+  type: "functional" | "regression" | "integration" | "e2e" | "unit" | "config";
+  steps: string[];
+  expectedResult: string;
+  actualResult: string;
+  status: "pass" | "fail" | "blocked";
+  evidence: string[];
+}
+
+function compactQaTestCases(testCases: QaTestCaseLike[]): QaTestCaseLike[] {
+  const normalized = testCases
+    .map((x, index) => ({
+      id: x.id || `TC-${index + 1}`,
+      title: trimText(x.title || `QA Test Case ${index + 1}`, 120),
+      type: x.type,
+      steps: x.steps.map((step) => trimText(step, 140)).slice(0, 5),
+      expectedResult: trimText(x.expectedResult, 220),
+      actualResult: trimText(x.actualResult, 220),
+      status: x.status,
+      evidence: x.evidence.map((item) => trimText(item, 160)).slice(0, 3),
+    }))
+    .filter((x) => Boolean(x.title && x.expectedResult && x.actualResult));
+
+  return normalized.slice(0, 6);
+}
+
+function buildFallbackQaTestCases(args: {
+  failures: string[];
+  returnContext: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[] }>;
+  executedChecks: Array<{ command: string; status: "passed" | "failed" | "skipped"; exitCode: number | null }>;
+}): QaTestCaseLike[] {
+  const output: QaTestCaseLike[] = [];
+  const checks = args.executedChecks;
+
+  if (checks.length) {
+    for (const check of checks.slice(0, 3)) {
+      output.push({
+        id: `CHK-${output.length + 1}`,
+        title: `Run check: ${check.command}`,
+        type: /e2e|playwright|cypress/i.test(check.command) ? "e2e" : "regression",
+        steps: [`Execute ${check.command}`],
+        expectedResult: "Command exits with code 0.",
+        actualResult: `status=${check.status}, exit=${check.exitCode ?? "null"}`,
+        status: check.status === "passed" ? "pass" : "fail",
+        evidence: [`${check.command} => ${check.status}`],
+      });
+    }
+  }
+
+  for (const item of args.returnContext.slice(0, 4)) {
+    output.push({
+      id: `RC-${output.length + 1}`,
+      title: item.issue,
+      type: /e2e|playwright|cypress/i.test(item.issue) ? "e2e" : "functional",
+      steps: ["Reproduce the issue using current workspace state."],
+      expectedResult: item.expectedResult,
+      actualResult: item.receivedResult,
+      status: "fail",
+      evidence: item.evidence,
+    });
+  }
+
+  if (!output.length && args.failures.length) {
+    for (const failure of args.failures.slice(0, 3)) {
+      output.push({
+        id: `F-${output.length + 1}`,
+        title: trimText(failure, 120),
+        type: /e2e|playwright|cypress/i.test(failure) ? "e2e" : "functional",
+        steps: ["Reproduce the failure from QA report."],
+        expectedResult: "Acceptance criteria should pass.",
+        actualResult: trimText(failure, 220),
+        status: "fail",
+        evidence: [],
+      });
+    }
+  }
+
+  return compactQaTestCases(output);
+}
+
+function formatTestCasesForView(testCases: QaTestCaseLike[]): string {
+  if (!testCases.length) return "- [none]";
+  return testCases
+    .map((tc) => `- ${tc.id} | ${tc.type.toUpperCase()} | ${tc.status.toUpperCase()} | ${tc.title}
+  Expected: ${tc.expectedResult}
+  Actual: ${tc.actualResult}`)
     .join("\n");
 }
 
@@ -138,6 +261,7 @@ export class QaWorker extends WorkerBase {
     const currentQaAttempt = previousQaAttempts + 1;
     const maxQaRetries = resolveQaMaxRetries();
     const previousReturnHistory = await loadQaReturnHistory(taskId);
+    const compactChecks = compactChecksForModel(executedChecks);
 
     const hardFailures: string[] = [];
     if (!changedFiles.length) {
@@ -176,7 +300,7 @@ export class QaWorker extends WorkerBase {
       },
       validationEvidence: {
         changedFiles,
-        executedChecks,
+        executedChecks: compactChecks,
         reportedUnitTests,
       },
     };
@@ -191,6 +315,8 @@ MANDATORY VALIDATION CONTRACT:
 - If verdict is "fail", set "nextAgent" to "${remediationAgent}".
 - If verdict is "fail", fill "returnContext" with actionable items using "issue", "expectedResult", and "receivedResult".
 - Each "returnContext" item must include concrete evidence and a recommended action for the next agent.
+- Populate "testCases" as a real QA would: include concrete expectedResult vs actualResult and status.
+- Keep "testCases" concise and evidence-driven (max 6).
 - If verdict is "pass", set "nextAgent" to "PR Writer".
 - This QA attempt is ${currentQaAttempt} of max ${maxQaRetries} before forced human escalation.
 - Keep failures specific and actionable.
@@ -202,11 +328,11 @@ MANDATORY VALIDATION CONTRACT:
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string" }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string" }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
-    output.executedChecks = executedChecks;
+    output.executedChecks = compactChecks;
     output.failures = unique([...output.failures, ...hardFailures]);
     if (output.failures.length) {
       output.verdict = "fail";
@@ -224,11 +350,24 @@ MANDATORY VALIDATION CONTRACT:
       ]);
     }
 
-    output.returnContext = mergeQaReturnContextItems([
-      ...normalizeQaReturnContextItems(output.returnContext),
+    output.returnContext = compactQaReturnContextItems([
+      ...output.returnContext,
       ...buildFallbackQaReturnContextItems({
         failures: output.failures,
         changedFiles: output.changedFiles,
+        executedChecks: output.executedChecks.map((x) => ({
+          command: x.command,
+          status: x.status,
+          exitCode: x.exitCode,
+        })),
+        existing: output.returnContext,
+      }),
+    ]);
+    output.testCases = compactQaTestCases([
+      ...output.testCases,
+      ...buildFallbackQaTestCases({
+        failures: output.failures,
+        returnContext: output.returnContext,
         executedChecks: output.executedChecks.map((x) => ({
           command: x.command,
           status: x.status,
@@ -249,6 +388,7 @@ MANDATORY VALIDATION CONTRACT:
       };
       qaReturnHistory = [...previousReturnHistory.filter((x) => x.attempt !== currentQaAttempt), latestReturnEntry]
         .sort((a, b) => a.attempt - b.attempt);
+      qaReturnHistory = compactQaReturnHistoryEntries(qaReturnHistory);
       await saveQaReturnHistory(taskId, qaReturnHistory);
     }
 
@@ -284,6 +424,9 @@ ${output.mainScenarios.length ? output.mainScenarios.map((x, index) => `${index 
 
 ## Acceptance Checklist
 ${output.acceptanceChecklist.length ? output.acceptanceChecklist.map((x) => `- [ ] ${x}`).join("\n") : "- [none]"}
+
+## QA Test Cases
+${formatTestCasesForView(output.testCases)}
 
 ## Failures
 ${output.failures.length ? output.failures.map((x) => `- ${x}`).join("\n") : "- [none]"}

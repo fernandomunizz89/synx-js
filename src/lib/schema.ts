@@ -141,6 +141,17 @@ export const validationCheckResultSchema = z.object({
   stderrPreview: z.string(),
 });
 
+export const qaTestCaseSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  type: z.enum(["functional", "regression", "integration", "e2e", "unit", "config"]),
+  steps: z.array(z.string()).optional().default([]),
+  expectedResult: z.string(),
+  actualResult: z.string(),
+  status: z.enum(["pass", "fail", "blocked"]),
+  evidence: z.array(z.string()).optional().default([]),
+});
+
 export const qaReturnContextItemSchema = z.object({
   issue: z.string(),
   expectedResult: z.string(),
@@ -177,6 +188,7 @@ export const qaHandoffContextSchema = z.object({
 export const qaOutputSchema = z.object({
   mainScenarios: z.array(z.string()),
   acceptanceChecklist: z.array(z.string()),
+  testCases: z.array(qaTestCaseSchema).optional().default([]),
   failures: z.array(z.string()),
   verdict: z.enum(["pass", "fail"]),
   e2ePlan: z.array(z.string()).optional().default([]),

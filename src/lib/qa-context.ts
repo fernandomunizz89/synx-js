@@ -39,6 +39,12 @@ interface CheckLike {
   exitCode: number | null;
 }
 
+const DEFAULT_MAX_FINDINGS = 6;
+const DEFAULT_MAX_EVIDENCE = 3;
+const DEFAULT_MAX_TEXT_CHARS = 220;
+const DEFAULT_MAX_HISTORY_ENTRIES = 6;
+const DEFAULT_MAX_CUMULATIVE_FINDINGS = 10;
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -59,6 +65,26 @@ function isQaRemediationAgent(value: string): value is QaRemediationAgent {
 
 function contextKey(item: QaReturnContextItem): string {
   return `${item.issue.toLowerCase()}|||${item.expectedResult.toLowerCase()}|||${item.receivedResult.toLowerCase()}`;
+}
+
+function trimText(value: string, maxChars: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function normalizeIssueKey(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function isGenericFallbackItem(item: QaReturnContextItem): boolean {
+  return /acceptance criteria and validation checks should pass\.?/i.test(item.expectedResult);
+}
+
+function issueOverlaps(a: string, b: string): boolean {
+  const aa = normalizeIssueKey(a);
+  const bb = normalizeIssueKey(b);
+  return aa.includes(bb) || bb.includes(aa);
 }
 
 export function normalizeQaReturnContextItems(value: unknown): QaReturnContextItem[] {
@@ -118,6 +144,48 @@ export function mergeQaReturnContextItems(items: QaReturnContextItem[]): QaRetur
   return Array.from(merged.values());
 }
 
+export function compactQaReturnContextItems(
+  items: QaReturnContextItem[],
+  options?: {
+    maxItems?: number;
+    maxEvidencePerItem?: number;
+    maxTextChars?: number;
+  },
+): QaReturnContextItem[] {
+  const maxItems = options?.maxItems ?? DEFAULT_MAX_FINDINGS;
+  const maxEvidencePerItem = options?.maxEvidencePerItem ?? DEFAULT_MAX_EVIDENCE;
+  const maxTextChars = options?.maxTextChars ?? DEFAULT_MAX_TEXT_CHARS;
+
+  const merged = mergeQaReturnContextItems(items)
+    .map((item) => ({
+      issue: trimText(item.issue, maxTextChars),
+      expectedResult: trimText(item.expectedResult, maxTextChars),
+      receivedResult: trimText(item.receivedResult, maxTextChars),
+      evidence: item.evidence
+        .map((x) => trimText(x, maxTextChars))
+        .filter(Boolean)
+        .slice(0, maxEvidencePerItem),
+      recommendedAction: trimText(item.recommendedAction || "Address this blocker and re-run relevant checks.", maxTextChars),
+    }));
+
+  const nonGeneric = merged.filter((item) => !isGenericFallbackItem(item));
+  const filtered = merged.filter((item) => {
+    if (!isGenericFallbackItem(item)) return true;
+    return !nonGeneric.some((x) => issueOverlaps(x.issue, item.issue) || issueOverlaps(x.receivedResult, item.receivedResult));
+  });
+
+  filtered.sort((a, b) => {
+    const score = (value: QaReturnContextItem): number => {
+      const evidenceScore = Math.min(2, value.evidence.length);
+      const nonGenericScore = isGenericFallbackItem(value) ? 0 : 3;
+      return nonGenericScore + evidenceScore;
+    };
+    return score(b) - score(a);
+  });
+
+  return filtered.slice(0, maxItems);
+}
+
 export function normalizeQaReturnHistoryEntries(value: unknown): QaReturnHistoryEntry[] {
   if (!Array.isArray(value)) return [];
   const normalized: QaReturnHistoryEntry[] = [];
@@ -141,6 +209,24 @@ export function normalizeQaReturnHistoryEntries(value: unknown): QaReturnHistory
   }
 
   return normalized.sort((a, b) => a.attempt - b.attempt);
+}
+
+export function compactQaReturnHistoryEntries(
+  entries: QaReturnHistoryEntry[],
+  options?: {
+    maxEntries?: number;
+    maxFindingsPerEntry?: number;
+  },
+): QaReturnHistoryEntry[] {
+  const maxEntries = options?.maxEntries ?? DEFAULT_MAX_HISTORY_ENTRIES;
+  const maxFindingsPerEntry = options?.maxFindingsPerEntry ?? DEFAULT_MAX_FINDINGS;
+  const recent = [...entries].sort((a, b) => a.attempt - b.attempt).slice(-maxEntries);
+  return recent.map((entry) => ({
+    ...entry,
+    summary: trimText(entry.summary, DEFAULT_MAX_TEXT_CHARS),
+    failures: entry.failures.map((x) => trimText(x, DEFAULT_MAX_TEXT_CHARS)).slice(0, maxFindingsPerEntry),
+    findings: compactQaReturnContextItems(entry.findings, { maxItems: maxFindingsPerEntry }),
+  }));
 }
 
 export function buildQaCumulativeFindings(history: QaReturnHistoryEntry[]): QaCumulativeFinding[] {
@@ -171,17 +257,25 @@ export function buildQaCumulativeFindings(history: QaReturnHistoryEntry[]): QaCu
     }
   }
 
-  return Array.from(merged.values()).sort((a, b) => a.firstSeenAttempt - b.firstSeenAttempt);
+  return Array.from(merged.values())
+    .sort((a, b) => b.occurrences - a.occurrences || a.firstSeenAttempt - b.firstSeenAttempt)
+    .slice(0, DEFAULT_MAX_CUMULATIVE_FINDINGS);
 }
 
 export function buildFallbackQaReturnContextItems(args: {
   failures: string[];
   changedFiles: string[];
   executedChecks: CheckLike[];
+  existing?: QaReturnContextItem[];
 }): QaReturnContextItem[] {
   const items: QaReturnContextItem[] = [];
   const checks = args.executedChecks;
   const changedFiles = args.changedFiles;
+  const existing = args.existing ?? [];
+
+  const hasExistingOverlap = (issue: string): boolean => {
+    return existing.some((item) => issueOverlaps(item.issue, issue) || issueOverlaps(item.receivedResult, issue));
+  };
 
   for (const failure of args.failures) {
     const normalizedFailure = failure.trim();
@@ -189,6 +283,7 @@ export function buildFallbackQaReturnContextItems(args: {
 
     const failedCheckMatch = normalizedFailure.match(/^Check failed:\s*(.+?)\s*\(exit\s*([^)]+)\)/i);
     if (failedCheckMatch) {
+      if (hasExistingOverlap(normalizedFailure)) continue;
       const command = failedCheckMatch[1].trim();
       const exitCode = failedCheckMatch[2].trim();
       const checkEvidence = checks
@@ -205,6 +300,7 @@ export function buildFallbackQaReturnContextItems(args: {
     }
 
     if (/no code changes detected in git diff/i.test(normalizedFailure)) {
+      if (hasExistingOverlap("No code changes detected")) continue;
       items.push({
         issue: "No code changes detected",
         expectedResult: "Relevant source/test/config files should be present in git diff.",
@@ -216,6 +312,7 @@ export function buildFallbackQaReturnContextItems(args: {
     }
 
     if (/no e2e check was executed/i.test(normalizedFailure)) {
+      if (hasExistingOverlap("Missing E2E execution evidence")) continue;
       items.push({
         issue: "Missing E2E execution evidence",
         expectedResult: "At least one E2E command should execute and be recorded in QA checks.",
@@ -227,6 +324,7 @@ export function buildFallbackQaReturnContextItems(args: {
     }
 
     if (/no unit test file changes were detected/i.test(normalizedFailure)) {
+      if (hasExistingOverlap("Missing unit-test evidence")) continue;
       items.push({
         issue: "Missing unit-test evidence",
         expectedResult: "At least one relevant unit test should be added or updated.",
@@ -238,6 +336,7 @@ export function buildFallbackQaReturnContextItems(args: {
     }
 
     if (/no automated checks were executed/i.test(normalizedFailure)) {
+      if (hasExistingOverlap("No automated checks executed")) continue;
       items.push({
         issue: "No automated checks executed",
         expectedResult: "Project checks (lint/test/check/e2e) should run with recorded output.",
@@ -248,6 +347,7 @@ export function buildFallbackQaReturnContextItems(args: {
       continue;
     }
 
+    if (hasExistingOverlap(normalizedFailure)) continue;
     items.push({
       issue: normalizedFailure,
       expectedResult: "Acceptance criteria and validation checks should pass.",
@@ -257,7 +357,7 @@ export function buildFallbackQaReturnContextItems(args: {
     });
   }
 
-  return mergeQaReturnContextItems(items);
+  return compactQaReturnContextItems(items);
 }
 
 export function extractQaHandoffContext(previousStage: unknown): QaHandoffContext | null {
@@ -274,8 +374,8 @@ export function extractQaHandoffContext(previousStage: unknown): QaHandoffContex
   if (attempt < 1 || maxRetries < 1) return null;
   if (returnedToRaw !== "PR Writer" && !isQaRemediationAgent(returnedToRaw)) return null;
 
-  const latestFindings = normalizeQaReturnContextItems(raw.latestFindings);
-  const history = normalizeQaReturnHistoryEntries(raw.history);
+  const latestFindings = compactQaReturnContextItems(normalizeQaReturnContextItems(raw.latestFindings));
+  const history = compactQaReturnHistoryEntries(normalizeQaReturnHistoryEntries(raw.history));
   const rawCumulativeFindings: QaCumulativeFinding[] = Array.isArray(raw.cumulativeFindings)
     ? raw.cumulativeFindings
       .map((item) => {
@@ -313,7 +413,7 @@ export function extractQaHandoffContext(previousStage: unknown): QaHandoffContex
       })
       .filter((x): x is QaCumulativeFinding => x !== null)
     : [];
-  const cumulativeFindings = history.length ? buildQaCumulativeFindings(history) : rawCumulativeFindings;
+  const cumulativeFindings = history.length ? buildQaCumulativeFindings(history) : rawCumulativeFindings.slice(0, DEFAULT_MAX_CUMULATIVE_FINDINGS);
 
   return {
     attempt,
