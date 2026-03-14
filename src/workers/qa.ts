@@ -1,11 +1,20 @@
 import path from "node:path";
 import { DEFAULT_QA_MAX_RETRIES, DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
-import { exists, readJson } from "../lib/fs.js";
+import { exists, readJson, writeJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { qaOutputSchema } from "../lib/schema.js";
 import { loadTaskMeta } from "../lib/task.js";
 import type { AgentName, StageEnvelope } from "../lib/types.js";
+import {
+  buildFallbackQaReturnContextItems,
+  buildQaCumulativeFindings,
+  mergeQaReturnContextItems,
+  normalizeQaReturnContextItems,
+  normalizeQaReturnHistoryEntries,
+  type QaHandoffContext,
+  type QaReturnHistoryEntry,
+} from "../lib/qa-context.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runProjectChecks } from "../lib/workspace-tools.js";
@@ -19,6 +28,60 @@ function resolveQaMaxRetries(): number {
   const raw = Number(process.env.AI_AGENTS_QA_MAX_RETRIES || "");
   if (Number.isFinite(raw) && raw >= 1) return Math.floor(raw);
   return DEFAULT_QA_MAX_RETRIES;
+}
+
+function qaReturnHistoryPath(taskId: string): string {
+  return path.join(taskDir(taskId), "artifacts", "qa-return-context-history.json");
+}
+
+async function loadQaReturnHistory(taskId: string): Promise<QaReturnHistoryEntry[]> {
+  const historyPath = qaReturnHistoryPath(taskId);
+  if (!(await exists(historyPath))) return [];
+  try {
+    const payload = await readJson<{ entries?: unknown }>(historyPath);
+    return normalizeQaReturnHistoryEntries(payload.entries);
+  } catch {
+    return [];
+  }
+}
+
+async function saveQaReturnHistory(taskId: string, entries: QaReturnHistoryEntry[]): Promise<void> {
+  await writeJson(qaReturnHistoryPath(taskId), {
+    taskId,
+    updatedAt: nowIso(),
+    entries,
+  });
+}
+
+function formatReturnContextForView(contextItems: Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}>): string {
+  if (!contextItems.length) return "- [none]";
+  return contextItems
+    .map((item, index) => {
+      const evidence = item.evidence.length ? item.evidence.join(" | ") : "[none]";
+      const action = item.recommendedAction || "[none]";
+      return `${index + 1}. ${item.issue}
+   Expected: ${item.expectedResult}
+   Received: ${item.receivedResult}
+   Evidence: ${evidence}
+   Recommended action: ${action}`;
+    })
+    .join("\n");
+}
+
+function formatReturnHistoryForView(history: QaReturnHistoryEntry[]): string {
+  if (!history.length) return "- [none]";
+  return history
+    .map((entry) => {
+      const summary = entry.summary || "[no summary]";
+      return `- Attempt ${entry.attempt} -> ${entry.returnedTo} | findings=${entry.findings.length} | ${summary}`;
+    })
+    .join("\n");
 }
 
 function isLikelyUnitTestFile(filePath: string): boolean {
@@ -74,6 +137,7 @@ export class QaWorker extends WorkerBase {
     const previousQaAttempts = meta.history.filter((x) => x.stage === "qa").length;
     const currentQaAttempt = previousQaAttempts + 1;
     const maxQaRetries = resolveQaMaxRetries();
+    const previousReturnHistory = await loadQaReturnHistory(taskId);
 
     const hardFailures: string[] = [];
     if (!changedFiles.length) {
@@ -125,6 +189,8 @@ MANDATORY VALIDATION CONTRACT:
 - If changedFiles is empty, verdict must be "fail".
 - If task type is Feature/Bug/Refactor/Mixed and no E2E check was executed, verdict must be "fail".
 - If verdict is "fail", set "nextAgent" to "${remediationAgent}".
+- If verdict is "fail", fill "returnContext" with actionable items using "issue", "expectedResult", and "receivedResult".
+- Each "returnContext" item must include concrete evidence and a recommended action for the next agent.
 - If verdict is "pass", set "nextAgent" to "PR Writer".
 - This QA attempt is ${currentQaAttempt} of max ${maxQaRetries} before forced human escalation.
 - Keep failures specific and actionable.
@@ -136,7 +202,7 @@ MANDATORY VALIDATION CONTRACT:
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string" }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
@@ -144,6 +210,9 @@ MANDATORY VALIDATION CONTRACT:
     output.failures = unique([...output.failures, ...hardFailures]);
     if (output.failures.length) {
       output.verdict = "fail";
+    }
+    if (output.verdict === "pass") {
+      output.returnContext = [];
     }
 
     output.nextAgent = output.verdict === "pass" ? "PR Writer" : remediationAgent;
@@ -154,6 +223,47 @@ MANDATORY VALIDATION CONTRACT:
         `QA retry limit reached (${currentQaAttempt}/${maxQaRetries}). Escalating to human review.`,
       ]);
     }
+
+    output.returnContext = mergeQaReturnContextItems([
+      ...normalizeQaReturnContextItems(output.returnContext),
+      ...buildFallbackQaReturnContextItems({
+        failures: output.failures,
+        changedFiles: output.changedFiles,
+        executedChecks: output.executedChecks.map((x) => ({
+          command: x.command,
+          status: x.status,
+          exitCode: x.exitCode,
+        })),
+      }),
+    ]);
+
+    let qaReturnHistory = previousReturnHistory;
+    if (output.verdict === "fail") {
+      const latestReturnEntry: QaReturnHistoryEntry = {
+        attempt: currentQaAttempt,
+        returnedAt: nowIso(),
+        returnedTo: remediationAgent,
+        summary: output.failures[0] || "QA validation failed.",
+        failures: [...output.failures],
+        findings: output.returnContext,
+      };
+      qaReturnHistory = [...previousReturnHistory.filter((x) => x.attempt !== currentQaAttempt), latestReturnEntry]
+        .sort((a, b) => a.attempt - b.attempt);
+      await saveQaReturnHistory(taskId, qaReturnHistory);
+    }
+
+    const qaHandoffContext: QaHandoffContext = {
+      attempt: currentQaAttempt,
+      maxRetries: maxQaRetries,
+      returnedTo: output.nextAgent,
+      summary: output.verdict === "fail"
+        ? `QA failed at attempt ${currentQaAttempt}/${maxQaRetries}.`
+        : `QA passed at attempt ${currentQaAttempt}/${maxQaRetries}.`,
+      latestFindings: output.verdict === "fail" ? output.returnContext : [],
+      cumulativeFindings: buildQaCumulativeFindings(qaReturnHistory),
+      history: qaReturnHistory,
+    };
+    output.qaHandoffContext = qaHandoffContext;
 
     const queuedNextAgent = escalatedToHuman ? undefined : output.nextAgent;
     const queuedNextStage = queuedNextAgent === "PR Writer" ? "pr" : queuedNextAgent === "Bug Fixer" ? "bug-fixer" : "builder";
@@ -178,6 +288,9 @@ ${output.acceptanceChecklist.length ? output.acceptanceChecklist.map((x) => `- [
 ## Failures
 ${output.failures.length ? output.failures.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
+## Return Context (Expected vs Received)
+${formatReturnContextForView(output.returnContext)}
+
 ## QA Verdict
 ${output.verdict}
 
@@ -196,6 +309,9 @@ ${reportedUnitTests.length ? reportedUnitTests.map((x) => `- ${x}`).join("\n") :
 
 ## Executed Checks
 ${output.executedChecks.length ? output.executedChecks.map((x) => `- ${x.status.toUpperCase()} | ${x.command} | exit=${x.exitCode ?? "null"} | ${x.durationMs}ms`).join("\n") : "- [none]"}
+
+## Cumulative QA Return History
+${formatReturnHistoryForView(output.qaHandoffContext?.history || [])}
 
 ## Next
 ${escalatedToHuman ? "Human Review" : output.nextAgent}

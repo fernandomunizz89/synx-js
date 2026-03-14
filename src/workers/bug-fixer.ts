@@ -1,5 +1,6 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { extractQaHandoffContext } from "../lib/qa-context.js";
 import { bugFixerOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
@@ -18,6 +19,22 @@ function extractQaFailures(previousStage: unknown): string[] {
   const failures = (output as { failures?: unknown }).failures;
   if (!Array.isArray(failures)) return [];
   return failures.filter((x): x is string => typeof x === "string");
+}
+
+function contextMentionsE2e(text: string): boolean {
+  return /\be2e\b|playwright|cypress/i.test(text);
+}
+
+function formatQaFindingsForView(
+  findings: Array<{ issue: string; expectedResult: string; receivedResult: string; recommendedAction: string }>,
+): string {
+  if (!findings.length) return "- [none]";
+  return findings
+    .map((item, index) => `${index + 1}. ${item.issue}
+   Expected: ${item.expectedResult}
+   Received: ${item.receivedResult}
+   Recommended action: ${item.recommendedAction || "[none]"}`)
+    .join("\n");
 }
 
 function hasE2eInfraEdits(edits: Array<{ path: string }>): boolean {
@@ -48,9 +65,16 @@ export class BugFixerWorker extends WorkerBase {
     const baseInput = await this.buildAgentInput(taskId, request);
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const qaFailures = extractQaFailures(baseInput.previousStage);
+    const qaHandoffContext = extractQaHandoffContext(baseInput.previousStage);
+    const latestQaFindings = qaHandoffContext?.latestFindings ?? [];
+    const cumulativeQaFindings = qaHandoffContext?.cumulativeFindings ?? [];
     const requiresE2eMainFlow = ["Feature", "Bug", "Refactor", "Mixed"].includes(baseInput.task.typeHint);
     const mustCreateE2eInfra = requiresE2eMainFlow && !testCapabilities.hasE2EScript;
-    const requiresE2eRepair = qaFailures.some((x) => /\be2e\b|playwright|cypress/i.test(x));
+    const requiresE2eRepair = [
+      ...qaFailures,
+      ...latestQaFindings.map((x) => `${x.issue} ${x.expectedResult} ${x.receivedResult}`),
+      ...cumulativeQaFindings.map((x) => `${x.issue} ${x.expectedResult} ${x.receivedResult}`),
+    ].some((x) => contextMentionsE2e(x));
     const workspaceContext = await buildWorkspaceContextSnapshot({
       workspaceRoot,
       query: `${baseInput.task.title}\n${baseInput.task.rawRequest}\n${JSON.stringify(baseInput.previousStage || {}, null, 2)}`,
@@ -60,6 +84,12 @@ export class BugFixerWorker extends WorkerBase {
     const modelInput = {
       ...baseInput,
       workspaceContext,
+      qaFeedback: {
+        failures: qaFailures,
+        latestExpectedVsReceived: latestQaFindings,
+        cumulativeExpectedVsReceived: cumulativeQaFindings,
+        history: qaHandoffContext?.history ?? [],
+      },
       executionContract: {
         mustProduceRealEdits: true,
         allowedActions: ["create", "replace", "replace_snippet", "delete"],
@@ -68,6 +98,7 @@ export class BugFixerWorker extends WorkerBase {
         requiresE2eMainFlow,
         mustCreateE2eInfra,
         requiresE2eRepair,
+        requiresQaFeedbackRemediation: latestQaFindings.length > 0,
       },
     };
 
@@ -79,6 +110,9 @@ MANDATORY EXECUTION CONTRACT:
 - If executionContract.requiresE2eMainFlow is true, include runnable e2e command(s) in "testsToRun".
 - If executionContract.mustCreateE2eInfra is true, create missing e2e script/config and at least one e2e test for the main flow.
 - If executionContract.requiresE2eRepair is true, fix existing e2e coverage gaps called out by QA.
+- If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
+- Use qaFeedback.latestExpectedVsReceived.expectedResult vs receivedResult as explicit fix targets.
+- Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
 - Use repository paths that exist in workspaceContext.files when possible.
 - Prefer action "replace_snippet" for small/localized edits.
 - Use action "replace" for full-file rewrites, and "create" only for new files.
@@ -142,6 +176,12 @@ Return exactly this JSON shape:
         "No E2E infrastructure edits were proposed although the project has no E2E script.",
       ]);
     }
+    if (latestQaFindings.length && !output.changesMade.length) {
+      output.risks = unique([
+        ...output.risks,
+        "QA provided detailed expected-vs-received findings, but changesMade is empty.",
+      ]);
+    }
 
     const applied = await applyWorkspaceEdits({
       workspaceRoot,
@@ -179,6 +219,9 @@ ${output.filesChanged.length ? output.filesChanged.map((x) => `- ${x}`).join("\n
 
 ## Changes Made
 ${output.changesMade.length ? output.changesMade.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
+
+## QA Context Received (Latest Return)
+${formatQaFindingsForView(latestQaFindings)}
 
 ## Unit Tests Added/Updated
 ${output.unitTestsAdded.length ? output.unitTestsAdded.map((x) => `- ${x}`).join("\n") : "- [none reported]"}

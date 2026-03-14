@@ -141,6 +141,39 @@ export const validationCheckResultSchema = z.object({
   stderrPreview: z.string(),
 });
 
+export const qaReturnContextItemSchema = z.object({
+  issue: z.string(),
+  expectedResult: z.string(),
+  receivedResult: z.string(),
+  evidence: z.array(z.string()).optional().default([]),
+  recommendedAction: z.string().optional().default(""),
+});
+
+export const qaReturnHistoryEntrySchema = z.object({
+  attempt: z.number().int().positive(),
+  returnedAt: z.string(),
+  returnedTo: z.union([z.literal("Feature Builder"), z.literal("Bug Fixer")]),
+  summary: z.string(),
+  failures: z.array(z.string()).optional().default([]),
+  findings: z.array(qaReturnContextItemSchema).optional().default([]),
+});
+
+export const qaCumulativeFindingSchema = qaReturnContextItemSchema.extend({
+  firstSeenAttempt: z.number().int().positive(),
+  lastSeenAttempt: z.number().int().positive(),
+  occurrences: z.number().int().positive(),
+});
+
+export const qaHandoffContextSchema = z.object({
+  attempt: z.number().int().positive(),
+  maxRetries: z.number().int().positive(),
+  returnedTo: z.union([z.literal("PR Writer"), z.literal("Feature Builder"), z.literal("Bug Fixer")]),
+  summary: z.string(),
+  latestFindings: z.array(qaReturnContextItemSchema).optional().default([]),
+  cumulativeFindings: z.array(qaCumulativeFindingSchema).optional().default([]),
+  history: z.array(qaReturnHistoryEntrySchema).optional().default([]),
+});
+
 export const qaOutputSchema = z.object({
   mainScenarios: z.array(z.string()),
   acceptanceChecklist: z.array(z.string()),
@@ -149,6 +182,8 @@ export const qaOutputSchema = z.object({
   e2ePlan: z.array(z.string()).optional().default([]),
   changedFiles: z.array(z.string()).optional().default([]),
   executedChecks: z.array(validationCheckResultSchema).optional().default([]),
+  returnContext: z.array(qaReturnContextItemSchema).optional().default([]),
+  qaHandoffContext: qaHandoffContextSchema.optional(),
   nextAgent: z.union([z.literal("PR Writer"), z.literal("Feature Builder"), z.literal("Bug Fixer")]),
 });
 
