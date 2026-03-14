@@ -1,0 +1,26 @@
+{
+  "name": "ai-agents-v5-node-ts",
+  "version": "0.5.0",
+  "private": true,
+  "description": "Human-friendly AI agents CLI with guided setup, recovery, doctor, and file-driven orchestration",
+  "type": "module",
+  "bin": {
+    "ai-agents": "./bin/ai-agents.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.10.1",
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
