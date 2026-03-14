@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import path from "node:path";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { allTaskIds, loadTaskMeta } from "../lib/task.js";
 import { writeDaemonState, logDaemon } from "../lib/logging.js";
@@ -12,6 +13,21 @@ import { providerHealthToHuman } from "../lib/human-messages.js";
 import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
 import { createStartProgressRenderer } from "../lib/start-progress.js";
+import { exists, readJson } from "../lib/fs.js";
+import { runtimeDir } from "../lib/paths.js";
+
+function processIsRunning(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "EPERM") {
+      return true;
+    }
+    return false;
+  }
+}
 
 export const startCommand = new Command("start")
   .description("Start the engine, recover unfinished work, and keep processing tasks")
@@ -20,6 +36,28 @@ export const startCommand = new Command("start")
   .action(async (options: { force?: boolean; progress?: boolean }) => {
     await ensureGlobalInitialized();
     await ensureProjectInitialized();
+
+    const daemonStatePath = path.join(runtimeDir(), "daemon-state.json");
+    if (await exists(daemonStatePath)) {
+      try {
+        const currentState = await readJson<{ pid?: number; lastHeartbeatAt?: string }>(daemonStatePath);
+        if (typeof currentState.pid === "number" && currentState.pid !== process.pid && processIsRunning(currentState.pid)) {
+          console.log("\nAnother engine appears to be running already.");
+          console.log(`- Running PID: ${currentState.pid}`);
+          if (currentState.lastHeartbeatAt) {
+            console.log(`- Last heartbeat: ${currentState.lastHeartbeatAt}`);
+          }
+          if (!options.force) {
+            console.log(`Next step: stop the other process, then run \`${commandExample("start")}\`.`);
+            console.log(`If you still want to start now, run \`${commandExample("start --force")}\`.`);
+            return;
+          }
+          console.log("Continuing due to --force. Multiple engines may cause duplicated or inconsistent processing.");
+        }
+      } catch {
+        // Ignore malformed daemon state and continue startup.
+      }
+    }
 
     const readiness = await collectReadinessReport({ includeProviderChecks: true });
     printReadinessReport(readiness, "Readiness checks");
@@ -56,6 +94,13 @@ export const startCommand = new Command("start")
     console.log("\nEngine started. Press Ctrl+C to stop.");
     console.log(`Tip: in another terminal, run \`${commandExample("new")}\` and \`${commandExample("status")}\`.`);
     await logDaemon("Engine started.");
+    await writeDaemonState({
+      pid: process.pid,
+      lastHeartbeatAt: nowIso(),
+      loop: 0,
+      taskCount: 0,
+      workerCount: workers.length,
+    });
 
     const engineStartedAtMs = Date.now();
     const progress = createStartProgressRenderer({ enabled: options.progress !== false });
