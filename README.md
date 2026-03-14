@@ -133,20 +133,26 @@ This works well with:
 - `Dispatcher` and `Spec Planner` are provider-driven with strict JSON schemas.
 - Downstream agents are also provider-driven:
   - `Bug Investigator`
+  - `Bug Fixer`
   - `Feature Builder`
   - `Reviewer`
   - `QA Validator`
   - `PR Writer`
 - The pipeline only advances when each stage output passes schema validation.
-- `Feature Builder` now applies real workspace edits (not only text handoff).
-- `QA Validator` now validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint` when present).
+- `Bug` tasks route to `Bug Fixer` after `Bug Investigator` (instead of `Feature Builder`).
+- `Feature Builder` and `Bug Fixer` apply real workspace edits (not only text handoff).
+- Implementation agents can edit multiple related files when required to complete a real fix/feature.
+- When unit test scripts exist, implementation agents must report unit test files updated for the change.
+- `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
+- On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
 
 ## Real code edits and QA evidence
-- Builder accepts concrete edit operations (`create`, `replace`, `replace_snippet`, `delete`) and applies them safely inside the workspace root.
+- Implementation agents (`Feature Builder`, `Bug Fixer`) accept concrete edit operations (`create`, `replace`, `replace_snippet`, `delete`) and apply them safely inside the workspace root.
 - Protected paths are blocked from edits (`.ai-agents/**`, `.git/**`).
-- QA records changed files and executed checks in task artifacts:
+- QA records changed files, checks, and E2E validation planning in task artifacts:
   - `.ai-agents/tasks/<task-id>/done/04-implementation.done.json`
+  - `.ai-agents/tasks/<task-id>/done/04b-bug-fixer.done.json` (bug path)
   - `.ai-agents/tasks/<task-id>/done/06-qa.done.json`
 
 ## Provider stability controls

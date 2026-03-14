@@ -7,10 +7,12 @@ The system:
 - creates a safe hidden work area in `.ai-agents/`
 - creates tasks
 - moves tasks through stages automatically
+- routes bug tasks through `Bug Investigator -> Bug Fixer`
 - stops at the final human approval step
 - logs how long every stage took
 - can recover unfinished work after interruptions
 - runs all pipeline agents with provider-backed structured outputs
+- sends failed QA back to the right implementation agent automatically
 
 ## The 4 commands you will use most
 
@@ -76,6 +78,11 @@ Supported task types:
 - `Documentation`
 - `Mixed`
 
+Routing summary:
+- `Bug`: Dispatcher -> Bug Investigator -> Bug Fixer -> Reviewer -> QA -> PR Writer -> Human approval
+- Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
+- QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
+
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).
 
 ### 4. `status`
@@ -118,6 +125,7 @@ It checks:
 - stale locks
 - orphan working files
 - interrupted tasks
+- required prompt files (including `bug-fixer.md`)
 
 When issues are found, doctor can run safe fixes immediately.
 
@@ -198,3 +206,8 @@ and
 ## Important expectation
 This tool is designed to reduce human error, but it does not remove the need for final human review.
 You remain the manager and final validator.
+
+Quality gates now enforced by the pipeline:
+- implementation stages must produce real code edits
+- when unit test scripts exist, implementation stages should include unit test updates
+- QA must validate changed files and executed checks, including E2E checks for main flows when applicable
