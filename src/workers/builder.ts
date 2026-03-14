@@ -1,5 +1,8 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
+import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { builderOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
+import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 
@@ -10,31 +13,38 @@ export class BuilderWorker extends WorkerBase {
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
-    await this.fakeWork(350, 1200);
+    const config = await loadResolvedProjectConfig();
+    const prompt = await loadPromptFile("feature-builder.md");
+    const provider = createProvider(config.providers.planner);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const result = await provider.generateStructured({
+      agent: "Feature Builder",
+      systemPrompt,
+      input: request,
+      expectedJsonSchemaDescription:
+        '{ "implementationSummary": "string", "filesChanged": ["string"], "changesMade": ["string"], "testsToRun": ["string"], "risks": ["string"], "nextAgent": "Reviewer" }',
+    });
+    const output = builderOutputSchema.parse(result.parsed);
 
-const output = {
-  filesChanged: ["src/mock-file.ts", "src/mock-component.tsx"],
-  changesMade: ["Applied scoped changes from the prior handoff.", "Kept unrelated modules untouched.", "Prepared review notes."],
-  risks: ["Potential regression if adjacent logic shares the same dependency."],
-  nextAgent: "Reviewer",
-};
-
-const view = `# HANDOFF
+    const view = `# HANDOFF
 
 ## Agent
 Feature Builder
 
+## Implementation Summary
+${output.implementationSummary}
+
 ## Files Changed
-- ${output.filesChanged[0]}
-- ${output.filesChanged[1]}
+${output.filesChanged.length ? output.filesChanged.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Changes Made
-1. ${output.changesMade[0]}
-2. ${output.changesMade[1]}
-3. ${output.changesMade[2]}
+${output.changesMade.length ? output.changesMade.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
+
+## Tests To Run
+${output.testsToRun.length ? output.testsToRun.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
 
 ## Risks
-- ${output.risks[0]}
+${output.risks.length ? output.risks.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Next
 Reviewer
@@ -52,10 +62,10 @@ Reviewer
       nextRequestFileName: STAGE_FILE_NAMES.reviewer,
       nextInputRef: `done/${DONE_FILE_NAMES.builder}`,
       startedAt,
-      provider: "mock",
-      model: "mock-builder-v1",
-      parseRetries: 0,
-      validationPassed: true,
+      provider: result.provider,
+      model: result.model,
+      parseRetries: result.parseRetries,
+      validationPassed: result.validationPassed,
     });
   }
 }

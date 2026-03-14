@@ -1,6 +1,9 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
+import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { prWriterOutputSchema } from "../lib/schema.js";
 import { finalizeForHumanReview } from "../lib/task.js";
 import type { StageEnvelope } from "../lib/types.js";
+import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 
@@ -11,14 +14,18 @@ export class PrWriterWorker extends WorkerBase {
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
-    await this.fakeWork(250, 900);
-
-    const output = {
-      summary: "Mock PR summary generated from prior stages.",
-      whatWasDone: ["Summarized the scoped changes.", "Captured risks and test plan."],
-      testPlan: ["Run the main scenario.", "Run the negative scenario.", "Check one adjacent regression path."],
-      nextAgent: "Human Review",
-    };
+    const config = await loadResolvedProjectConfig();
+    const prompt = await loadPromptFile("pr-writer.md");
+    const provider = createProvider(config.providers.planner);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const result = await provider.generateStructured({
+      agent: "PR Writer",
+      systemPrompt,
+      input: request,
+      expectedJsonSchemaDescription:
+        '{ "summary": "string", "whatWasDone": ["string"], "testPlan": ["string"], "rolloutNotes": ["string"], "nextAgent": "Human Review" }',
+    });
+    const output = prWriterOutputSchema.parse(result.parsed);
 
     const view = `# HANDOFF
 
@@ -29,13 +36,13 @@ PR Writer
 ${output.summary}
 
 ## What was done
-- ${output.whatWasDone[0]}
-- ${output.whatWasDone[1]}
+${output.whatWasDone.length ? output.whatWasDone.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Test Plan
-1. ${output.testPlan[0]}
-2. ${output.testPlan[1]}
-3. ${output.testPlan[2]}
+${output.testPlan.length ? output.testPlan.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
+
+## Rollout Notes
+${output.rolloutNotes.length ? output.rolloutNotes.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Next
 Human Review
@@ -50,10 +57,10 @@ Human Review
       output,
       humanApprovalRequired: true,
       startedAt,
-      provider: "mock",
-      model: "mock-pr-v1",
-      parseRetries: 0,
-      validationPassed: true,
+      provider: result.provider,
+      model: result.model,
+      parseRetries: result.parseRetries,
+      validationPassed: result.validationPassed,
     });
 
     await finalizeForHumanReview(taskId);

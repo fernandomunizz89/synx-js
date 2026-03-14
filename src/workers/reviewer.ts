@@ -1,5 +1,8 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
+import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { reviewerOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
+import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 
@@ -10,26 +13,32 @@ export class ReviewerWorker extends WorkerBase {
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
-    await this.fakeWork(350, 1200);
+    const config = await loadResolvedProjectConfig();
+    const prompt = await loadPromptFile("reviewer.md");
+    const provider = createProvider(config.providers.planner);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const result = await provider.generateStructured({
+      agent: "Reviewer",
+      systemPrompt,
+      input: request,
+      expectedJsonSchemaDescription:
+        '{ "whatLooksGood": ["string"], "issuesFound": ["string"], "requiredChanges": ["string"], "verdict": "approved | needs_changes", "nextAgent": "QA Validator" }',
+    });
+    const output = reviewerOutputSchema.parse(result.parsed);
 
-const output = {
-  whatLooksGood: ["The scope appears contained.", "The implementation summary is structured."],
-  issuesFound: [],
-  verdict: "Approved with adjustments",
-  nextAgent: "QA Validator",
-};
-
-const view = `# HANDOFF
+    const view = `# HANDOFF
 
 ## Agent
 Reviewer
 
 ## What Looks Good
-- ${output.whatLooksGood[0]}
-- ${output.whatLooksGood[1]}
+${output.whatLooksGood.length ? output.whatLooksGood.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Issues Found
-- [none in mock mode]
+${output.issuesFound.length ? output.issuesFound.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Required Changes
+${output.requiredChanges.length ? output.requiredChanges.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Review Verdict
 ${output.verdict}
@@ -50,10 +59,10 @@ QA Validator
       nextRequestFileName: STAGE_FILE_NAMES.qa,
       nextInputRef: `done/${DONE_FILE_NAMES.reviewer}`,
       startedAt,
-      provider: "mock",
-      model: "mock-reviewer-v1",
-      parseRetries: 0,
-      validationPassed: true,
+      provider: result.provider,
+      model: result.model,
+      parseRetries: result.parseRetries,
+      validationPassed: result.validationPassed,
     });
   }
 }

@@ -1,5 +1,8 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
+import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { bugInvestigatorOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
+import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 
@@ -10,36 +13,38 @@ export class BugInvestigatorWorker extends WorkerBase {
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
-    await this.fakeWork(350, 1200);
+    const config = await loadResolvedProjectConfig();
+    const prompt = await loadPromptFile("bug-investigator.md");
+    const provider = createProvider(config.providers.planner);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const result = await provider.generateStructured({
+      agent: "Bug Investigator",
+      systemPrompt,
+      input: request,
+      expectedJsonSchemaDescription:
+        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "nextAgent": "Feature Builder" }',
+    });
+    const output = bugInvestigatorOutputSchema.parse(result.parsed);
 
-const output = {
-  symptom: "Observed behavior differs from expected flow.",
-  expectedBehavior: "The UI or state should behave consistently after the relevant action.",
-  likelyCauses: ["State not reset correctly.", "Stale persisted data.", "Lifecycle timing mismatch."],
-  suspectAreas: ["state management", "storage access", "re-entry lifecycle"],
-  nextAgent: "Feature Builder",
-};
-
-const view = `# HANDOFF
+    const view = `# HANDOFF
 
 ## Agent
 Bug Investigator
 
-## Symptom
-${output.symptom}
+## Symptom Summary
+${output.symptomSummary}
 
-## Expected Behavior
-${output.expectedBehavior}
+## Known Facts
+${output.knownFacts.length ? output.knownFacts.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Likely Causes
-1. ${output.likelyCauses[0]}
-2. ${output.likelyCauses[1]}
-3. ${output.likelyCauses[2]}
+${output.likelyCauses.length ? output.likelyCauses.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
 
-## Suspect Areas
-- ${output.suspectAreas[0]}
-- ${output.suspectAreas[1]}
-- ${output.suspectAreas[2]}
+## Investigation Steps
+${output.investigationSteps.length ? output.investigationSteps.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
+
+## Unknowns
+${output.unknowns.length ? output.unknowns.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Next
 Feature Builder
@@ -57,10 +62,10 @@ Feature Builder
       nextRequestFileName: STAGE_FILE_NAMES.builder,
       nextInputRef: `done/${DONE_FILE_NAMES.bugInvestigator}`,
       startedAt,
-      provider: "mock",
-      model: "mock-bug-investigator-v1",
-      parseRetries: 0,
-      validationPassed: true,
+      provider: result.provider,
+      model: result.model,
+      parseRetries: result.parseRetries,
+      validationPassed: result.validationPassed,
     });
   }
 }

@@ -58,3 +58,45 @@ export const plannerOutputSchema = z.object({
   validationCriteria: z.array(z.string()),
   nextAgent: z.literal("Feature Builder"),
 });
+
+export const bugInvestigatorOutputSchema = z.object({
+  symptomSummary: z.string(),
+  knownFacts: z.array(z.string()),
+  likelyCauses: z.array(z.string()),
+  investigationSteps: z.array(z.string()),
+  unknowns: z.array(z.string()),
+  nextAgent: z.literal("Feature Builder"),
+});
+
+export const builderOutputSchema = z.object({
+  implementationSummary: z.string(),
+  filesChanged: z.array(z.string()),
+  changesMade: z.array(z.string()),
+  testsToRun: z.array(z.string()),
+  risks: z.array(z.string()),
+  nextAgent: z.literal("Reviewer"),
+});
+
+export const reviewerOutputSchema = z.object({
+  whatLooksGood: z.array(z.string()),
+  issuesFound: z.array(z.string()),
+  requiredChanges: z.array(z.string()),
+  verdict: z.enum(["approved", "needs_changes"]),
+  nextAgent: z.literal("QA Validator"),
+});
+
+export const qaOutputSchema = z.object({
+  mainScenarios: z.array(z.string()),
+  acceptanceChecklist: z.array(z.string()),
+  failures: z.array(z.string()),
+  verdict: z.enum(["pass", "fail"]),
+  nextAgent: z.literal("PR Writer"),
+});
+
+export const prWriterOutputSchema = z.object({
+  summary: z.string(),
+  whatWasDone: z.array(z.string()),
+  testPlan: z.array(z.string()),
+  rolloutNotes: z.array(z.string()),
+  nextAgent: z.literal("Human Review"),
+});

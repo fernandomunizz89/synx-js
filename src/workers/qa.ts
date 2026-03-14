@@ -1,5 +1,8 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
+import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { qaOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
+import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 
@@ -10,28 +13,35 @@ export class QaWorker extends WorkerBase {
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
-    await this.fakeWork(350, 1200);
+    const config = await loadResolvedProjectConfig();
+    const prompt = await loadPromptFile("qa-validator.md");
+    const provider = createProvider(config.providers.planner);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const result = await provider.generateStructured({
+      agent: "QA Validator",
+      systemPrompt,
+      input: request,
+      expectedJsonSchemaDescription:
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "failures": ["string"], "verdict": "pass | fail", "nextAgent": "PR Writer" }',
+    });
+    const output = qaOutputSchema.parse(result.parsed);
 
-const output = {
-  mainScenarios: ["Happy path", "Invalid input path", "Regression around adjacent behavior"],
-  acceptanceChecklist: ["Expected behavior is met.", "Invalid behavior is blocked.", "No obvious regression is observed."],
-  nextAgent: "PR Writer",
-};
-
-const view = `# HANDOFF
+    const view = `# HANDOFF
 
 ## Agent
 QA Validator
 
 ## Main Scenarios
-1. ${output.mainScenarios[0]}
-2. ${output.mainScenarios[1]}
-3. ${output.mainScenarios[2]}
+${output.mainScenarios.length ? output.mainScenarios.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
 
 ## Acceptance Checklist
-- [ ] ${output.acceptanceChecklist[0]}
-- [ ] ${output.acceptanceChecklist[1]}
-- [ ] ${output.acceptanceChecklist[2]}
+${output.acceptanceChecklist.length ? output.acceptanceChecklist.map((x) => `- [ ] ${x}`).join("\n") : "- [none]"}
+
+## Failures
+${output.failures.length ? output.failures.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## QA Verdict
+${output.verdict}
 
 ## Next
 PR Writer
@@ -49,10 +59,10 @@ PR Writer
       nextRequestFileName: STAGE_FILE_NAMES.pr,
       nextInputRef: `done/${DONE_FILE_NAMES.qa}`,
       startedAt,
-      provider: "mock",
-      model: "mock-qa-v1",
-      parseRetries: 0,
-      validationPassed: true,
+      provider: result.provider,
+      model: result.model,
+      parseRetries: result.parseRetries,
+      validationPassed: result.validationPassed,
     });
   }
 }

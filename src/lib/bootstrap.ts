@@ -66,6 +66,21 @@ export async function ensureProjectInitialized(): Promise<void> {
   const plannerPrompt = path.join(promptsDir(), "spec-planner.md");
   if (!(await exists(plannerPrompt))) await writeText(plannerPrompt, PLANNER_PROMPT.trim() + "\n");
 
+  const bugInvestigatorPrompt = path.join(promptsDir(), "bug-investigator.md");
+  if (!(await exists(bugInvestigatorPrompt))) await writeText(bugInvestigatorPrompt, BUG_INVESTIGATOR_PROMPT.trim() + "\n");
+
+  const builderPrompt = path.join(promptsDir(), "feature-builder.md");
+  if (!(await exists(builderPrompt))) await writeText(builderPrompt, BUILDER_PROMPT.trim() + "\n");
+
+  const reviewerPrompt = path.join(promptsDir(), "reviewer.md");
+  if (!(await exists(reviewerPrompt))) await writeText(reviewerPrompt, REVIEWER_PROMPT.trim() + "\n");
+
+  const qaPrompt = path.join(promptsDir(), "qa-validator.md");
+  if (!(await exists(qaPrompt))) await writeText(qaPrompt, QA_PROMPT.trim() + "\n");
+
+  const prPrompt = path.join(promptsDir(), "pr-writer.md");
+  if (!(await exists(prPrompt))) await writeText(prPrompt, PR_PROMPT.trim() + "\n");
+
   await ensureGitignoreEntry(".ai-agents/");
 }
 
@@ -136,6 +151,116 @@ Return exactly:
   "risks": ["string"],
   "validationCriteria": ["string"],
   "nextAgent": "Feature Builder"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const BUG_INVESTIGATOR_PROMPT = `
+You are the Bug Investigator agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You must be conservative.
+Do not invent architecture or implementation details not present in the input.
+When evidence is missing, put it in "unknowns".
+Suggest only plausible causes based on the provided context.
+
+Return exactly:
+{
+  "symptomSummary": "string",
+  "knownFacts": ["string"],
+  "likelyCauses": ["string"],
+  "investigationSteps": ["string"],
+  "unknowns": ["string"],
+  "nextAgent": "Feature Builder"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const BUILDER_PROMPT = `
+You are the Feature Builder agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You must be conservative.
+Do not claim code changes that are not clearly grounded in the input.
+If a file path is unknown, use a placeholder path and note risk in "risks".
+Keep the response practical and implementation-oriented.
+
+Return exactly:
+{
+  "implementationSummary": "string",
+  "filesChanged": ["string"],
+  "changesMade": ["string"],
+  "testsToRun": ["string"],
+  "risks": ["string"],
+  "nextAgent": "Reviewer"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const REVIEWER_PROMPT = `
+You are the Reviewer agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You must be conservative.
+Do not invent defects without evidence.
+If no concrete issue is visible from input, keep "issuesFound" empty.
+Use "requiredChanges" only for actionable fixes.
+
+Return exactly:
+{
+  "whatLooksGood": ["string"],
+  "issuesFound": ["string"],
+  "requiredChanges": ["string"],
+  "verdict": "approved | needs_changes",
+  "nextAgent": "QA Validator"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const QA_PROMPT = `
+You are the QA Validator agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You must be conservative.
+Do not report passing scenarios unless they are directly supported by input.
+When verification evidence is incomplete, add notes in "failures".
+
+Return exactly:
+{
+  "mainScenarios": ["string"],
+  "acceptanceChecklist": ["string"],
+  "failures": ["string"],
+  "verdict": "pass | fail",
+  "nextAgent": "PR Writer"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const PR_PROMPT = `
+You are the PR Writer agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You must be conservative.
+Summarize only what is present in prior stages.
+If deployment details are unknown, use neutral rollout notes with explicit caveats.
+
+Return exactly:
+{
+  "summary": "string",
+  "whatWasDone": ["string"],
+  "testPlan": ["string"],
+  "rolloutNotes": ["string"],
+  "nextAgent": "Human Review"
 }
 
 Input JSON:
