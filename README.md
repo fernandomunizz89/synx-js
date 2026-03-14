@@ -150,6 +150,8 @@ This works well with:
 - QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
 - QA return context is cumulative across retries and is passed forward again on each new remediation loop.
 - QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
+- QA now enriches failed checks (especially Cypress/E2E) with compact diagnostics, artifacts, and runtime QA config notes.
+- Cypress QA runs use low-noise runtime overrides (e.g., reduced screenshot/video noise) to prioritize actionable failure context.
 - On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.

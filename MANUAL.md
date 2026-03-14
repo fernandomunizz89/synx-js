@@ -82,6 +82,7 @@ Routing summary:
 - `Bug`: Dispatcher -> Bug Investigator -> Bug Fixer -> Reviewer -> QA -> PR Writer -> Human approval
 - Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
 - QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
+- QA captures compact diagnostics from failed checks (including Cypress/E2E) and sends expected-vs-received evidence in the handoff
 - QA fail handoff includes structured context per blocker: expected result, received result, evidence, and recommended action
 - QA return context is cumulative and updated on each loop so the next implementation attempt sees prior QA findings
 - QA now emits explicit test cases with expected vs actual results (real QA mindset)
@@ -216,6 +217,7 @@ Quality gates now enforced by the pipeline:
 - implementation stages must produce real code edits
 - when unit test scripts exist, implementation stages should include unit test updates
 - for `Feature`, `Bug`, `Refactor`, and `Mixed`, implementation + QA must cover main-flow E2E checks
+- for Cypress-driven E2E flows, QA applies runtime low-noise diagnostics settings and forwards actionable failure evidence (not screenshot-only noise)
 - QA must validate changed files and executed checks, including E2E checks for main flows when applicable
 
 Advanced tuning:
