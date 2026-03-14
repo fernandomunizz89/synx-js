@@ -139,6 +139,9 @@ export const validationCheckResultSchema = z.object({
   durationMs: z.number().int().nonnegative(),
   stdoutPreview: z.string(),
   stderrPreview: z.string(),
+  diagnostics: z.array(z.string()).optional().default([]),
+  qaConfigNotes: z.array(z.string()).optional().default([]),
+  artifacts: z.array(z.string()).optional().default([]),
 });
 
 export const qaTestCaseSchema = z.object({

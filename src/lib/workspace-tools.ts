@@ -140,6 +140,9 @@ export interface ValidationCheckResult {
   durationMs: number;
   stdoutPreview: string;
   stderrPreview: string;
+  diagnostics?: string[];
+  qaConfigNotes?: string[];
+  artifacts?: string[];
 }
 
 export interface TestCapabilities {
@@ -559,17 +562,26 @@ async function readPackageScripts(workspaceRoot: string): Promise<Record<string,
   }
 }
 
-function buildScriptCommand(manager: "npm" | "pnpm" | "yarn" | "bun", script: string): { command: string; args: string[] } {
+function buildScriptCommand(
+  manager: "npm" | "pnpm" | "yarn" | "bun",
+  script: string,
+  extraArgs: string[] = [],
+): { command: string; args: string[] } {
+  const withExtra = (base: string[]): string[] => {
+    if (!extraArgs.length) return base;
+    return [...base, "--", ...extraArgs];
+  };
+
   switch (manager) {
     case "pnpm":
-      return { command: "pnpm", args: ["run", "--if-present", script] };
+      return { command: "pnpm", args: withExtra(["run", "--if-present", script]) };
     case "yarn":
-      return { command: "yarn", args: ["run", script] };
+      return { command: "yarn", args: withExtra(["run", script]) };
     case "bun":
-      return { command: "bun", args: ["run", script] };
+      return { command: "bun", args: withExtra(["run", script]) };
     case "npm":
     default:
-      return { command: "npm", args: ["run", "--if-present", script] };
+      return { command: "npm", args: withExtra(["run", "--if-present", script]) };
   }
 }
 
@@ -589,6 +601,155 @@ const E2E_SCRIPT_CANDIDATES = [
 function compactCommandPreview(value: string, maxChars = 1200): string {
   if (value.length <= maxChars) return value;
   return `${value.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function normalizeSignalLine(value: string, maxChars = 220): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function extractSignalLines(text: string, patterns: RegExp[], maxItems = 8): string[] {
+  const out: string[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = normalizeSignalLine(rawLine);
+    if (!line) continue;
+    if (!patterns.some((pattern) => pattern.test(line))) continue;
+    out.push(line);
+    if (out.length >= maxItems) break;
+  }
+  return unique(out);
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+function parseCypressJunitDiagnostics(xml: string, maxItems = 6): string[] {
+  const out: string[] = [];
+  const testcaseRegex = /<testcase\b([^>]*)>([\s\S]*?)<\/testcase>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = testcaseRegex.exec(xml)) && out.length < maxItems) {
+    const attrs = match[1] || "";
+    const body = match[2] || "";
+    if (!/<failure\b/i.test(body)) continue;
+
+    const nameMatch = /name="([^"]*)"/i.exec(attrs);
+    const testcaseName = decodeXmlEntities(nameMatch?.[1] || "unknown testcase");
+
+    const failureTagMatch = /<failure\b([^>]*)>/i.exec(body);
+    const failureAttrs = failureTagMatch?.[1] || "";
+    const messageAttr = decodeXmlEntities((/message="([^"]*)"/i.exec(failureAttrs)?.[1] || "").trim());
+
+    const failureBodyMatch = /<failure\b[^>]*>([\s\S]*?)<\/failure>/i.exec(body);
+    const failureBody = decodeXmlEntities((failureBodyMatch?.[1] || "").replace(/<[^>]+>/g, " "));
+
+    const headline = normalizeSignalLine(messageAttr || failureBody || `Failure in ${testcaseName}`);
+    const locationMatch = /([A-Za-z0-9_./-]+\.(?:cy|spec)\.[cm]?[jt]sx?:\d+:\d+)/.exec(failureBody);
+
+    if (headline) out.push(`Test "${testcaseName}": ${headline}`);
+    if (locationMatch?.[1]) out.push(`Location: ${locationMatch[1]}`);
+  }
+
+  return unique(out).slice(0, maxItems);
+}
+
+function safeToken(value: string): string {
+  const token = value.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return token.slice(0, 48) || "check";
+}
+
+function isCypressScript(script: string, scripts: Record<string, string>): boolean {
+  const scriptName = script.toLowerCase();
+  const body = (scripts[script] || "").toLowerCase();
+  return scriptName.includes("cypress") || /\bcypress\b/.test(body);
+}
+
+async function buildCypressQaOverrides(workspaceRoot: string, script: string): Promise<{
+  extraArgs: string[];
+  reportPath: string;
+  qaConfigNotes: string[];
+}> {
+  const outDir = path.join(workspaceRoot, ".ai-agents", "runtime", "qa-cypress");
+  await ensureDir(outDir);
+  const reportPath = path.join(outDir, `${safeToken(script)}-${Date.now()}.xml`);
+
+  return {
+    extraArgs: [
+      "--reporter",
+      "junit",
+      "--reporter-options",
+      `mochaFile=${reportPath},toConsole=true`,
+      "--config",
+      "video=false,screenshotOnRunFailure=false,trashAssetsBeforeRuns=false",
+    ],
+    reportPath,
+    qaConfigNotes: [
+      "QA Cypress override: reporter=junit (console + XML output).",
+      "QA Cypress override: screenshotOnRunFailure=false and video=false for lower-noise diagnostics.",
+    ],
+  };
+}
+
+async function buildCheckDiagnostics(args: {
+  workspaceRoot: string;
+  isCypress: boolean;
+  stdout: string;
+  stderr: string;
+  cypressReportPath?: string;
+}): Promise<{ diagnostics: string[]; artifacts: string[] }> {
+  const combined = `${args.stdout}\n${args.stderr}`;
+  const genericPatterns = [
+    /\b(assertionerror|typeerror|referenceerror|syntaxerror|failed|error)\b/i,
+    /\bexpected\b.+\bto\b/i,
+    /\btimed out\b/i,
+    /\bdoes not provide an export named\b/i,
+    /[A-Za-z0-9_./-]+\.[cm]?[jt]sx?:\d+:\d+/,
+  ];
+  const cypressPatterns = [
+    /\bcypresserror\b/i,
+    /\bassertionerror\b/i,
+    /\btimed out retrying\b/i,
+    /\bfailing\b/i,
+    /[A-Za-z0-9_./-]+\.(?:cy|spec)\.[cm]?[jt]sx?:\d+:\d+/,
+  ];
+
+  const lineDiagnostics = extractSignalLines(combined, args.isCypress ? cypressPatterns : genericPatterns, args.isCypress ? 10 : 5);
+  const artifacts: string[] = [];
+  let reportDiagnostics: string[] = [];
+  let reportArtifact = "";
+
+  if (args.isCypress && args.cypressReportPath) {
+    reportArtifact = normalizeInputPath(path.relative(args.workspaceRoot, args.cypressReportPath));
+    if (await exists(args.cypressReportPath)) {
+      const xml = await fs.readFile(args.cypressReportPath, "utf8").catch(() => "");
+      reportDiagnostics = xml ? parseCypressJunitDiagnostics(xml, 8) : [];
+      artifacts.push(reportArtifact);
+    } else {
+      artifacts.push(`${reportArtifact} (not generated)`);
+    }
+  }
+
+  const combinedDiagnostics = unique([...reportDiagnostics, ...lineDiagnostics]).slice(0, 10);
+  if (args.isCypress && combinedDiagnostics.length === 0) {
+    const fallback = "No actionable Cypress assertion text was captured; adjust Cypress output/reporter config for terminal-readable failure details.";
+    return {
+      diagnostics: [fallback],
+      artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
+    };
+  }
+
+  return {
+    diagnostics: combinedDiagnostics,
+    artifacts,
+  };
 }
 
 export async function detectTestCapabilities(workspaceRoot: string): Promise<TestCapabilities> {
@@ -633,13 +794,30 @@ export async function runProjectChecks(args: {
   const results: ValidationCheckResult[] = [];
 
   for (const script of available) {
-    const command = buildScriptCommand(manager, script);
+    const cypressScript = isCypressScript(script, scripts);
+    let cypressReportPath: string | undefined;
+    let qaConfigNotes: string[] = [];
+    let command = buildScriptCommand(manager, script);
+    if (cypressScript) {
+      const overrides = await buildCypressQaOverrides(workspaceRoot, script);
+      cypressReportPath = overrides.reportPath;
+      qaConfigNotes = overrides.qaConfigNotes;
+      command = buildScriptCommand(manager, script, overrides.extraArgs);
+    }
+
     const result = await runCommand({
       command: command.command,
       commandArgs: command.args,
       cwd: workspaceRoot,
       timeoutMs,
-      maxOutputChars: 5_000,
+      maxOutputChars: cypressScript ? 12_000 : 5_000,
+    });
+    const diagnostics = await buildCheckDiagnostics({
+      workspaceRoot,
+      isCypress: cypressScript,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      cypressReportPath,
     });
 
     results.push({
@@ -650,6 +828,9 @@ export async function runProjectChecks(args: {
       durationMs: result.durationMs,
       stdoutPreview: compactCommandPreview(result.stdout),
       stderrPreview: compactCommandPreview(result.stderr),
+      diagnostics: diagnostics.diagnostics,
+      qaConfigNotes,
+      artifacts: diagnostics.artifacts,
     });
   }
 
