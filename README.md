@@ -101,6 +101,16 @@ This works well with:
 - OpenRouter-compatible gateways
 - future compatible endpoints
 
+## Agent pipeline behavior
+- `Dispatcher` and `Spec Planner` are provider-driven with strict JSON schemas.
+- Downstream agents are also provider-driven:
+  - `Bug Investigator`
+  - `Feature Builder`
+  - `Reviewer`
+  - `QA Validator`
+  - `PR Writer`
+- The pipeline only advances when each stage output passes schema validation.
+
 ## Cross-platform
 The CLI uses Node path and home directory resolution, so it is built to run on:
 - macOS

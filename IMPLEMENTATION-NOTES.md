@@ -6,6 +6,7 @@
 - LM Studio setup stores local connection in config by default (no per-terminal export needed)
 - command preflight checks before start/new/status/approve with guided remediation
 - start aborts by default when setup is broken (`--force` available)
+- all downstream workers (Bug Investigator, Builder, Reviewer, QA, PR) now use real provider calls with strict schemas
 - human-friendly `start`
 - guided `new`
 - `doctor`, `resume`, and `fix`

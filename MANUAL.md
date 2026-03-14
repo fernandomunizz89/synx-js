@@ -10,6 +10,7 @@ The system:
 - stops at the final human approval step
 - logs how long every stage took
 - can recover unfinished work after interruptions
+- runs all pipeline agents with provider-backed structured outputs
 
 ## The 4 commands you will use most
 

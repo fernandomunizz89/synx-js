@@ -29,3 +29,8 @@
 ## Documentation
 - Updated operational docs for day-1 setup and daily usage.
 - Added guidance for new machine/new user onboarding.
+
+## Agent Execution
+- Dispatcher and Spec Planner run with provider-backed structured output.
+- Bug Investigator, Feature Builder, Reviewer, QA Validator, and PR Writer also run with provider-backed structured output (no mock-only downstream path).
+- All stage outputs are validated with strict zod schemas before advancing.
