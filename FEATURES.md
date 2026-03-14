@@ -4,6 +4,7 @@
 - Interactive terminal menus (arrow keys + Enter) for setup/new/approve/fix.
 - Dynamic command hints that match how the CLI was invoked.
 - Human-friendly next-step guidance after key commands.
+- Explicit task type support in `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
 
 ## Setup and Configuration
 - Guided setup with required human reviewer name (no implicit default).

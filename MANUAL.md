@@ -57,6 +57,14 @@ Or:
 ai-agents new "Add dark mode toggle" --type Feature
 ```
 
+Supported task types:
+- `Feature`
+- `Bug`
+- `Refactor`
+- `Research`
+- `Documentation`
+- `Mixed`
+
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).
 
 ### 4. `status`

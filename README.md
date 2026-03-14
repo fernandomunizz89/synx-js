@@ -24,6 +24,15 @@ This version is designed to reduce operator friction:
 - `metrics`
 - `show-config`
 
+## Task types
+Supported values for `ai-agents new --type <type>`:
+- `Feature`
+- `Bug`
+- `Refactor`
+- `Research`
+- `Documentation`
+- `Mixed`
+
 ## Feature summary
 - See [FEATURES.md](./FEATURES.md) for the initial feature set included in this baseline commit.
 
