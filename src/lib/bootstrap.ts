@@ -196,9 +196,11 @@ Main-flow E2E validation is required for bug tasks.
 If the repository has no E2E script, add one and create at least one E2E test that covers the main user flow.
 If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
 When QA provides expected-vs-received return context, address each item explicitly.
+Use QA evidence/recommendedAction fields to drive concrete edits, not generic retries.
 When a previous QA attempt failed, use a different strategy instead of repeating the same approach.
 Act autonomously to solve root causes, including related source/config/test changes when needed.
 Always include the runnable E2E command in "testsToRun".
+If QA indicates low-signal Cypress output, update Cypress config/scripts so failures include actionable assertion + location details.
 Only use paths that are valid for the workspace and avoid protected folders.
 
 Return exactly:
@@ -238,9 +240,11 @@ Main-flow E2E validation is required for Feature/Refactor/Mixed tasks.
 If the repository has no E2E script, add one and create at least one E2E test that covers the main user flow.
 If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
 When QA provides expected-vs-received return context, address each item explicitly.
+Use QA evidence/recommendedAction fields to drive concrete edits, not generic retries.
 When a previous QA attempt failed, use a different strategy instead of repeating the same approach.
 Act autonomously to solve root causes, including related source/config/test changes when needed.
 Always include the runnable E2E command in "testsToRun".
+If QA indicates low-signal Cypress output, update Cypress config/scripts so failures include actionable assertion + location details.
 Only use paths that are valid for the workspace and avoid protected folders.
 Keep edits minimal and implementation-oriented.
 
@@ -300,6 +304,7 @@ Do not report passing scenarios unless they are directly supported by evidence.
 When verification evidence is incomplete, add explicit notes in "failures".
 When verdict is fail, provide expected-vs-received context for each blocker in "returnContext".
 Think like a real QA engineer: define concrete test cases with expected vs actual outcomes.
+For Cypress/E2E failures, include assertion/location evidence and avoid screenshot-only guidance.
 
 Return exactly:
 {
@@ -329,7 +334,10 @@ Return exactly:
       "timedOut": false,
       "durationMs": 0,
       "stdoutPreview": "string",
-      "stderrPreview": "string"
+      "stderrPreview": "string",
+      "diagnostics": ["string"],
+      "qaConfigNotes": ["string"],
+      "artifacts": ["string"]
     }
   ],
   "returnContext": [

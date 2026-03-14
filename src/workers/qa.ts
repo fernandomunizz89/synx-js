@@ -99,6 +99,9 @@ function compactChecksForModel(
     durationMs: number;
     stdoutPreview: string;
     stderrPreview: string;
+    diagnostics?: string[];
+    qaConfigNotes?: string[];
+    artifacts?: string[];
   }>,
 ): Array<{
   command: string;
@@ -108,11 +111,17 @@ function compactChecksForModel(
   durationMs: number;
   stdoutPreview: string;
   stderrPreview: string;
+  diagnostics: string[];
+  qaConfigNotes: string[];
+  artifacts: string[];
 }> {
   return checks.map((x) => ({
     ...x,
     stdoutPreview: trimText(x.stdoutPreview, 500),
     stderrPreview: trimText(x.stderrPreview, 500),
+    diagnostics: (x.diagnostics || []).map((item) => trimText(item, 220)).slice(0, 8),
+    qaConfigNotes: (x.qaConfigNotes || []).map((item) => trimText(item, 220)).slice(0, 4),
+    artifacts: (x.artifacts || []).map((item) => trimText(item, 180)).slice(0, 4),
   }));
 }
 
@@ -147,7 +156,12 @@ function compactQaTestCases(testCases: QaTestCaseLike[]): QaTestCaseLike[] {
 function buildFallbackQaTestCases(args: {
   failures: string[];
   returnContext: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[] }>;
-  executedChecks: Array<{ command: string; status: "passed" | "failed" | "skipped"; exitCode: number | null }>;
+  executedChecks: Array<{
+    command: string;
+    status: "passed" | "failed" | "skipped";
+    exitCode: number | null;
+    diagnostics?: string[];
+  }>;
 }): QaTestCaseLike[] {
   const output: QaTestCaseLike[] = [];
   const checks = args.executedChecks;
@@ -160,9 +174,14 @@ function buildFallbackQaTestCases(args: {
         type: /e2e|playwright|cypress/i.test(check.command) ? "e2e" : "regression",
         steps: [`Execute ${check.command}`],
         expectedResult: "Command exits with code 0.",
-        actualResult: `status=${check.status}, exit=${check.exitCode ?? "null"}`,
+        actualResult: check.diagnostics?.[0]
+          ? `status=${check.status}, exit=${check.exitCode ?? "null"} | ${trimText(check.diagnostics[0], 140)}`
+          : `status=${check.status}, exit=${check.exitCode ?? "null"}`,
         status: check.status === "passed" ? "pass" : "fail",
-        evidence: [`${check.command} => ${check.status}`],
+        evidence: [
+          `${check.command} => ${check.status}`,
+          ...(check.diagnostics || []).slice(0, 2),
+        ],
       });
     }
   }
@@ -205,6 +224,113 @@ function formatTestCasesForView(testCases: QaTestCaseLike[]): string {
   Expected: ${tc.expectedResult}
   Actual: ${tc.actualResult}`)
     .join("\n");
+}
+
+function isE2eCheckCommand(command: string): boolean {
+  return /\be2e\b|playwright|cypress/i.test(command);
+}
+
+function extractSourceLocations(lines: string[]): string[] {
+  const out: string[] = [];
+  const locationPattern = /([A-Za-z0-9_./-]+\.[cm]?[jt]sx?:\d+:\d+)/g;
+
+  for (const line of lines) {
+    let match: RegExpExecArray | null;
+    while ((match = locationPattern.exec(line))) {
+      out.push(match[1]);
+    }
+  }
+
+  return unique(out).slice(0, 3);
+}
+
+function buildCheckDrivenReturnContext(args: {
+  executedChecks: Array<{
+    command: string;
+    status: "passed" | "failed" | "skipped";
+    exitCode: number | null;
+    diagnostics?: string[];
+    qaConfigNotes?: string[];
+    artifacts?: string[];
+  }>;
+}): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  const failedChecks = args.executedChecks.filter((check) => check.status === "failed").slice(0, 4);
+  const items: Array<{
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+    evidence: string[];
+    recommendedAction: string;
+  }> = [];
+
+  for (const check of failedChecks) {
+    const diagnostics = (check.diagnostics || []).map((item) => trimText(item, 200)).slice(0, 4);
+    const qaConfigNotes = (check.qaConfigNotes || []).map((item) => trimText(item, 180)).slice(0, 2);
+    const artifacts = (check.artifacts || []).map((item) => trimText(item, 160)).slice(0, 2);
+    const sourceLocations = extractSourceLocations(diagnostics);
+    const e2eCheck = isE2eCheckCommand(check.command);
+    const cypressCheck = /\bcypress\b/i.test(check.command);
+
+    const issue = e2eCheck
+      ? `E2E check failed: ${trimText(check.command, 120)}`
+      : `Automated check failed: ${trimText(check.command, 120)}`;
+    const expectedResult = e2eCheck
+      ? "E2E command exits with code 0 and main-flow assertions pass with actionable failure details."
+      : "Automated validation command exits with code 0.";
+    const receivedResult = diagnostics[0]
+      || `Command exited with code ${check.exitCode ?? "unknown"} and no detailed assertion context.`;
+    const evidence = unique([
+      `Command: ${check.command}`,
+      ...qaConfigNotes,
+      ...artifacts.map((item) => `Artifact: ${item}`),
+      ...diagnostics,
+    ]).slice(0, 6);
+
+    let recommendedAction = e2eCheck
+      ? "Fix the failing E2E assertion or app flow and re-run this E2E command."
+      : "Fix the failing validation target and re-run this command.";
+
+    if (sourceLocations.length) {
+      recommendedAction = e2eCheck
+        ? `Fix the failing E2E assertion/root cause near ${sourceLocations.join(", ")} and re-run this E2E command.`
+        : `Apply targeted code/test fixes near ${sourceLocations.join(", ")} and re-run this command.`;
+    }
+
+    if (cypressCheck && diagnostics.length < 2) {
+      recommendedAction = `${recommendedAction} If failure output is still low-signal, update Cypress config/scripts to keep terminal-readable assertion output (reporter + stack traces) and avoid screenshot-only diagnostics.`;
+    }
+
+    items.push({
+      issue,
+      expectedResult,
+      receivedResult,
+      evidence,
+      recommendedAction,
+    });
+
+    if (cypressCheck && diagnostics.length < 2) {
+      items.push({
+        issue: "Cypress diagnostics are low-signal for QA handoff.",
+        expectedResult: "Cypress failures include assertion message and source location in terminal/report output.",
+        receivedResult: "Failure details were too generic and relied on low-value artifacts.",
+        evidence: unique([
+          ...qaConfigNotes,
+          ...artifacts.map((item) => `Artifact: ${item}`),
+          ...diagnostics,
+        ]).slice(0, 5),
+        recommendedAction:
+          "Adjust Cypress configuration/scripts so failed runs emit actionable assertion and location details for remediation agents.",
+      });
+    }
+  }
+
+  return items;
 }
 
 function isLikelyUnitTestFile(filePath: string): boolean {
@@ -262,6 +388,7 @@ export class QaWorker extends WorkerBase {
     const maxQaRetries = resolveQaMaxRetries();
     const previousReturnHistory = await loadQaReturnHistory(taskId);
     const compactChecks = compactChecksForModel(executedChecks);
+    const checkDrivenReturnContext = buildCheckDrivenReturnContext({ executedChecks: compactChecks });
 
     const hardFailures: string[] = [];
     if (!changedFiles.length) {
@@ -270,7 +397,12 @@ export class QaWorker extends WorkerBase {
 
     const failedChecks = executedChecks.filter((x) => x.status === "failed");
     for (const check of failedChecks) {
-      hardFailures.push(`Check failed: ${check.command} (exit ${check.exitCode ?? "unknown"})`);
+      const detail = (check.diagnostics || [])[0];
+      hardFailures.push(
+        detail
+          ? `Check failed: ${check.command} (exit ${check.exitCode ?? "unknown"}) | ${trimText(detail, 160)}`
+          : `Check failed: ${check.command} (exit ${check.exitCode ?? "unknown"})`,
+      );
     }
 
     const requiresE2E = ["Feature", "Bug", "Refactor", "Mixed"].includes(baseInput.task.typeHint);
@@ -315,6 +447,8 @@ MANDATORY VALIDATION CONTRACT:
 - If verdict is "fail", set "nextAgent" to "${remediationAgent}".
 - If verdict is "fail", fill "returnContext" with actionable items using "issue", "expectedResult", and "receivedResult".
 - Each "returnContext" item must include concrete evidence and a recommended action for the next agent.
+- Use executedChecks[].diagnostics, qaConfigNotes, and artifacts to make returnContext specific (avoid screenshot-only guidance).
+- For Cypress/E2E failures, include assertion/location evidence and remediation direction in returnContext.
 - Populate "testCases" as a real QA would: include concrete expectedResult vs actualResult and status.
 - Keep "testCases" concise and evidence-driven (max 6).
 - If verdict is "pass", set "nextAgent" to "PR Writer".
@@ -328,7 +462,7 @@ MANDATORY VALIDATION CONTRACT:
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string" }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
@@ -350,8 +484,9 @@ MANDATORY VALIDATION CONTRACT:
       ]);
     }
 
+    const modelAndCheckReturnContext = [...output.returnContext, ...checkDrivenReturnContext];
     output.returnContext = compactQaReturnContextItems([
-      ...output.returnContext,
+      ...modelAndCheckReturnContext,
       ...buildFallbackQaReturnContextItems({
         failures: output.failures,
         changedFiles: output.changedFiles,
@@ -360,7 +495,7 @@ MANDATORY VALIDATION CONTRACT:
           status: x.status,
           exitCode: x.exitCode,
         })),
-        existing: output.returnContext,
+        existing: modelAndCheckReturnContext,
       }),
     ]);
     output.testCases = compactQaTestCases([
@@ -372,6 +507,7 @@ MANDATORY VALIDATION CONTRACT:
           command: x.command,
           status: x.status,
           exitCode: x.exitCode,
+          diagnostics: x.diagnostics,
         })),
       }),
     ]);
@@ -451,7 +587,10 @@ ${output.changedFiles.length ? output.changedFiles.map((x) => `- ${x}`).join("\n
 ${reportedUnitTests.length ? reportedUnitTests.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Executed Checks
-${output.executedChecks.length ? output.executedChecks.map((x) => `- ${x.status.toUpperCase()} | ${x.command} | exit=${x.exitCode ?? "null"} | ${x.durationMs}ms`).join("\n") : "- [none]"}
+${output.executedChecks.length ? output.executedChecks.map((x) => {
+        const diag = x.diagnostics?.[0] ? ` | diag=${trimText(x.diagnostics[0], 120)}` : "";
+        return `- ${x.status.toUpperCase()} | ${x.command} | exit=${x.exitCode ?? "null"} | ${x.durationMs}ms${diag}`;
+      }).join("\n") : "- [none]"}
 
 ## Cumulative QA Return History
 ${formatReturnHistoryForView(output.qaHandoffContext?.history || [])}

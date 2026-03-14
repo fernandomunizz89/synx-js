@@ -283,9 +283,15 @@ export function buildFallbackQaReturnContextItems(args: {
 
     const failedCheckMatch = normalizedFailure.match(/^Check failed:\s*(.+?)\s*\(exit\s*([^)]+)\)/i);
     if (failedCheckMatch) {
-      if (hasExistingOverlap(normalizedFailure)) continue;
       const command = failedCheckMatch[1].trim();
       const exitCode = failedCheckMatch[2].trim();
+      const alreadyCoveredByExisting = hasExistingOverlap(normalizedFailure)
+        || existing.some((item) =>
+          item.issue.toLowerCase().includes(command.toLowerCase())
+          || item.receivedResult.toLowerCase().includes(command.toLowerCase())
+          || item.evidence.some((e) => e.toLowerCase().includes(command.toLowerCase())),
+        );
+      if (alreadyCoveredByExisting) continue;
       const checkEvidence = checks
         .filter((x) => x.command.includes(command))
         .map((x) => `${x.command} => status=${x.status}, exit=${x.exitCode ?? "null"}`);

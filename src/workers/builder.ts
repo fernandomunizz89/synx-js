@@ -54,8 +54,8 @@ function compactQaFindingsForModel(
     issue: trimText(item.issue, 180),
     expectedResult: trimText(item.expectedResult, 180),
     receivedResult: trimText(item.receivedResult, 180),
-    evidence: item.evidence.map((x) => trimText(x, 120)).slice(0, 2),
-    recommendedAction: trimText(item.recommendedAction, 180),
+    evidence: item.evidence.map((x) => trimText(x, 160)).slice(0, 3),
+    recommendedAction: trimText(item.recommendedAction, 220),
   }));
 }
 
@@ -74,7 +74,7 @@ function buildQaFeedbackQuery(args: {
   title: string;
   rawRequest: string;
   qaFailures: string[];
-  latestFindings: Array<{ issue: string; expectedResult: string; receivedResult: string }>;
+  latestFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
   repeatedIssues: string[];
 }): string {
   const lines: string[] = [];
@@ -90,6 +90,8 @@ function buildQaFeedbackQuery(args: {
       lines.push(`- ${trimText(item.issue, 120)}`);
       lines.push(`  expected=${trimText(item.expectedResult, 120)}`);
       lines.push(`  received=${trimText(item.receivedResult, 120)}`);
+      if (item.recommendedAction) lines.push(`  action=${trimText(item.recommendedAction, 140)}`);
+      if (item.evidence.length) lines.push(`  evidence=${item.evidence.map((x) => trimText(x, 80)).join(" | ")}`);
     }
   }
   if (args.repeatedIssues.length) {
@@ -239,7 +241,9 @@ MANDATORY EXECUTION CONTRACT:
 - If executionContract.requiresE2eRepair is true, fix existing e2e coverage gaps called out by QA.
 - If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
 - Use qaFeedback.latestExpectedVsReceived.expectedResult vs receivedResult as explicit fix targets.
+- Use qaFeedback.latestExpectedVsReceived.recommendedAction and evidence to choose concrete edits.
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
+- If QA evidence points to Cypress/E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
 - If executionContract.mustChangeStrategy is true, do not repeat the previous failed approach.
 - If executionContract.mustChangeStrategy is true, include "Iteration Strategy: ..." as the first item in changesMade.
 - Use repository paths that exist in workspaceContext.files when possible.
