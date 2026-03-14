@@ -21,6 +21,8 @@ export type AgentName =
   | "Human Review";
 
 export type ProviderType = "mock" | "openai-compatible";
+export type E2EPolicy = "auto" | "required" | "skip";
+export type E2EFramework = "auto" | "cypress" | "playwright" | "other";
 
 export interface ProviderStageConfig {
   type: ProviderType;
@@ -74,6 +76,11 @@ export interface NewTaskInput {
     relatedFiles: string[];
     logs: string[];
     notes: string[];
+    qaPreferences?: {
+      e2ePolicy?: E2EPolicy;
+      e2eFramework?: E2EFramework;
+      objective?: string;
+    };
   };
 }
 

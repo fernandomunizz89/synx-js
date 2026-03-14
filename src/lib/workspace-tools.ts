@@ -768,11 +768,13 @@ export async function detectTestCapabilities(workspaceRoot: string): Promise<Tes
 export async function runProjectChecks(args: {
   workspaceRoot: string;
   timeoutMsPerCheck?: number;
+  includeE2E?: boolean;
 }): Promise<ValidationCheckResult[]> {
   const workspaceRoot = path.resolve(args.workspaceRoot);
   const scripts = await readPackageScripts(workspaceRoot);
   const availableBase = BASE_CHECK_SCRIPT_ORDER.filter((name) => Boolean(scripts[name]));
-  const availableE2e = E2E_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
+  const includeE2E = args.includeE2E ?? true;
+  const availableE2e = includeE2E ? E2E_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name])) : [];
   const available = unique([...availableBase, ...availableE2e]);
 
   if (!available.length) {

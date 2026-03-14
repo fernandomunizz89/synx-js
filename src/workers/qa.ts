@@ -15,6 +15,7 @@ import {
   type QaHandoffContext,
   type QaReturnHistoryEntry,
 } from "../lib/qa-context.js";
+import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runProjectChecks } from "../lib/workspace-tools.js";
@@ -377,12 +378,17 @@ export class QaWorker extends WorkerBase {
     const prompt = await loadPromptFile("qa-validator.md");
     const provider = createProvider(config.providers.planner);
     const baseInput = await this.buildAgentInput(taskId, request);
+    const qaPreferences = resolveTaskQaPreferences(baseInput.task);
     const meta = await loadTaskMeta(taskId);
     const workspaceRoot = process.cwd();
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const reportedUnitTests = await loadReportedUnitTests(taskId);
     const changedFiles = await getGitChangedFiles(workspaceRoot);
-    const executedChecks = await runProjectChecks({ workspaceRoot, timeoutMsPerCheck: 150_000 });
+    const executedChecks = await runProjectChecks({
+      workspaceRoot,
+      timeoutMsPerCheck: 150_000,
+      includeE2E: qaPreferences.e2ePolicy !== "skip",
+    });
     const previousQaAttempts = meta.history.filter((x) => x.stage === "qa").length;
     const currentQaAttempt = previousQaAttempts + 1;
     const maxQaRetries = resolveQaMaxRetries();
@@ -405,11 +411,17 @@ export class QaWorker extends WorkerBase {
       );
     }
 
-    const requiresE2E = ["Feature", "Bug", "Refactor", "Mixed"].includes(baseInput.task.typeHint);
+    const requiresE2E = qaPreferences.e2eRequired;
     const requiresUnitTests = requiresE2E;
     const e2eChecks = executedChecks.filter((x) => /\be2e\b|playwright|cypress/i.test(x.command));
+    const frameworkChecks = qaPreferences.e2eFramework === "auto" || qaPreferences.e2eFramework === "other"
+      ? e2eChecks
+      : e2eChecks.filter((x) => matchesE2EFrameworkCommand(x.command, qaPreferences.e2eFramework));
     if (requiresE2E && !e2eChecks.length) {
-      hardFailures.push("No E2E check was executed. Add an e2e script and a main-flow E2E test.");
+      hardFailures.push(`No E2E check was executed. Objective: ${qaPreferences.objective}`);
+    }
+    if (requiresE2E && qaPreferences.e2eFramework !== "auto" && qaPreferences.e2eFramework !== "other" && !frameworkChecks.length) {
+      hardFailures.push(`No ${qaPreferences.e2eFramework} check was executed, but this framework is required for this task.`);
     }
 
     const hasUnitTestEvidence = reportedUnitTests.length > 0 || changedFiles.some(isLikelyUnitTestFile);
@@ -435,6 +447,7 @@ export class QaWorker extends WorkerBase {
         executedChecks: compactChecks,
         reportedUnitTests,
       },
+      qaPreferences,
     };
 
     const strictContract = `
@@ -444,11 +457,18 @@ MANDATORY VALIDATION CONTRACT:
 - If any check failed, verdict must be "fail".
 - If changedFiles is empty, verdict must be "fail".
 - If task type is Feature/Bug/Refactor/Mixed and no E2E check was executed, verdict must be "fail".
+- Follow qaPreferences.e2ePolicy and qaPreferences.objective as the explicit human quality target.
+- If qaPreferences.e2ePolicy is "required", E2E evidence is mandatory.
+- If qaPreferences.e2eFramework is "cypress" or "playwright", require evidence for that framework specifically.
 - If verdict is "fail", set "nextAgent" to "${remediationAgent}".
 - If verdict is "fail", fill "returnContext" with actionable items using "issue", "expectedResult", and "receivedResult".
 - Each "returnContext" item must include concrete evidence and a recommended action for the next agent.
 - Use executedChecks[].diagnostics, qaConfigNotes, and artifacts to make returnContext specific (avoid screenshot-only guidance).
 - For Cypress/E2E failures, include assertion/location evidence and remediation direction in returnContext.
+- If failures suggest missing data-cy selectors, list required selectors and target files in returnContext.
+- If failures suggest import/export mismatch, call out the exact symbol/file contract mismatch in returnContext.
+- If failures suggest Cypress config mismatch (baseUrl/specPattern/configFile), call out exact config edits needed.
+- If failures suggest flawed E2E test logic (scoping/order/assertion form), call out exact test file fixes.
 - Populate "testCases" as a real QA would: include concrete expectedResult vs actualResult and status.
 - Keep "testCases" concise and evidence-driven (max 6).
 - If verdict is "pass", set "nextAgent" to "PR Writer".
@@ -576,6 +596,11 @@ ${output.verdict}
 ## QA Attempt
 - Attempt: ${currentQaAttempt}/${maxQaRetries}
 - Escalated to human: ${escalatedToHuman ? "yes" : "no"}
+
+## Human QA Preferences
+- E2E policy: ${qaPreferences.e2ePolicy}
+- E2E framework: ${qaPreferences.e2eFramework}
+- Objective: ${qaPreferences.objective}
 
 ## E2E Plan
 ${output.e2ePlan.length ? output.e2ePlan.map((x) => `- ${x}`).join("\n") : "- [none]"}
