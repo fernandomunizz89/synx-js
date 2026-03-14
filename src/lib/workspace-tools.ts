@@ -81,8 +81,8 @@ const STOPWORDS = new Set([
 const MAX_SCAN_FILES = 1200;
 const MAX_FILE_SIZE_BYTES = 300_000;
 const MAX_FILE_CONTEXT_CHARS = 7000;
-const MAX_CONTEXT_FILES = 6;
-const MAX_TOTAL_CONTEXT_CHARS = 18_000;
+const MAX_CONTEXT_FILES = 12;
+const MAX_TOTAL_CONTEXT_CHARS = 30_000;
 
 export type WorkspaceEditAction = "create" | "replace" | "replace_snippet" | "delete";
 
@@ -132,6 +132,13 @@ export interface ValidationCheckResult {
   durationMs: number;
   stdoutPreview: string;
   stderrPreview: string;
+}
+
+export interface TestCapabilities {
+  hasUnitTestScript: boolean;
+  hasE2EScript: boolean;
+  unitScripts: string[];
+  e2eScripts: string[];
 }
 
 function normalizeInputPath(filePath: string): string {
@@ -483,7 +490,7 @@ export async function isGitRepository(workspaceRoot: string): Promise<boolean> {
 export async function getGitChangedFiles(workspaceRoot: string): Promise<string[]> {
   if (!(await isGitRepository(workspaceRoot))) return [];
 
-  const result = await runCommand({
+  const trackedResult = await runCommand({
     command: "git",
     commandArgs: ["diff", "--name-only", "--"],
     cwd: workspaceRoot,
@@ -491,10 +498,29 @@ export async function getGitChangedFiles(workspaceRoot: string): Promise<string[
     maxOutputChars: 50_000,
   });
 
-  if (result.exitCode !== 0) return [];
+  if (trackedResult.exitCode !== 0) return [];
 
-  return result.stdout
+  const untrackedResult = await runCommand({
+    command: "git",
+    commandArgs: ["ls-files", "--others", "--exclude-standard"],
+    cwd: workspaceRoot,
+    timeoutMs: 12_000,
+    maxOutputChars: 50_000,
+  });
+
+  const tracked = trackedResult.stdout
     .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const untracked = untrackedResult.exitCode === 0
+    ? untrackedResult.stdout
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+    : [];
+
+  return unique([...tracked, ...untracked])
     .map((x) => x.trim())
     .filter((x) => Boolean(x) && !x.startsWith(".ai-agents/") && !x.startsWith(".git/"));
 }
@@ -533,14 +559,41 @@ function buildScriptCommand(manager: "npm" | "pnpm" | "yarn" | "bun", script: st
   }
 }
 
+const BASE_CHECK_SCRIPT_ORDER = ["check", "test", "lint"] as const;
+const UNIT_SCRIPT_CANDIDATES = ["test", "unit", "test:unit", "test:ci"] as const;
+const E2E_SCRIPT_CANDIDATES = [
+  "e2e",
+  "test:e2e",
+  "e2e:test",
+  "test:e2e:ci",
+  "playwright",
+  "playwright:test",
+  "cypress",
+  "cypress:run",
+] as const;
+
+export async function detectTestCapabilities(workspaceRoot: string): Promise<TestCapabilities> {
+  const scripts = await readPackageScripts(path.resolve(workspaceRoot));
+  const unitScripts = UNIT_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
+  const e2eScripts = E2E_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
+
+  return {
+    hasUnitTestScript: unitScripts.length > 0,
+    hasE2EScript: e2eScripts.length > 0,
+    unitScripts,
+    e2eScripts,
+  };
+}
+
 export async function runProjectChecks(args: {
   workspaceRoot: string;
   timeoutMsPerCheck?: number;
 }): Promise<ValidationCheckResult[]> {
   const workspaceRoot = path.resolve(args.workspaceRoot);
   const scripts = await readPackageScripts(workspaceRoot);
-  const checkOrder = ["check", "test", "lint"];
-  const available = checkOrder.filter((name) => Boolean(scripts[name]));
+  const availableBase = BASE_CHECK_SCRIPT_ORDER.filter((name) => Boolean(scripts[name]));
+  const availableE2e = E2E_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
+  const available = unique([...availableBase, ...availableE2e]);
 
   if (!available.length) {
     return [
@@ -551,7 +604,7 @@ export async function runProjectChecks(args: {
         timedOut: false,
         durationMs: 0,
         stdoutPreview: "",
-        stderrPreview: "No check/test/lint scripts found in package.json",
+        stderrPreview: "No check/test/lint/e2e scripts found in package.json",
       },
     ];
   }
