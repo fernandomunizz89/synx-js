@@ -1,9 +1,10 @@
 import path from "node:path";
-import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
+import { DEFAULT_QA_MAX_RETRIES, DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { qaOutputSchema } from "../lib/schema.js";
+import { loadTaskMeta } from "../lib/task.js";
 import type { AgentName, StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
@@ -12,6 +13,12 @@ import { WorkerBase } from "./base.js";
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
+}
+
+function resolveQaMaxRetries(): number {
+  const raw = Number(process.env.AI_AGENTS_QA_MAX_RETRIES || "");
+  if (Number.isFinite(raw) && raw >= 1) return Math.floor(raw);
+  return DEFAULT_QA_MAX_RETRIES;
 }
 
 function isLikelyUnitTestFile(filePath: string): boolean {
@@ -58,11 +65,15 @@ export class QaWorker extends WorkerBase {
     const prompt = await loadPromptFile("qa-validator.md");
     const provider = createProvider(config.providers.planner);
     const baseInput = await this.buildAgentInput(taskId, request);
+    const meta = await loadTaskMeta(taskId);
     const workspaceRoot = process.cwd();
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const reportedUnitTests = await loadReportedUnitTests(taskId);
     const changedFiles = await getGitChangedFiles(workspaceRoot);
     const executedChecks = await runProjectChecks({ workspaceRoot, timeoutMsPerCheck: 150_000 });
+    const previousQaAttempts = meta.history.filter((x) => x.stage === "qa").length;
+    const currentQaAttempt = previousQaAttempts + 1;
+    const maxQaRetries = resolveQaMaxRetries();
 
     const hardFailures: string[] = [];
     if (!changedFiles.length) {
@@ -95,6 +106,10 @@ export class QaWorker extends WorkerBase {
 
     const modelInput = {
       ...baseInput,
+      qaControl: {
+        currentAttempt: currentQaAttempt,
+        maxRetries: maxQaRetries,
+      },
       validationEvidence: {
         changedFiles,
         executedChecks,
@@ -111,6 +126,7 @@ MANDATORY VALIDATION CONTRACT:
 - If task type is Feature/Bug/Refactor/Mixed and no E2E check was executed, verdict must be "fail".
 - If verdict is "fail", set "nextAgent" to "${remediationAgent}".
 - If verdict is "pass", set "nextAgent" to "PR Writer".
+- This QA attempt is ${currentQaAttempt} of max ${maxQaRetries} before forced human escalation.
 - Keep failures specific and actionable.
 `;
 
@@ -131,10 +147,19 @@ MANDATORY VALIDATION CONTRACT:
     }
 
     output.nextAgent = output.verdict === "pass" ? "PR Writer" : remediationAgent;
-    const nextStage = output.nextAgent === "PR Writer" ? "pr" : output.nextAgent === "Bug Fixer" ? "bug-fixer" : "builder";
-    const nextRequestFileName = output.nextAgent === "PR Writer"
+    const escalatedToHuman = output.verdict === "fail" && currentQaAttempt >= maxQaRetries;
+    if (escalatedToHuman) {
+      output.failures = unique([
+        ...output.failures,
+        `QA retry limit reached (${currentQaAttempt}/${maxQaRetries}). Escalating to human review.`,
+      ]);
+    }
+
+    const queuedNextAgent = escalatedToHuman ? undefined : output.nextAgent;
+    const queuedNextStage = queuedNextAgent === "PR Writer" ? "pr" : queuedNextAgent === "Bug Fixer" ? "bug-fixer" : "builder";
+    const queuedNextRequestFileName = queuedNextAgent === "PR Writer"
       ? STAGE_FILE_NAMES.pr
-      : output.nextAgent === "Bug Fixer"
+      : queuedNextAgent === "Bug Fixer"
         ? STAGE_FILE_NAMES.bugFixer
         : STAGE_FILE_NAMES.builder;
     const nextInputRef = `done/${DONE_FILE_NAMES.qa}`;
@@ -156,6 +181,10 @@ ${output.failures.length ? output.failures.map((x) => `- ${x}`).join("\n") : "- 
 ## QA Verdict
 ${output.verdict}
 
+## QA Attempt
+- Attempt: ${currentQaAttempt}/${maxQaRetries}
+- Escalated to human: ${escalatedToHuman ? "yes" : "no"}
+
 ## E2E Plan
 ${output.e2ePlan.length ? output.e2ePlan.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
@@ -169,7 +198,7 @@ ${reportedUnitTests.length ? reportedUnitTests.map((x) => `- ${x}`).join("\n") :
 ${output.executedChecks.length ? output.executedChecks.map((x) => `- ${x.status.toUpperCase()} | ${x.command} | exit=${x.exitCode ?? "null"} | ${x.durationMs}ms`).join("\n") : "- [none]"}
 
 ## Next
-${output.nextAgent}
+${escalatedToHuman ? "Human Review" : output.nextAgent}
 `;
 
     await this.finishStage({
@@ -179,10 +208,11 @@ ${output.nextAgent}
       viewFileName: "06-qa.md",
       viewContent: view,
       output,
-      nextAgent: output.nextAgent,
-      nextStage,
-      nextRequestFileName,
+      nextAgent: queuedNextAgent,
+      nextStage: queuedNextAgent ? queuedNextStage : undefined,
+      nextRequestFileName: queuedNextAgent ? queuedNextRequestFileName : undefined,
       nextInputRef,
+      humanApprovalRequired: escalatedToHuman,
       startedAt,
       provider: result.provider,
       model: result.model,

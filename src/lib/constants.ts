@@ -7,6 +7,7 @@ export const RUNTIME_DIR = ".ai-agents/runtime";
 export const LOCKS_DIR = ".ai-agents/runtime/locks";
 export const POLL_INTERVAL_MS = 1200;
 export const STALE_LOCK_MINUTES = 10;
+export const DEFAULT_QA_MAX_RETRIES = 3;
 
 export const STAGE_FILE_NAMES = {
   dispatcher: "00-dispatcher.request.json",
