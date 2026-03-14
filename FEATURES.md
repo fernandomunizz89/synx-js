@@ -43,6 +43,8 @@
 - QA can send failed tasks back to the correct implementation agent (`Bug Fixer` for bugs, `Feature Builder` for non-bugs).
 - QA failure now carries structured blocker context (`expectedResult` vs `receivedResult`, evidence, and recommended action).
 - QA return context is cumulative across retries and is refreshed on every new return.
+- QA output now includes concrete test cases (`expectedResult` vs `actualResult`) to emulate real QA validation.
+- Implementation retries now include anti-repeat strategy guidance when previous QA loops failed.
 - QA retry loops are capped and escalate to human review when the retry limit is reached.
 - Feature Builder and Bug Fixer apply real file edits in the target workspace (`create`, `replace`, `replace_snippet`, `delete`).
 - Implementation stages support broader multi-file edits for related source/test/config files while keeping protected paths blocked.

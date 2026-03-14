@@ -84,6 +84,8 @@ Routing summary:
 - QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
 - QA fail handoff includes structured context per blocker: expected result, received result, evidence, and recommended action
 - QA return context is cumulative and updated on each loop so the next implementation attempt sees prior QA findings
+- QA now emits explicit test cases with expected vs actual results (real QA mindset)
+- In repeated QA loops, implementation agents are instructed to change strategy, not repeat the same failed approach
 - QA retry loop is capped (default 3 fails). After the cap, the task is escalated to human review (`waiting_human`).
 
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).

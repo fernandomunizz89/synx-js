@@ -149,6 +149,8 @@ This works well with:
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
 - QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
 - QA return context is cumulative across retries and is passed forward again on each new remediation loop.
+- QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
+- On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
 
@@ -160,6 +162,7 @@ This works well with:
   - `.ai-agents/tasks/<task-id>/done/04b-bug-fixer.done.json` (bug path)
   - `.ai-agents/tasks/<task-id>/done/06-qa.done.json`
   - `.ai-agents/tasks/<task-id>/artifacts/qa-return-context-history.json` (cumulative QA return context)
+- Check output previews are compacted to reduce token usage and improve iteration speed.
 
 ## Provider stability controls
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
