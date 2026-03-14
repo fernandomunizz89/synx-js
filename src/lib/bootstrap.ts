@@ -192,7 +192,10 @@ Fix the root cause using real code edits in relevant files.
 It is allowed to edit multiple related files when needed for a complete bug fix.
 Do not claim code changes that were not actually proposed as file edits.
 When test infra exists, add or update unit tests that cover the bug and happy path.
+Main-flow E2E validation is required for bug tasks.
+If the repository has no E2E script, add one and create at least one E2E test that covers the main user flow.
 If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
+Always include the runnable E2E command in "testsToRun".
 Only use paths that are valid for the workspace and avoid protected folders.
 
 Return exactly:
@@ -228,7 +231,10 @@ Apply real code changes in the target workspace.
 It is allowed to edit multiple related files when needed for a complete feature/refactor implementation.
 Do not claim code changes that were not actually proposed as file edits.
 When unit test infrastructure exists, add or update unit tests for the delivered behavior.
+Main-flow E2E validation is required for Feature/Refactor/Mixed tasks.
+If the repository has no E2E script, add one and create at least one E2E test that covers the main user flow.
 If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
+Always include the runnable E2E command in "testsToRun".
 Only use paths that are valid for the workspace and avoid protected folders.
 Keep edits minimal and implementation-oriented.
 

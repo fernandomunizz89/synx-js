@@ -20,6 +20,20 @@ function extractQaFailures(previousStage: unknown): string[] {
   return failures.filter((x): x is string => typeof x === "string");
 }
 
+function hasE2eInfraEdits(edits: Array<{ path: string }>): boolean {
+  return edits.some((edit) => {
+    const p = edit.path.replace(/\\/g, "/").toLowerCase();
+    return (
+      p === "package.json" ||
+      p.includes("/e2e/") ||
+      p.endsWith(".spec.ts") ||
+      p.endsWith(".spec.tsx") ||
+      p.includes("playwright") ||
+      p.includes("cypress")
+    );
+  });
+}
+
 export class BuilderWorker extends WorkerBase {
   readonly agent = "Feature Builder" as const;
   readonly requestFileName = STAGE_FILE_NAMES.builder;
@@ -34,6 +48,8 @@ export class BuilderWorker extends WorkerBase {
     const baseInput = await this.buildAgentInput(taskId, request);
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const qaFailures = extractQaFailures(baseInput.previousStage);
+    const requiresE2eMainFlow = ["Feature", "Bug", "Refactor", "Mixed"].includes(baseInput.task.typeHint);
+    const mustCreateE2eInfra = requiresE2eMainFlow && !testCapabilities.hasE2EScript;
     const requiresE2eRepair = qaFailures.some((x) => /\be2e\b|playwright|cypress/i.test(x));
     const workspaceContext = await buildWorkspaceContextSnapshot({
       workspaceRoot,
@@ -49,6 +65,8 @@ export class BuilderWorker extends WorkerBase {
         allowedActions: ["create", "replace", "replace_snippet", "delete"],
         protectedPaths: [".ai-agents/**", ".git/**"],
         testCapabilities,
+        requiresE2eMainFlow,
+        mustCreateE2eInfra,
         requiresE2eRepair,
       },
     };
@@ -58,7 +76,9 @@ MANDATORY EXECUTION CONTRACT:
 - You MUST propose concrete file edits in "edits".
 - You MAY edit any files that are directly related to the request (source, tests, config, and wiring).
 - If executionContract.testCapabilities.hasUnitTestScript is true, include at least one updated unit test path in "unitTestsAdded".
-- If executionContract.requiresE2eRepair is true, include e2e-related updates and runnable e2e command(s) in "testsToRun".
+- If executionContract.requiresE2eMainFlow is true, include runnable e2e command(s) in "testsToRun".
+- If executionContract.mustCreateE2eInfra is true, create missing e2e script/config and at least one e2e test for the main flow.
+- If executionContract.requiresE2eRepair is true, fix existing e2e coverage gaps called out by QA.
 - Use repository paths that exist in workspaceContext.files when possible.
 - Prefer action "replace_snippet" for small/localized edits.
 - Use action "replace" for full-file rewrites, and "create" only for new files.
@@ -108,6 +128,19 @@ Return exactly this JSON shape:
       output.risks = unique([
         ...output.risks,
         "QA requested E2E remediation but testsToRun did not explicitly include an E2E command.",
+      ]);
+    }
+    if (requiresE2eMainFlow && !output.testsToRun.some((x) => /\be2e\b|playwright|cypress/i.test(x))) {
+      output.testsToRun = unique([...output.testsToRun, "npm run --if-present e2e"]);
+      output.risks = unique([
+        ...output.risks,
+        "Main-flow E2E is required but testsToRun did not include an E2E command.",
+      ]);
+    }
+    if (mustCreateE2eInfra && !hasE2eInfraEdits(output.edits)) {
+      output.risks = unique([
+        ...output.risks,
+        "No E2E infrastructure edits were proposed although the project has no E2E script.",
       ]);
     }
 
