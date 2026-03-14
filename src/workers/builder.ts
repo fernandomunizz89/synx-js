@@ -2,6 +2,7 @@ import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { extractQaHandoffContext } from "../lib/qa-context.js";
+import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { builderOutputSchema } from "../lib/schema.js";
@@ -171,6 +172,7 @@ export class BuilderWorker extends WorkerBase {
     const provider = createProvider(config.providers.planner);
     const workspaceRoot = process.cwd();
     const baseInput = await this.buildAgentInput(taskId, request);
+    const qaPreferences = resolveTaskQaPreferences(baseInput.task);
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const qaFailures = extractQaFailures(baseInput.previousStage);
     const qaHandoffContext = extractQaHandoffContext(baseInput.previousStage);
@@ -181,7 +183,7 @@ export class BuilderWorker extends WorkerBase {
       .map((item) => `${item.issue} (x${item.occurrences})`)
       .slice(0, 5);
     const mustChangeStrategy = (qaHandoffContext?.attempt ?? 0) >= 2 || repeatedIssues.length > 0;
-    const requiresE2eMainFlow = ["Feature", "Bug", "Refactor", "Mixed"].includes(baseInput.task.typeHint);
+    const requiresE2eMainFlow = qaPreferences.e2eRequired;
     const mustCreateE2eInfra = requiresE2eMainFlow && !testCapabilities.hasE2EScript;
     const requiresE2eRepair = [
       ...qaFailures,
@@ -223,6 +225,7 @@ export class BuilderWorker extends WorkerBase {
         allowedActions: ["create", "replace", "replace_snippet", "delete"],
         protectedPaths: [".ai-agents/**", ".git/**"],
         testCapabilities,
+        qaPreferences,
         requiresE2eMainFlow,
         mustCreateE2eInfra,
         requiresE2eRepair,
@@ -236,7 +239,9 @@ MANDATORY EXECUTION CONTRACT:
 - You MUST propose concrete file edits in "edits".
 - You MAY edit any files that are directly related to the request (source, tests, config, and wiring).
 - If executionContract.testCapabilities.hasUnitTestScript is true, include at least one updated unit test path in "unitTestsAdded".
+- Follow executionContract.qaPreferences.objective as the human-defined validation target.
 - If executionContract.requiresE2eMainFlow is true, include runnable e2e command(s) in "testsToRun".
+- If executionContract.qaPreferences.e2eFramework is cypress or playwright, include the corresponding framework command in "testsToRun".
 - If executionContract.mustCreateE2eInfra is true, create missing e2e script/config and at least one e2e test for the main flow.
 - If executionContract.requiresE2eRepair is true, fix existing e2e coverage gaps called out by QA.
 - If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
@@ -244,6 +249,10 @@ MANDATORY EXECUTION CONTRACT:
 - Use qaFeedback.latestExpectedVsReceived.recommendedAction and evidence to choose concrete edits.
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
 - If QA evidence points to Cypress/E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
+- If QA findings mention missing data-cy selectors, add those data-cy attributes directly in the relevant UI components.
+- If QA findings mention import/export mismatch (e.g., "does not provide an export named"), reconcile import/export contracts in source code.
+- If QA findings mention Cypress config issues (baseUrl/specPattern/configFile), fix and unify Cypress config so tests run consistently.
+- If QA findings mention flaky/incorrect E2E test logic (e.g., variable scope across then blocks), patch the test code itself.
 - If executionContract.mustChangeStrategy is true, do not repeat the previous failed approach.
 - If executionContract.mustChangeStrategy is true, include "Iteration Strategy: ..." as the first item in changesMade.
 - Use repository paths that exist in workspaceContext.files when possible.
@@ -307,18 +316,20 @@ Return exactly this JSON shape:
         "Unit test scripts exist but no unit test file was reported in unitTestsAdded.",
       ]);
     }
-    if (requiresE2eRepair && !output.testsToRun.some((x) => /\be2e\b|playwright|cypress/i.test(x))) {
-      output.testsToRun = unique([...output.testsToRun, "npm run --if-present e2e"]);
+    const hasRequiredE2eCommand = output.testsToRun.some((x) => matchesE2EFrameworkCommand(x, qaPreferences.e2eFramework));
+    const preferredCommand = preferredE2ECommand(qaPreferences.e2eFramework, testCapabilities.e2eScripts);
+    if (requiresE2eRepair && !hasRequiredE2eCommand) {
+      output.testsToRun = unique([...output.testsToRun, preferredCommand]);
       output.risks = unique([
         ...output.risks,
-        "QA requested E2E remediation but testsToRun did not explicitly include an E2E command.",
+        `QA requested E2E remediation but testsToRun did not include ${qaPreferences.e2eFramework} command coverage.`,
       ]);
     }
-    if (requiresE2eMainFlow && !output.testsToRun.some((x) => /\be2e\b|playwright|cypress/i.test(x))) {
-      output.testsToRun = unique([...output.testsToRun, "npm run --if-present e2e"]);
+    if (requiresE2eMainFlow && !output.testsToRun.some((x) => matchesE2EFrameworkCommand(x, qaPreferences.e2eFramework))) {
+      output.testsToRun = unique([...output.testsToRun, preferredCommand]);
       output.risks = unique([
         ...output.risks,
-        "Main-flow E2E is required but testsToRun did not include an E2E command.",
+        `Main-flow E2E is required (${qaPreferences.e2eFramework}) but testsToRun did not include the required framework command.`,
       ]);
     }
     if (mustCreateE2eInfra && !hasE2eInfraEdits(output.edits)) {
