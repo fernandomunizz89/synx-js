@@ -44,6 +44,17 @@ If setup is broken, it stops with guidance and asks you to run:
 ai-agents setup
 ```
 
+When running in an interactive terminal, `start` also shows a live progress panel:
+- spinner heartbeat
+- engine uptime
+- active/waiting/failed/done counters
+- progress bar per active task based on stage
+
+To disable it:
+```bash
+ai-agents start --no-progress
+```
+
 ### 3. `new`
 Creates a task.
 
@@ -72,10 +83,15 @@ Shows what is happening in simple terms.
 
 It tells you:
 - whether basic readiness checks passed
-- what tasks are running
-- what tasks need your approval
-- what failed
-- what looks stuck
+- summary counters (active, waiting, failed, done)
+- by default, only the most relevant task:
+  - current in-progress task, or
+  - latest completed task when nothing is active
+
+To list all tasks/history:
+```bash
+ai-agents status --all
+```
 
 ## Final human step
 When a task reaches `waiting_human`, approve it with:

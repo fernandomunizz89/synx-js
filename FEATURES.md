@@ -5,6 +5,8 @@
 - Dynamic command hints that match how the CLI was invoked.
 - Human-friendly next-step guidance after key commands.
 - Explicit task type support in `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
+- Live `start` terminal indicator with spinner, elapsed time, stage-based per-task progress bars, and task counters (`--no-progress` available).
+- `status` now defaults to a focused view (current task or latest completed), with `status --all` for full history.
 
 ## Setup and Configuration
 - Guided setup with required human reviewer name (no implicit default).

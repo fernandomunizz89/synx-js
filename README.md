@@ -67,6 +67,25 @@ ai-agents status
 ai-agents approve
 ```
 
+While `start` is running in a terminal, it now shows:
+- live spinner heartbeat
+- elapsed timer
+- per-task progress bar by pipeline stage/agent
+
+If you prefer quiet mode:
+```bash
+ai-agents start --no-progress
+```
+
+`status` now defaults to a focused view:
+- shows the task currently in progress (or waiting your approval)
+- if no active task exists, shows the latest completed task
+
+To list all historical tasks:
+```bash
+ai-agents status --all
+```
+
 ## Preflight behavior
 - `start`, `new`, `status`, and `approve` run readiness checks before doing work.
 - The CLI does not assume another machine/user is already configured.
