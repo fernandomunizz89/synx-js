@@ -15,6 +15,7 @@
 - Preflight readiness checks before `start`, `new`, `status`, and `approve`.
 - `start` aborts by default when setup is broken, with clear remediation.
 - Optional `start --force` for advanced/manual recovery scenarios.
+- Readiness now verifies required prompt files explicitly (not just prompt directory existence).
 
 ## Recovery and Operations
 - Stale lock detection by age and dead PID.
@@ -34,3 +35,7 @@
 - Dispatcher and Spec Planner run with provider-backed structured output.
 - Bug Investigator, Feature Builder, Reviewer, QA Validator, and PR Writer also run with provider-backed structured output (no mock-only downstream path).
 - All stage outputs are validated with strict zod schemas before advancing.
+- Stage input chaining now includes both original task input and prior stage artifacts for downstream agents.
+- Feature Builder now applies real file edits in the target workspace (`create`, `replace`, `replace_snippet`, `delete`).
+- QA Validator now captures real validation evidence (`git diff` changed files + runnable checks from package scripts).
+- OpenAI-compatible provider calls now support timeout control via `AI_AGENTS_PROVIDER_TIMEOUT_MS`.

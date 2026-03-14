@@ -110,6 +110,30 @@ This works well with:
   - `QA Validator`
   - `PR Writer`
 - The pipeline only advances when each stage output passes schema validation.
+- `Feature Builder` now applies real workspace edits (not only text handoff).
+- `QA Validator` now validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint` when present).
+- Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
+
+## Real code edits and QA evidence
+- Builder accepts concrete edit operations (`create`, `replace`, `replace_snippet`, `delete`) and applies them safely inside the workspace root.
+- Protected paths are blocked from edits (`.ai-agents/**`, `.git/**`).
+- QA records changed files and executed checks in task artifacts:
+  - `.ai-agents/tasks/<task-id>/done/04-implementation.done.json`
+  - `.ai-agents/tasks/<task-id>/done/06-qa.done.json`
+
+## Provider stability controls
+- `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
+- `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
+
+If a model is slow locally, start by lowering context and setting a timeout:
+```bash
+export AI_AGENTS_PROVIDER_TIMEOUT_MS=180000
+```
+
+## Prompt integrity checks
+- `doctor` now verifies that all required prompt files exist, not only the prompt folder.
+- Readiness checks used by `start/new/status/approve` also block when required prompt files are missing.
+- To recreate missing prompts/config safely: `ai-agents fix --bootstrap`.
 
 ## Cross-platform
 The CLI uses Node path and home directory resolution, so it is built to run on:
