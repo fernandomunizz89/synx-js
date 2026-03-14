@@ -27,3 +27,13 @@ export const DONE_FILE_NAMES = {
   qa: "06-qa.done.json",
   pr: "07-pr.done.json",
 };
+
+export const REQUIRED_PROMPT_FILES = [
+  "dispatcher.md",
+  "spec-planner.md",
+  "bug-investigator.md",
+  "feature-builder.md",
+  "reviewer.md",
+  "qa-validator.md",
+  "pr-writer.md",
+] as const;

@@ -9,6 +9,8 @@ import { providerHealthToHuman } from "../lib/human-messages.js";
 import { confirmAction } from "../lib/interactive.js";
 import { clearStaleLocks, detectInterruptedTasks, detectStaleLocks, detectWorkingOrphans, recoverInterruptedTasks, recoverWorkingFiles } from "../lib/runtime.js";
 import { commandExample } from "../lib/cli-command.js";
+import { REQUIRED_PROMPT_FILES } from "../lib/constants.js";
+import path from "node:path";
 
 export const doctorCommand = new Command("doctor")
   .description("Run human-friendly diagnostics")
@@ -35,6 +37,20 @@ export const doctorCommand = new Command("doctor")
       label: "Prompts",
       ok: await exists(promptsDir()),
       message: await exists(promptsDir()) ? "Prompt folder exists." : "Prompt folder is missing.",
+    });
+
+    const missingPrompts: string[] = [];
+    for (const promptFile of REQUIRED_PROMPT_FILES) {
+      if (!(await exists(path.join(promptsDir(), promptFile)))) {
+        missingPrompts.push(promptFile);
+      }
+    }
+    checks.push({
+      label: "Prompt files",
+      ok: missingPrompts.length === 0,
+      message: missingPrompts.length
+        ? `Missing ${missingPrompts.length} file(s): ${missingPrompts.join(", ")}`
+        : "All required prompt files are present.",
     });
 
     const config = await loadResolvedProjectConfig();

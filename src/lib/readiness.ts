@@ -2,6 +2,10 @@ import { loadResolvedProjectConfig } from "./config.js";
 import { providerHealthToHuman } from "./human-messages.js";
 import { checkProviderHealth } from "./provider-health.js";
 import { commandExample } from "./cli-command.js";
+import { exists } from "./fs.js";
+import { promptsDir } from "./paths.js";
+import { REQUIRED_PROMPT_FILES } from "./constants.js";
+import path from "node:path";
 
 export type ReadinessSeverity = "error" | "warning";
 
@@ -26,6 +30,17 @@ function pushIssue(issues: ReadinessIssue[], severity: ReadinessSeverity, messag
 export async function collectReadinessReport(options: ReadinessOptions): Promise<ReadinessReport> {
   const issues: ReadinessIssue[] = [];
   const config = await loadResolvedProjectConfig();
+
+  for (const promptFile of REQUIRED_PROMPT_FILES) {
+    const promptPath = path.join(promptsDir(), promptFile);
+    if (!(await exists(promptPath))) {
+      pushIssue(
+        issues,
+        "error",
+        `Prompt file missing: ${promptFile}. Run \`${commandExample("setup")}\` to recreate defaults.`
+      );
+    }
+  }
 
   if (!config.humanReviewer.trim()) {
     pushIssue(

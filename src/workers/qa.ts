@@ -4,7 +4,12 @@ import { qaOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
+import { getGitChangedFiles, runProjectChecks } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
+}
 
 export class QaWorker extends WorkerBase {
   readonly agent = "QA Validator" as const;
@@ -16,15 +21,57 @@ export class QaWorker extends WorkerBase {
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("qa-validator.md");
     const provider = createProvider(config.providers.planner);
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const baseInput = await this.buildAgentInput(taskId, request);
+    const workspaceRoot = process.cwd();
+    const changedFiles = await getGitChangedFiles(workspaceRoot);
+    const executedChecks = await runProjectChecks({ workspaceRoot, timeoutMsPerCheck: 150_000 });
+
+    const hardFailures: string[] = [];
+    if (!changedFiles.length) {
+      hardFailures.push("No code changes detected in git diff.");
+    }
+
+    const failedChecks = executedChecks.filter((x) => x.status === "failed");
+    for (const check of failedChecks) {
+      hardFailures.push(`Check failed: ${check.command} (exit ${check.exitCode ?? "unknown"})`);
+    }
+
+    const skippedChecks = executedChecks.filter((x) => x.status === "skipped");
+    if (skippedChecks.length === executedChecks.length) {
+      hardFailures.push("No automated checks were executed (check/test/lint scripts not found).");
+    }
+
+    const modelInput = {
+      ...baseInput,
+      validationEvidence: {
+        changedFiles,
+        executedChecks,
+      },
+    };
+
+    const strictContract = `
+MANDATORY VALIDATION CONTRACT:
+- Use "validationEvidence.changedFiles" and "validationEvidence.executedChecks" as primary evidence.
+- If any check failed, verdict must be "fail".
+- If changedFiles is empty, verdict must be "fail".
+- Keep failures specific and actionable.
+`;
+
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${strictContract}`;
     const result = await provider.generateStructured({
       agent: "QA Validator",
       systemPrompt,
-      input: request,
+      input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "failures": ["string"], "verdict": "pass | fail", "nextAgent": "PR Writer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "failures": ["string"], "verdict": "pass | fail", "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string" }], "nextAgent": "PR Writer" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
+    output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
+    output.executedChecks = executedChecks;
+    output.failures = unique([...output.failures, ...hardFailures]);
+    if (output.failures.length) {
+      output.verdict = "fail";
+    }
 
     const view = `# HANDOFF
 
@@ -42,6 +89,12 @@ ${output.failures.length ? output.failures.map((x) => `- ${x}`).join("\n") : "- 
 
 ## QA Verdict
 ${output.verdict}
+
+## Changed Files (git diff)
+${output.changedFiles.length ? output.changedFiles.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Executed Checks
+${output.executedChecks.length ? output.executedChecks.map((x) => `- ${x.status.toUpperCase()} | ${x.command} | exit=${x.exitCode ?? "null"} | ${x.durationMs}ms`).join("\n") : "- [none]"}
 
 ## Next
 PR Writer

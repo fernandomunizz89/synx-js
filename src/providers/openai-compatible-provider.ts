@@ -30,26 +30,44 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: this.model,
-        temperature: 0.1,
-        messages: [
-          { role: "system", content: request.systemPrompt },
-          {
-            role: "user",
-            content: [
-              "Return ONLY valid JSON.",
-              `Expected shape: ${request.expectedJsonSchemaDescription}`,
-              "Input:",
-              JSON.stringify(request.input, null, 2),
-            ].join("\n\n"),
-          },
-        ],
-      }),
-    });
+    const timeoutMsRaw = Number(process.env.AI_AGENTS_PROVIDER_TIMEOUT_MS || "300000");
+    const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? timeoutMsRaw : 300000;
+    const maxTokensRaw = Number(process.env.AI_AGENTS_OPENAI_MAX_TOKENS || "");
+    const maxTokens = Number.isFinite(maxTokensRaw) && maxTokensRaw > 0 ? Math.floor(maxTokensRaw) : undefined;
+
+    const payload: Record<string, unknown> = {
+      model: this.model,
+      temperature: 0.1,
+      messages: [
+        { role: "system", content: request.systemPrompt },
+        {
+          role: "user",
+          content: [
+            "Return ONLY valid JSON.",
+            `Expected shape: ${request.expectedJsonSchemaDescription}`,
+            "Input:",
+            JSON.stringify(request.input, null, 2),
+          ].join("\n\n"),
+        },
+      ],
+    };
+    if (maxTokens) payload.max_tokens = maxTokens;
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      const name = error && typeof error === "object" && "name" in error ? (error as { name?: string }).name : "";
+      if (name === "TimeoutError" || name === "AbortError") {
+        throw new Error(`Provider request timed out after ${timeoutMs}ms.`);
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");

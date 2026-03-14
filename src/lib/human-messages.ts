@@ -21,6 +21,10 @@ export function providerErrorToHuman(message: string): string {
     return "The provider could not be reached. If you use LM Studio, make sure its local server is running.";
   }
 
+  if (lower.includes("timed out")) {
+    return "The model took too long to answer. Try reducing context/model load or increasing AI_AGENTS_PROVIDER_TIMEOUT_MS.";
+  }
+
   return message;
 }
 
