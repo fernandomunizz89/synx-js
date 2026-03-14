@@ -17,11 +17,12 @@ export class PrWriterWorker extends WorkerBase {
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("pr-writer.md");
     const provider = createProvider(config.providers.planner);
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const modelInput = await this.buildAgentInput(taskId, request);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2));
     const result = await provider.generateStructured({
       agent: "PR Writer",
       systemPrompt,
-      input: request,
+      input: modelInput,
       expectedJsonSchemaDescription:
         '{ "summary": "string", "whatWasDone": ["string"], "testPlan": ["string"], "rolloutNotes": ["string"], "nextAgent": "Human Review" }',
     });

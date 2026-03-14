@@ -16,11 +16,12 @@ export class ReviewerWorker extends WorkerBase {
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("reviewer.md");
     const provider = createProvider(config.providers.planner);
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const modelInput = await this.buildAgentInput(taskId, request);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2));
     const result = await provider.generateStructured({
       agent: "Reviewer",
       systemPrompt,
-      input: request,
+      input: modelInput,
       expectedJsonSchemaDescription:
         '{ "whatLooksGood": ["string"], "issuesFound": ["string"], "requiredChanges": ["string"], "verdict": "approved | needs_changes", "nextAgent": "QA Validator" }',
     });

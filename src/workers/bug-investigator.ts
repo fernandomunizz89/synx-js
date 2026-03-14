@@ -16,11 +16,12 @@ export class BugInvestigatorWorker extends WorkerBase {
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("bug-investigator.md");
     const provider = createProvider(config.providers.planner);
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const modelInput = await this.buildAgentInput(taskId, request);
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2));
     const result = await provider.generateStructured({
       agent: "Bug Investigator",
       systemPrompt,
-      input: request,
+      input: modelInput,
       expectedJsonSchemaDescription:
         '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "nextAgent": "Feature Builder" }',
     });

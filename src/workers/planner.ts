@@ -16,12 +16,13 @@ export class PlannerWorker extends WorkerBase {
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("spec-planner.md");
     const provider = createProvider(config.providers.planner);
+    const modelInput = await this.buildAgentInput(taskId, request);
 
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(request, null, 2));
+    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2));
     const result = await provider.generateStructured({
       agent: "Spec Planner",
       systemPrompt,
-      input: request,
+      input: modelInput,
       expectedJsonSchemaDescription:
         '{ "technicalContext": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "requiresHumanInput": false, "conditionalPlan": ["string"], "edgeCases": ["string"], "risks": ["string"], "validationCriteria": ["string"], "nextAgent": "Feature Builder" }',
     });

@@ -6,7 +6,7 @@ import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
 import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
 import { providerErrorToHuman } from "../lib/human-messages.js";
-import type { AgentName, StageEnvelope, TimingEntry } from "../lib/types.js";
+import type { AgentName, NewTaskInput, StageEnvelope, TimingEntry } from "../lib/types.js";
 import { nowIso, sleep } from "../lib/utils.js";
 
 export abstract class WorkerBase {
@@ -162,5 +162,39 @@ export abstract class WorkerBase {
   protected async fakeWork(minMs = 300, maxMs = 1100): Promise<void> {
     const duration = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
     await sleep(duration);
+  }
+
+  protected async loadTaskInput(taskId: string): Promise<NewTaskInput> {
+    return readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
+  }
+
+  protected async loadReferencedInput(taskId: string, request: StageEnvelope): Promise<unknown | null> {
+    if (!request.inputRef) return null;
+    const base = taskDir(taskId);
+    const target = path.resolve(base, request.inputRef);
+    if (!(target === base || target.startsWith(`${base}${path.sep}`))) {
+      throw new Error(`Unsafe inputRef path detected: ${request.inputRef}`);
+    }
+    if (!(await exists(target))) {
+      throw new Error(`Referenced input file not found: ${request.inputRef}`);
+    }
+    return readJson<unknown>(target);
+  }
+
+  protected async buildAgentInput(taskId: string, request: StageEnvelope): Promise<{
+    task: NewTaskInput;
+    request: StageEnvelope;
+    previousStage: unknown | null;
+  }> {
+    const [task, previousStage] = await Promise.all([
+      this.loadTaskInput(taskId),
+      this.loadReferencedInput(taskId, request),
+    ]);
+
+    return {
+      task,
+      request,
+      previousStage,
+    };
   }
 }
