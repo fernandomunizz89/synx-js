@@ -1,6 +1,9 @@
+import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { extractQaHandoffContext } from "../lib/qa-context.js";
+import { exists, readJson } from "../lib/fs.js";
+import { taskDir } from "../lib/paths.js";
 import { builderOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
@@ -10,6 +13,12 @@ import { WorkerBase } from "./base.js";
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
+}
+
+function trimText(value: string, maxChars = 220): string {
+  const next = value.trim();
+  if (next.length <= maxChars) return next;
+  return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function extractQaFailures(previousStage: unknown): string[] {
@@ -35,6 +44,103 @@ function formatQaFindingsForView(
    Received: ${item.receivedResult}
    Recommended action: ${item.recommendedAction || "[none]"}`)
     .join("\n");
+}
+
+function compactQaFindingsForModel(
+  findings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>,
+  maxItems = 5,
+): Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }> {
+  return findings.slice(0, maxItems).map((item) => ({
+    issue: trimText(item.issue, 180),
+    expectedResult: trimText(item.expectedResult, 180),
+    receivedResult: trimText(item.receivedResult, 180),
+    evidence: item.evidence.map((x) => trimText(x, 120)).slice(0, 2),
+    recommendedAction: trimText(item.recommendedAction, 180),
+  }));
+}
+
+function compactQaHistoryForModel(
+  history: Array<{ attempt: number; summary: string; returnedTo: string; findings: Array<{ issue: string }> }>,
+): Array<{ attempt: number; summary: string; returnedTo: string; findingIssues: string[] }> {
+  return history.slice(-4).map((entry) => ({
+    attempt: entry.attempt,
+    summary: trimText(entry.summary, 180),
+    returnedTo: entry.returnedTo,
+    findingIssues: entry.findings.map((x) => trimText(x.issue, 120)).slice(0, 4),
+  }));
+}
+
+function buildQaFeedbackQuery(args: {
+  title: string;
+  rawRequest: string;
+  qaFailures: string[];
+  latestFindings: Array<{ issue: string; expectedResult: string; receivedResult: string }>;
+  repeatedIssues: string[];
+}): string {
+  const lines: string[] = [];
+  lines.push(args.title);
+  lines.push(args.rawRequest);
+  if (args.qaFailures.length) {
+    lines.push("QA Failures:");
+    for (const item of args.qaFailures.slice(0, 6)) lines.push(`- ${trimText(item, 180)}`);
+  }
+  if (args.latestFindings.length) {
+    lines.push("Latest QA Expected vs Received:");
+    for (const item of args.latestFindings.slice(0, 5)) {
+      lines.push(`- ${trimText(item.issue, 120)}`);
+      lines.push(`  expected=${trimText(item.expectedResult, 120)}`);
+      lines.push(`  received=${trimText(item.receivedResult, 120)}`);
+    }
+  }
+  if (args.repeatedIssues.length) {
+    lines.push("Repeated QA Issues:");
+    for (const issue of args.repeatedIssues.slice(0, 5)) lines.push(`- ${trimText(issue, 120)}`);
+  }
+  return lines.join("\n");
+}
+
+function contextLimitsForIteration(qaAttempt: number) {
+  if (qaAttempt >= 2) {
+    return {
+      maxContextFiles: 8,
+      maxTotalContextChars: 16_000,
+      maxFileContextChars: 2_800,
+      maxScanFiles: 900,
+    };
+  }
+
+  return {
+    maxContextFiles: 10,
+    maxTotalContextChars: 22_000,
+    maxFileContextChars: 4_200,
+    maxScanFiles: 1_100,
+  };
+}
+
+function editSignature(edits: Array<{ path: string; action: string; find?: string; replace?: string; content?: string }>): string {
+  return edits
+    .map((edit) => {
+      const p = edit.path.replace(/\\/g, "/").trim().toLowerCase();
+      const find = (edit.find || "").trim().slice(0, 80);
+      const replace = (edit.replace || "").trim().slice(0, 80);
+      const contentSample = (edit.content || "").trim().slice(0, 80);
+      return `${edit.action}|${p}|${find}|${replace}|${contentSample.length}`;
+    })
+    .sort()
+    .join("||");
+}
+
+async function loadPreviousBuilderSignature(taskId: string): Promise<string | null> {
+  const donePath = path.join(taskDir(taskId), "done", DONE_FILE_NAMES.builder);
+  if (!(await exists(donePath))) return null;
+  try {
+    const envelope = await readJson<{ output?: { edits?: Array<{ path: string; action: string; find?: string; replace?: string; content?: string }> } }>(donePath);
+    const edits = envelope.output?.edits;
+    if (!Array.isArray(edits) || edits.length === 0) return null;
+    return editSignature(edits);
+  } catch {
+    return null;
+  }
 }
 
 function hasE2eInfraEdits(edits: Array<{ path: string }>): boolean {
@@ -66,8 +172,13 @@ export class BuilderWorker extends WorkerBase {
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const qaFailures = extractQaFailures(baseInput.previousStage);
     const qaHandoffContext = extractQaHandoffContext(baseInput.previousStage);
-    const latestQaFindings = qaHandoffContext?.latestFindings ?? [];
-    const cumulativeQaFindings = qaHandoffContext?.cumulativeFindings ?? [];
+    const latestQaFindings = compactQaFindingsForModel(qaHandoffContext?.latestFindings ?? []);
+    const cumulativeQaFindings = compactQaFindingsForModel(qaHandoffContext?.cumulativeFindings ?? [], 8);
+    const repeatedIssues = (qaHandoffContext?.cumulativeFindings ?? [])
+      .filter((item) => item.occurrences >= 2)
+      .map((item) => `${item.issue} (x${item.occurrences})`)
+      .slice(0, 5);
+    const mustChangeStrategy = (qaHandoffContext?.attempt ?? 0) >= 2 || repeatedIssues.length > 0;
     const requiresE2eMainFlow = ["Feature", "Bug", "Refactor", "Mixed"].includes(baseInput.task.typeHint);
     const mustCreateE2eInfra = requiresE2eMainFlow && !testCapabilities.hasE2EScript;
     const requiresE2eRepair = [
@@ -77,18 +188,33 @@ export class BuilderWorker extends WorkerBase {
     ].some((x) => contextMentionsE2e(x));
     const workspaceContext = await buildWorkspaceContextSnapshot({
       workspaceRoot,
-      query: `${baseInput.task.title}\n${baseInput.task.rawRequest}\n${JSON.stringify(baseInput.previousStage || {}, null, 2)}`,
+      query: buildQaFeedbackQuery({
+        title: baseInput.task.title,
+        rawRequest: baseInput.task.rawRequest,
+        qaFailures,
+        latestFindings: latestQaFindings,
+        repeatedIssues,
+      }),
       relatedFiles: baseInput.task.extraContext.relatedFiles,
+      limits: contextLimitsForIteration(qaHandoffContext?.attempt ?? 0),
     });
 
     const modelInput = {
       ...baseInput,
+      previousStage: qaHandoffContext || qaFailures.length
+        ? {
+            stage: "qa",
+            qaAttempt: qaHandoffContext?.attempt ?? 0,
+            verdict: "fail",
+          }
+        : baseInput.previousStage,
       workspaceContext,
       qaFeedback: {
-        failures: qaFailures,
+        failures: qaFailures.slice(0, 8).map((x) => trimText(x, 200)),
         latestExpectedVsReceived: latestQaFindings,
         cumulativeExpectedVsReceived: cumulativeQaFindings,
-        history: qaHandoffContext?.history ?? [],
+        repeatedIssues,
+        history: compactQaHistoryForModel(qaHandoffContext?.history ?? []),
       },
       executionContract: {
         mustProduceRealEdits: true,
@@ -99,6 +225,7 @@ export class BuilderWorker extends WorkerBase {
         mustCreateE2eInfra,
         requiresE2eRepair,
         requiresQaFeedbackRemediation: latestQaFindings.length > 0,
+        mustChangeStrategy,
       },
     };
 
@@ -113,6 +240,8 @@ MANDATORY EXECUTION CONTRACT:
 - If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
 - Use qaFeedback.latestExpectedVsReceived.expectedResult vs receivedResult as explicit fix targets.
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
+- If executionContract.mustChangeStrategy is true, do not repeat the previous failed approach.
+- If executionContract.mustChangeStrategy is true, include "Iteration Strategy: ..." as the first item in changesMade.
 - Use repository paths that exist in workspaceContext.files when possible.
 - Prefer action "replace_snippet" for small/localized edits.
 - Use action "replace" for full-file rewrites, and "create" only for new files.
@@ -151,6 +280,23 @@ Return exactly this JSON shape:
         '{ "implementationSummary": "string", "filesChanged": ["string"], "changesMade": ["string"], "unitTestsAdded": ["string"], "testsToRun": ["string"], "risks": ["string"], "edits": [{ "path": "string", "action": "create | replace | replace_snippet | delete", "content": "string (required for create/replace)", "find": "string (required for replace_snippet)", "replace": "string (required for replace_snippet)" }], "nextAgent": "Reviewer" }',
     });
     const output = builderOutputSchema.parse(result.parsed);
+    const previousSignature = await loadPreviousBuilderSignature(taskId);
+    const currentSignature = editSignature(output.edits);
+    if (mustChangeStrategy && previousSignature && previousSignature === currentSignature) {
+      output.risks = unique([
+        ...output.risks,
+        "Proposed edit plan is identical to the previous failed attempt; strategy must differ.",
+      ]);
+    }
+    if (mustChangeStrategy) {
+      const hasStrategyLine = output.changesMade.some((item) => /^iteration strategy:/i.test(item));
+      if (!hasStrategyLine) {
+        const strategy = repeatedIssues.length
+          ? `Iteration Strategy: prioritize repeated blockers (${repeatedIssues.join("; ")}).`
+          : "Iteration Strategy: apply a materially different fix path than the previous QA-failed attempt.";
+        output.changesMade = [strategy, ...output.changesMade];
+      }
+    }
     if (testCapabilities.hasUnitTestScript && !output.unitTestsAdded.length) {
       output.risks = unique([
         ...output.risks,

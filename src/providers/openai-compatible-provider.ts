@@ -35,20 +35,26 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const maxTokensRaw = Number(process.env.AI_AGENTS_OPENAI_MAX_TOKENS || "");
     const maxTokens = Number.isFinite(maxTokensRaw) && maxTokensRaw > 0 ? Math.floor(maxTokensRaw) : undefined;
 
+    const inputJson = JSON.stringify(request.input, null, 2);
+    const maybeEmbeddedSample = inputJson.slice(0, Math.min(240, inputJson.length));
+    const inputLikelyEmbeddedInSystemPrompt = maybeEmbeddedSample.length > 32 && request.systemPrompt.includes(maybeEmbeddedSample);
+
+    const userParts = [
+      "Return ONLY valid JSON.",
+      `Expected shape: ${request.expectedJsonSchemaDescription}`,
+    ];
+    if (!inputLikelyEmbeddedInSystemPrompt) {
+      userParts.push("Input:", inputJson);
+    } else {
+      userParts.push("Input is already included in the system instructions.");
+    }
+
     const payload: Record<string, unknown> = {
       model: this.model,
       temperature: 0.1,
       messages: [
         { role: "system", content: request.systemPrompt },
-        {
-          role: "user",
-          content: [
-            "Return ONLY valid JSON.",
-            `Expected shape: ${request.expectedJsonSchemaDescription}`,
-            "Input:",
-            JSON.stringify(request.input, null, 2),
-          ].join("\n\n"),
-        },
+        { role: "user", content: userParts.join("\n\n") },
       ],
     };
     if (maxTokens) payload.max_tokens = maxTokens;

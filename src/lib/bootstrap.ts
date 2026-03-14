@@ -196,6 +196,8 @@ Main-flow E2E validation is required for bug tasks.
 If the repository has no E2E script, add one and create at least one E2E test that covers the main user flow.
 If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
 When QA provides expected-vs-received return context, address each item explicitly.
+When a previous QA attempt failed, use a different strategy instead of repeating the same approach.
+Act autonomously to solve root causes, including related source/config/test changes when needed.
 Always include the runnable E2E command in "testsToRun".
 Only use paths that are valid for the workspace and avoid protected folders.
 
@@ -236,6 +238,8 @@ Main-flow E2E validation is required for Feature/Refactor/Mixed tasks.
 If the repository has no E2E script, add one and create at least one E2E test that covers the main user flow.
 If upstream QA reports missing E2E coverage, include the required E2E test/script updates in this stage.
 When QA provides expected-vs-received return context, address each item explicitly.
+When a previous QA attempt failed, use a different strategy instead of repeating the same approach.
+Act autonomously to solve root causes, including related source/config/test changes when needed.
 Always include the runnable E2E command in "testsToRun".
 Only use paths that are valid for the workspace and avoid protected folders.
 Keep edits minimal and implementation-oriented.
@@ -295,11 +299,24 @@ Use real validation evidence from git diff and executed checks.
 Do not report passing scenarios unless they are directly supported by evidence.
 When verification evidence is incomplete, add explicit notes in "failures".
 When verdict is fail, provide expected-vs-received context for each blocker in "returnContext".
+Think like a real QA engineer: define concrete test cases with expected vs actual outcomes.
 
 Return exactly:
 {
   "mainScenarios": ["string"],
   "acceptanceChecklist": ["string"],
+  "testCases": [
+    {
+      "id": "string",
+      "title": "string",
+      "type": "functional | regression | integration | e2e | unit | config",
+      "steps": ["string"],
+      "expectedResult": "string",
+      "actualResult": "string",
+      "status": "pass | fail | blocked",
+      "evidence": ["string"]
+    }
+  ],
   "failures": ["string"],
   "verdict": "pass | fail",
   "e2ePlan": ["string"],

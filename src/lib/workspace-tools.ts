@@ -108,6 +108,14 @@ export interface WorkspaceContextSnapshot {
   files: WorkspaceFileContext[];
 }
 
+export interface WorkspaceContextLimits {
+  maxScanFiles?: number;
+  maxFileSizeBytes?: number;
+  maxFileContextChars?: number;
+  maxContextFiles?: number;
+  maxTotalContextChars?: number;
+}
+
 export interface AppliedWorkspaceEdits {
   appliedFiles: string[];
   skippedEdits: string[];
@@ -182,15 +190,17 @@ function scoreText(text: string, keywords: string[]): number {
   return score;
 }
 
-async function walkFiles(root: string): Promise<string[]> {
+async function walkFiles(root: string, limits?: WorkspaceContextLimits): Promise<string[]> {
+  const maxScanFiles = limits?.maxScanFiles ?? MAX_SCAN_FILES;
+  const maxFileSizeBytes = limits?.maxFileSizeBytes ?? MAX_FILE_SIZE_BYTES;
   const out: string[] = [];
 
   async function walk(current: string): Promise<void> {
-    if (out.length >= MAX_SCAN_FILES) return;
+    if (out.length >= maxScanFiles) return;
     const entries = await fs.readdir(current, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (out.length >= MAX_SCAN_FILES) break;
+      if (out.length >= maxScanFiles) break;
       const fullPath = path.join(current, entry.name);
       const relativePath = path.relative(root, fullPath);
 
@@ -205,7 +215,7 @@ async function walkFiles(root: string): Promise<string[]> {
       if (!shouldReadFile(relativePath)) continue;
 
       const stat = await fs.stat(fullPath).catch(() => null);
-      if (!stat || stat.size > MAX_FILE_SIZE_BYTES) continue;
+      if (!stat || stat.size > maxFileSizeBytes) continue;
       out.push(relativePath);
     }
   }
@@ -260,36 +270,40 @@ function sortByScore(paths: string[], keywords: string[], related: Set<string>):
   });
 }
 
-function sanitizeForContext(content: string): string {
+function sanitizeForContext(content: string, maxFileContextChars = MAX_FILE_CONTEXT_CHARS): string {
   const withoutNull = content.replace(/\0/g, "");
-  if (withoutNull.length <= MAX_FILE_CONTEXT_CHARS) return withoutNull;
-  return `${withoutNull.slice(0, MAX_FILE_CONTEXT_CHARS)}\n/* ... truncated ... */`;
+  if (withoutNull.length <= maxFileContextChars) return withoutNull;
+  return `${withoutNull.slice(0, maxFileContextChars)}\n/* ... truncated ... */`;
 }
 
 export async function buildWorkspaceContextSnapshot(args: {
   workspaceRoot: string;
   query: string;
   relatedFiles?: string[];
+  limits?: WorkspaceContextLimits;
 }): Promise<WorkspaceContextSnapshot> {
   const workspaceRoot = path.resolve(args.workspaceRoot);
+  const maxContextFiles = args.limits?.maxContextFiles ?? MAX_CONTEXT_FILES;
+  const maxTotalContextChars = args.limits?.maxTotalContextChars ?? MAX_TOTAL_CONTEXT_CHARS;
+  const maxFileContextChars = args.limits?.maxFileContextChars ?? MAX_FILE_CONTEXT_CHARS;
   const keywords = extractKeywords(args.query);
   const related = new Set((args.relatedFiles || []).map((x) => normalizeInputPath(x)).filter(Boolean));
 
-  const candidates = await walkFiles(workspaceRoot);
+  const candidates = await walkFiles(workspaceRoot, args.limits);
   const sorted = sortByScore(candidates, keywords, related);
 
   const files: WorkspaceFileContext[] = [];
   let totalChars = 0;
 
   for (const relativePath of sorted) {
-    if (files.length >= MAX_CONTEXT_FILES) break;
-    if (totalChars >= MAX_TOTAL_CONTEXT_CHARS) break;
+    if (files.length >= maxContextFiles) break;
+    if (totalChars >= maxTotalContextChars) break;
 
     const absolutePath = path.join(workspaceRoot, relativePath);
     const raw = await fs.readFile(absolutePath, "utf8").catch(() => "");
     if (!raw.trim()) continue;
 
-    const sanitized = sanitizeForContext(raw);
+    const sanitized = sanitizeForContext(raw, maxFileContextChars);
     const truncated = sanitized.includes("/* ... truncated ... */");
     const contentScore = scoreText(sanitized, keywords);
     const pathScore = scoreText(relativePath, keywords);
@@ -572,6 +586,11 @@ const E2E_SCRIPT_CANDIDATES = [
   "cypress:run",
 ] as const;
 
+function compactCommandPreview(value: string, maxChars = 1200): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
 export async function detectTestCapabilities(workspaceRoot: string): Promise<TestCapabilities> {
   const scripts = await readPackageScripts(path.resolve(workspaceRoot));
   const unitScripts = UNIT_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
@@ -620,7 +639,7 @@ export async function runProjectChecks(args: {
       commandArgs: command.args,
       cwd: workspaceRoot,
       timeoutMs,
-      maxOutputChars: 14_000,
+      maxOutputChars: 5_000,
     });
 
     results.push({
@@ -629,8 +648,8 @@ export async function runProjectChecks(args: {
       exitCode: result.exitCode,
       timedOut: result.timedOut,
       durationMs: result.durationMs,
-      stdoutPreview: result.stdout,
-      stderrPreview: result.stderr,
+      stdoutPreview: compactCommandPreview(result.stdout),
+      stderrPreview: compactCommandPreview(result.stderr),
     });
   }
 
