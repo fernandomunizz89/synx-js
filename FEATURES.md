@@ -41,8 +41,10 @@
 - Stage input chaining now includes both original task input and prior stage artifacts for downstream agents.
 - Bug tasks now route through `Bug Investigator -> Bug Fixer`.
 - QA can send failed tasks back to the correct implementation agent (`Bug Fixer` for bugs, `Feature Builder` for non-bugs).
+- QA retry loops are capped and escalate to human review when the retry limit is reached.
 - Feature Builder and Bug Fixer apply real file edits in the target workspace (`create`, `replace`, `replace_snippet`, `delete`).
 - Implementation stages support broader multi-file edits for related source/test/config files while keeping protected paths blocked.
 - Implementation stages now include explicit unit-test update reporting when test scripts are available.
+- Main-flow E2E is enforced for `Feature`, `Bug`, `Refactor`, and `Mixed` tasks, with remediation instructions to create missing E2E infra when needed.
 - QA Validator now captures real validation evidence (`git diff` changed files + runnable checks from package scripts, including common E2E scripts).
 - OpenAI-compatible provider calls now support timeout control via `AI_AGENTS_PROVIDER_TIMEOUT_MS`.

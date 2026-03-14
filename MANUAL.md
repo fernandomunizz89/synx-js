@@ -82,6 +82,7 @@ Routing summary:
 - `Bug`: Dispatcher -> Bug Investigator -> Bug Fixer -> Reviewer -> QA -> PR Writer -> Human approval
 - Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
 - QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
+- QA retry loop is capped (default 3 fails). After the cap, the task is escalated to human review (`waiting_human`).
 
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).
 
@@ -210,4 +211,8 @@ You remain the manager and final validator.
 Quality gates now enforced by the pipeline:
 - implementation stages must produce real code edits
 - when unit test scripts exist, implementation stages should include unit test updates
+- for `Feature`, `Bug`, `Refactor`, and `Mixed`, implementation + QA must cover main-flow E2E checks
 - QA must validate changed files and executed checks, including E2E checks for main flows when applicable
+
+Advanced tuning:
+- set `AI_AGENTS_QA_MAX_RETRIES` to control how many QA fail loops are allowed before forced human escalation

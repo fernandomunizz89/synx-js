@@ -143,8 +143,11 @@ This works well with:
 - `Feature Builder` and `Bug Fixer` apply real workspace edits (not only text handoff).
 - Implementation agents can edit multiple related files when required to complete a real fix/feature.
 - When unit test scripts exist, implementation agents must report unit test files updated for the change.
+- For `Feature`, `Bug`, `Refactor`, and `Mixed`, main-flow E2E validation is required by QA.
+- If E2E infrastructure is missing, implementation agents are instructed to add an E2E script/test path as part of remediation.
 - `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
+- QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
 
 ## Real code edits and QA evidence
@@ -158,6 +161,7 @@ This works well with:
 ## Provider stability controls
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
+- `AI_AGENTS_QA_MAX_RETRIES`: max QA fail loops before escalation to human review (default: `3`).
 
 If a model is slow locally, start by lowering context and setting a timeout:
 ```bash
