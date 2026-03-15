@@ -84,6 +84,40 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     }
   }
 
+  const numericFields = [
+    "scopeFiles",
+    "blockingFailures",
+    "outOfScopeFailures",
+    "cheapChecksExecuted",
+    "heavyChecksExecuted",
+    "heavyChecksSkipped",
+    "fullBuildChecksExecuted",
+    "earlyInScopeFailures",
+    "plannedChecks",
+    "executedChecks",
+    "attempt",
+    "attempts",
+    "maxAttempts",
+  ];
+  for (const field of numericFields) {
+    if (typeof row[field] === "number" && Number.isFinite(row[field])) {
+      summary[field] = row[field];
+    }
+  }
+
+  if (row.metrics && typeof row.metrics === "object" && !Array.isArray(row.metrics)) {
+    const metrics = row.metrics as Record<string, unknown>;
+    summary.metrics = {
+      plannedChecks: typeof metrics.plannedChecks === "number" ? metrics.plannedChecks : 0,
+      executedChecks: typeof metrics.executedChecks === "number" ? metrics.executedChecks : 0,
+      cheapChecksExecuted: typeof metrics.cheapChecksExecuted === "number" ? metrics.cheapChecksExecuted : 0,
+      heavyChecksExecuted: typeof metrics.heavyChecksExecuted === "number" ? metrics.heavyChecksExecuted : 0,
+      heavyChecksSkipped: typeof metrics.heavyChecksSkipped === "number" ? metrics.heavyChecksSkipped : 0,
+      fullBuildChecksExecuted: typeof metrics.fullBuildChecksExecuted === "number" ? metrics.fullBuildChecksExecuted : 0,
+      earlyInScopeFailures: typeof metrics.earlyInScopeFailures === "number" ? metrics.earlyInScopeFailures : 0,
+    };
+  }
+
   if (Array.isArray(row.executedChecks)) {
     const checks = row.executedChecks
       .filter((item): item is { command?: unknown; status?: unknown; exitCode?: unknown } => Boolean(item && typeof item === "object"))

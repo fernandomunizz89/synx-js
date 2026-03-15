@@ -724,6 +724,11 @@ Return exactly this JSON shape:
         })),
         blockingFailures: postEditSanity.blockingFailureSummaries.length,
         outOfScopeFailures: postEditSanity.outOfScopeFailureSummaries.length,
+        cheapChecksExecuted: postEditSanity.metrics.cheapChecksExecuted,
+        heavyChecksExecuted: postEditSanity.metrics.heavyChecksExecuted,
+        heavyChecksSkipped: postEditSanity.metrics.heavyChecksSkipped,
+        fullBuildChecksExecuted: postEditSanity.metrics.fullBuildChecksExecuted,
+        earlyInScopeFailures: postEditSanity.metrics.earlyInScopeFailures,
       },
     });
 
@@ -832,6 +837,11 @@ Return exactly this JSON shape:
           changedFiles: repairApplied.changedFiles.slice(0, 8),
           blockingFailures: postEditSanity.blockingFailureSummaries.length,
           outOfScopeFailures: postEditSanity.outOfScopeFailureSummaries.length,
+          cheapChecksExecuted: postEditSanity.metrics.cheapChecksExecuted,
+          heavyChecksExecuted: postEditSanity.metrics.heavyChecksExecuted,
+          heavyChecksSkipped: postEditSanity.metrics.heavyChecksSkipped,
+          fullBuildChecksExecuted: postEditSanity.metrics.fullBuildChecksExecuted,
+          earlyInScopeFailures: postEditSanity.metrics.earlyInScopeFailures,
         },
       });
     }
@@ -867,6 +877,11 @@ Return exactly this JSON shape:
         attempts: qualityRepairAttempts,
         checksExecuted: postEditSanity.checks.length,
         filesChanged: output.filesChanged.length,
+        cheapChecksExecuted: postEditSanity.metrics.cheapChecksExecuted,
+        heavyChecksExecuted: postEditSanity.metrics.heavyChecksExecuted,
+        heavyChecksSkipped: postEditSanity.metrics.heavyChecksSkipped,
+        fullBuildChecksExecuted: postEditSanity.metrics.fullBuildChecksExecuted,
+        earlyInScopeFailures: postEditSanity.metrics.earlyInScopeFailures,
       },
     });
     output.verificationMode = postEditSanity.checks.length ? "mixed" : "static_review";
@@ -916,6 +931,7 @@ Return exactly this JSON shape:
       const detail = check.diagnostics?.[0] ? ` | diag=${trimText(check.diagnostics[0], 120)}` : "";
       return `- ${check.status.toUpperCase()} | ${check.command} | exit=${check.exitCode ?? "null"} | ${check.durationMs}ms${detail}`;
     });
+    const sanityMetricsLine = `- planned=${postEditSanity.metrics.plannedChecks} | executed=${postEditSanity.metrics.executedChecks} | cheap=${postEditSanity.metrics.cheapChecksExecuted} | heavy=${postEditSanity.metrics.heavyChecksExecuted} | heavy_skipped=${postEditSanity.metrics.heavyChecksSkipped} | full_build=${postEditSanity.metrics.fullBuildChecksExecuted} | early_in_scope_failures=${postEditSanity.metrics.earlyInScopeFailures}`;
 
     const view = `# HANDOFF
 
@@ -982,6 +998,7 @@ ${output.residualRisks.length ? output.residualRisks.map((x) => `- ${x}`).join("
 
 ## Post-Edit Sanity Checks
 ${sanityCheckLines.length ? sanityCheckLines.join("\n") : "- [not run]"}
+${sanityCheckLines.length ? `\n## Post-Edit Sanity Metrics\n${sanityMetricsLine}` : ""}
 
 ## Applied Edits
 ${output.edits.length ? output.edits.map((x) => `- ${x.action.toUpperCase()} ${x.path}`).join("\n") : "- [none]"}
