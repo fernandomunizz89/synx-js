@@ -29,6 +29,7 @@ It:
 - lets you choose provider in an interactive menu
 - saves LM Studio connection in global config by default (so you do not need manual exports each terminal)
 - lets you pick model in a list when provider discovery is available
+- supports LM Studio auto model detection (`model: auto`) based on the currently loaded local model
 - validates provider and model before finishing
 
 ### 2. `start`
@@ -236,6 +237,7 @@ Quality gates now enforced by the pipeline:
 Advanced tuning:
 - set `AI_AGENTS_QA_MAX_RETRIES` to control how many QA fail loops are allowed before forced human escalation
 - set `AI_AGENTS_PROVIDER_TIMEOUT_MS` to control provider timeout per call
+- set `AI_AGENTS_PROVIDER_DISCOVERY_TIMEOUT_MS` to control model discovery timeout checks
 - set `AI_AGENTS_OPENAI_MAX_TOKENS` to cap completion tokens for OpenAI-compatible providers
 - set `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE=<n>` to enforce local provider-call throughput cap (`0` disables, default `0`)
 - set `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS=<ms>` to tune the local limiter window (default `60000`, min `200`)
@@ -256,6 +258,37 @@ Polling/queue audit logs:
 Provider throttle audit logs:
 - `.ai-agents/logs/provider-throttle.jsonl`: local limiter waits, backoff scheduling, retry attempts, recovery, and exhaustion events.
 - `.ai-agents/logs/stage-metrics.jsonl`: per-stage provider metrics now include `providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, and `providerRateLimitWaitMs`.
+- `.ai-agents/logs/provider-model-resolution.jsonl`: LM Studio model autodiscovery/selection/fallback events.
+
+LM Studio model id behavior:
+- Provider type `lmstudio` supports `model: auto` and detects loaded model(s) from LM Studio at runtime.
+- Default LM Studio endpoint is `http://127.0.0.1:1234` (OpenAI-compatible API path `/v1` is applied automatically).
+- If autodiscovery fails, the runtime can use `fallbackModel` in config or `AI_AGENTS_LMSTUDIO_FALLBACK_MODEL`.
+- You can disable autodiscovery with `autoDiscoverModel: false` (or `AI_AGENTS_LMSTUDIO_AUTODISCOVER_MODEL=false`) and pin a fixed model.
+- If no model is loaded in LM Studio, setup/doctor/start checks fail with a clear action message.
+
+LM Studio env knobs:
+- `AI_AGENTS_LMSTUDIO_BASE_URL` (default `http://127.0.0.1:1234`)
+- `AI_AGENTS_LMSTUDIO_API_KEY` (default `lm-studio-local`)
+- `AI_AGENTS_LMSTUDIO_MODEL` (`auto` or explicit model id)
+- `AI_AGENTS_LMSTUDIO_AUTODISCOVER_MODEL` (`true`/`false`)
+- `AI_AGENTS_LMSTUDIO_FALLBACK_MODEL` (optional fallback model id)
+
+Minimal LM Studio provider config example:
+```json
+{
+  "type": "lmstudio",
+  "baseUrl": "http://127.0.0.1:1234",
+  "model": "auto",
+  "fallbackModel": "",
+  "autoDiscoverModel": true
+}
+```
+
+Diagnostics:
+- Use `ai-agents doctor` to confirm LM Studio connectivity and loaded models.
+- If autodiscovery fails, inspect `.ai-agents/logs/provider-model-resolution.jsonl`.
+- If no model is loaded, load one in LM Studio and retry.
 
 ## Stateless LLM calls
 OpenAI-compatible calls are stateless by design.

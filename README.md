@@ -70,6 +70,7 @@ ai-agents setup
 - lets you choose provider from an interactive list
 - discovers models and lets you pick from a list when possible
 - for LM Studio, saves recommended local connection by default (no manual `export` required)
+- for LM Studio, can auto-detect the currently loaded local model at runtime (`model: auto`)
 - validates provider + model before finishing
 
 ### Daily use
@@ -142,12 +143,48 @@ Interactive selection is used by:
 ## Provider support in V5
 - `mock`
 - `openai-compatible`
+- `lmstudio`
 
 This works well with:
 - OpenAI-compatible APIs
 - LM Studio local server
 - OpenRouter-compatible gateways
 - future compatible endpoints
+
+### LM Studio autodiscovery (`http://127.0.0.1:1234`)
+- `lmstudio` provider supports `model: auto` (default in setup recommendation).
+- In auto mode, the runtime queries LM Studio `/v1/models` and chooses a loaded model dynamically.
+- The selected model is logged in `.ai-agents/logs/provider-model-resolution.jsonl`.
+- If autodiscovery fails, you can use fallback model via config (`fallbackModel`) or env (`AI_AGENTS_LMSTUDIO_FALLBACK_MODEL`).
+- You can pin a fixed model id instead of auto mode in setup.
+- If no model is loaded in LM Studio, health checks fail with a clear message.
+
+Example global config (LM Studio auto mode):
+```json
+{
+  "providers": {
+    "dispatcher": {
+      "type": "lmstudio",
+      "baseUrl": "http://127.0.0.1:1234",
+      "model": "auto",
+      "fallbackModel": "",
+      "autoDiscoverModel": true
+    },
+    "planner": {
+      "type": "lmstudio",
+      "baseUrl": "http://127.0.0.1:1234",
+      "model": "auto",
+      "fallbackModel": "",
+      "autoDiscoverModel": true
+    }
+  }
+}
+```
+
+Troubleshooting quick checks:
+- run `ai-agents doctor` and verify provider health lines for Dispatcher/Planner.
+- if detection fails, ensure LM Studio local server is running and at least one model is loaded.
+- inspect `.ai-agents/logs/provider-model-resolution.jsonl` for discovery/fallback reasons.
 
 ## Agent pipeline behavior
 - `Dispatcher` and `Spec Planner` are provider-driven with strict JSON schemas.
@@ -163,12 +200,13 @@ This works well with:
 - `Feature Builder` and `Bug Fixer` apply real workspace edits (not only text handoff).
 - Implementation agents can edit multiple related files when required to complete a real fix/feature.
 - When unit test scripts exist, implementation agents must report unit test files updated for the change.
-- Pre-handover quality gate: `Feature Builder` and `Bug Fixer` now run scoped sanity checks before handoff; if scoped lint/type/syntax blockers remain, handoff is blocked and remediation is attempted first.
-- Sanity checks now run in cheap-first order: lightweight static heuristics + scoped lint/type checks execute before heavy checks (for example full build).
+- Pre-handover quality gate: `Feature Builder` and `Bug Fixer` run strict sanity checks before handoff; lint + build (when scripts exist) plus language-aware checks must pass.
+- Sanity checks run in cheap-first order: lightweight static heuristics + lint/type checks execute before heavy checks (for example full build).
 - When cheap in-scope failures are already conclusive, heavy checks are skipped in that pass to reduce unnecessary cost/time.
 - Quality-repair retries are adaptive (not blind repetition): attempt 1 uses local/cheap fixes, attempt 2 expands context, and repeated no-progress retries are aborted early instead of forcing a full retry count.
 - Each quality-repair retry now logs explicit reason, failure hypothesis, selected strategy, strategy delta vs previous attempt, and success/abandon criteria for auditability.
-- Scoped quality filtering now ignores out-of-scope failures (existing errors unrelated to files changed in the current stage), reducing noisy loop-backs.
+- Implementation-stage quality gate can enforce project-clean failures as blocking (not only scoped files), reducing QA handoffs with hidden lint/build debt.
+- Command-output diagnostics are scanned for hidden blocker signatures (for example import/export mismatch or runtime syntax markers) and treated as failures before QA handoff.
 - JS/TS code-quality bootstrap now attempts to provision linting/typecheck automatically: it can install missing ESLint dependencies, generate a conservative `eslint.config.cjs`, and wire `scripts.lint`/`scripts.typecheck` before validation.
 - For `Feature`, `Bug`, `Refactor`, and `Mixed`, main-flow E2E validation is required by QA.
 - If E2E infrastructure is missing, implementation agents are instructed to add an E2E script/test path as part of remediation.
@@ -212,6 +250,7 @@ This works well with:
 
 ## Provider stability controls
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
+- `AI_AGENTS_PROVIDER_DISCOVERY_TIMEOUT_MS`: timeout for provider model discovery checks (default: `10000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
 - `AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES`: extra retries for JSON-format parsing failures in the provider (default: `1`, max: `2`).
 - `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE`: local per-process provider call cap (`0` disables; default `0`).
@@ -222,6 +261,13 @@ This works well with:
 - `AI_AGENTS_PROVIDER_BACKOFF_JITTER_RATIO`: jitter ratio for backoff delay (`0..1`, default: `0.2`).
 - `AI_AGENTS_QA_MAX_RETRIES`: max QA fail loops before escalation to human review (default: `3`).
 - `AI_AGENTS_QUALITY_REPAIR_MAX_ATTEMPTS`: max quality-gate remediation attempts inside Feature Builder/Bug Fixer (default: `3`, cap: `5`).
+
+LM Studio runtime model controls:
+- `AI_AGENTS_LMSTUDIO_BASE_URL`: LM Studio root URL (default `http://127.0.0.1:1234`).
+- `AI_AGENTS_LMSTUDIO_API_KEY`: LM Studio API key (default `lm-studio-local`).
+- `AI_AGENTS_LMSTUDIO_AUTODISCOVER_MODEL`: `true/false` to enable/disable auto model discovery (default `true`).
+- `AI_AGENTS_LMSTUDIO_MODEL`: explicit model override (`auto` keeps autodiscovery behavior).
+- `AI_AGENTS_LMSTUDIO_FALLBACK_MODEL`: fallback model id when autodiscovery fails.
 
 JSON parse retry notes:
 - Triggered only when provider text cannot be extracted/parsing as JSON.
