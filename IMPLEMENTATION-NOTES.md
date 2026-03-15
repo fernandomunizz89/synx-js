@@ -42,9 +42,9 @@ The CLI is ready for future iterations:
   - Cypress diagnostics now capture config/runtime errors explicitly
   - selector preflight ignores scaffold `example/sample` specs when real specs exist
   - QA drops selector/config findings when unsupported by executed evidence
-- Added deterministic timer remediation for repeated E2E failures:
-  - robust rewrite of `e2e/timer.cy.ts` countdown scenario
-  - runtime hook patch in `src/hooks/useTimer.ts` when timer does not advance
+- Added deterministic runtime/remediation guidance for repeated E2E value-stability failures:
+  - robust rewrite of the failing E2E scenario when assertions prove the value never changes
+  - source-level state/update patch guidance in the implicated runtime module before test-only edits
 
 ### Benchmark snapshot (same task title across runs)
 `QA handoff quality check: Cypress selectors and config mismatch`

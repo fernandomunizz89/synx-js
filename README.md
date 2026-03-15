@@ -41,7 +41,7 @@ Supported values for `ai-agents new --type <type>`:
 
 Example:
 ```bash
-ai-agents new "Fix timer import/export + Cypress failures" --type Bug --e2e required --e2e-framework cypress --qa-objective "Fazer os testes E2E do Cypress passarem."
+ai-agents new "Fix import/export mismatch and failing E2E selectors" --type Bug --e2e required --e2e-framework cypress --qa-objective "Get Cypress main flow tests passing."
 ```
 
 These preferences are passed to QA, Feature Builder, and Bug Fixer as explicit quality gates.
@@ -151,6 +151,14 @@ This works well with:
 - OpenRouter-compatible gateways
 - future compatible endpoints
 
+`setup` now includes OpenAI-compatible cloud presets:
+- `OpenAI API (cloud)` -> `https://api.openai.com/v1` (for models like `gpt-5.3-codex`)
+- `OpenRouter (cloud multi-model)` -> `https://openrouter.ai/api/v1` (for models like Claude/Qwen families)
+- `Custom OpenAI-compatible endpoint` -> self-hosted or gateway deployments
+- In env mode with preset defaults, setup keeps the preset base URL in config and asks only for provider API key env by default.
+
+If model discovery is unavailable, setup accepts manual model ids and shows preset-specific examples.
+
 ### LM Studio autodiscovery (`http://127.0.0.1:1234`)
 - `lmstudio` provider supports `model: auto` (default in setup recommendation).
 - In auto mode, the runtime queries LM Studio `/v1/models` and chooses a loaded model dynamically.
@@ -236,7 +244,13 @@ Troubleshooting quick checks:
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
 - `Bug Fixer` and `Feature Builder` now auto-recover malformed `replace_snippet` model outputs to avoid hard pipeline failures.
 - Cypress config recovery now auto-generates `cypress.config.cjs`, rewires scripts to use it, and keeps `cypress.config.ts` lint-safe.
-- When QA reports timer-not-advancing evidence, deterministic remediations can patch both `e2e/timer.cy.ts` and `src/hooks/useTimer.ts`.
+- When QA reports repeated static-value assertion mismatches, deterministic remediations can patch source/state update logic and the failing E2E spec path directly.
+
+## Project-agnostic design
+- The orchestrator is not tied to a single target repository or stack.
+- QA and implementation stages now use file/risk-oriented handoffs without project-specific path assumptions.
+- Pre-QA quality gates include language-aware checks beyond JS/TS when changed files indicate other stacks (for example Python, Go, Rust, Java).
+- OpenAI-compatible providers allow switching between local and cloud coding models without changing pipeline architecture.
 
 ## Real code edits and QA evidence
 - Implementation agents (`Feature Builder`, `Bug Fixer`) accept concrete edit operations (`create`, `replace`, `replace_snippet`, `delete`) and apply them safely inside the workspace root.

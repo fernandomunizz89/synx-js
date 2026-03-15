@@ -30,6 +30,7 @@ It:
 - saves LM Studio connection in global config by default (so you do not need manual exports each terminal)
 - lets you pick model in a list when provider discovery is available
 - supports LM Studio auto model detection (`model: auto`) based on the currently loaded local model
+- supports OpenAI-compatible cloud presets (OpenAI, OpenRouter, custom endpoint)
 - validates provider and model before finishing
 
 ### 2. `start`
@@ -73,7 +74,7 @@ ai-agents new "Add dark mode toggle" --type Feature
 
 You can also set human QA direction for E2E in the task itself:
 ```bash
-ai-agents new "Fix timer import/export + Cypress failures" --type Bug --e2e required --e2e-framework cypress --qa-objective "Fazer os testes E2E do Cypress passarem."
+ai-agents new "Fix import/export mismatch and failing E2E selectors" --type Bug --e2e required --e2e-framework cypress --qa-objective "Get Cypress main flow tests passing."
 ```
 
 Supported task types:
@@ -206,6 +207,17 @@ npm link
 ai-agents setup
 ai-agents start
 ```
+
+## Multi-stack behavior
+- The orchestrator is repository-agnostic: it can run against different stacks/frameworks/languages.
+- FB/BF/QA handoffs are file- and risk-based (no hardcoded project path assumptions).
+- When package scripts are missing, QA can run language-aware fallback checks based on changed files (TypeScript/Python/Go/Rust/Java).
+
+## Local and cloud models
+- Local: LM Studio (`lmstudio`) with runtime model autodiscovery (`model: auto`).
+- Cloud: `openai-compatible` preset for OpenAI/OpenRouter/custom gateways.
+- In preset env mode, setup keeps the provider base URL in config and usually requires only the API key env variable.
+- You can switch models/providers per machine without changing pipeline stages.
 
 ## Where files live
 
