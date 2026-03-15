@@ -182,6 +182,13 @@ ai-agents status
 ai-agents metrics
 ```
 
+### Compare iterations with a time window
+```bash
+ai-agents metrics --since 20260315-212519
+ai-agents metrics --since 1773609919792 --until 1773613519792
+ai-agents metrics --since 2026-03-15T21:25:19Z --json
+```
+
 ### Approve final result
 ```bash
 ai-agents approve

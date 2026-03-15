@@ -99,6 +99,13 @@ To list all historical tasks:
 ai-agents status --all
 ```
 
+`metrics` now supports collaboration-focused measurement with time windows:
+```bash
+ai-agents metrics --since 20260315-212519
+ai-agents metrics --since 1773609919792 --until 1773613519792
+ai-agents metrics --since 2026-03-15T21:25:19Z --json
+```
+
 ## Preflight behavior
 - `start`, `new`, `status`, and `approve` run readiness checks before doing work.
 - The CLI does not assume another machine/user is already configured.
