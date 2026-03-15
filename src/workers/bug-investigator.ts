@@ -320,6 +320,10 @@ Bug Fixer
       model: result.model,
       parseRetries: result.parseRetries,
       validationPassed: result.validationPassed,
+      providerAttempts: result.providerAttempts,
+      providerBackoffRetries: result.providerBackoffRetries,
+      providerBackoffWaitMs: result.providerBackoffWaitMs,
+      providerRateLimitWaitMs: result.providerRateLimitWaitMs,
     });
   }
 }

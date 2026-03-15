@@ -89,6 +89,21 @@ export abstract class WorkerBase {
       const parseFailureReasons = (error && typeof error === "object" && "parseFailureReasons" in error && Array.isArray((error as { parseFailureReasons?: unknown }).parseFailureReasons))
         ? ((error as { parseFailureReasons?: unknown[] }).parseFailureReasons || []).filter((x): x is string => typeof x === "string").slice(0, 3)
         : [];
+      const providerAttempts = (error && typeof error === "object" && "providerAttempts" in error && typeof (error as { providerAttempts?: unknown }).providerAttempts === "number")
+        ? Number((error as { providerAttempts?: number }).providerAttempts)
+        : 1;
+      const providerBackoffRetries = (error && typeof error === "object" && "providerBackoffRetries" in error && typeof (error as { providerBackoffRetries?: unknown }).providerBackoffRetries === "number")
+        ? Number((error as { providerBackoffRetries?: number }).providerBackoffRetries)
+        : 0;
+      const providerBackoffWaitMs = (error && typeof error === "object" && "providerBackoffWaitMs" in error && typeof (error as { providerBackoffWaitMs?: unknown }).providerBackoffWaitMs === "number")
+        ? Number((error as { providerBackoffWaitMs?: number }).providerBackoffWaitMs)
+        : 0;
+      const providerRateLimitWaitMs = (error && typeof error === "object" && "providerRateLimitWaitMs" in error && typeof (error as { providerRateLimitWaitMs?: unknown }).providerRateLimitWaitMs === "number")
+        ? Number((error as { providerRateLimitWaitMs?: number }).providerRateLimitWaitMs)
+        : 0;
+      const providerThrottleReasons = (error && typeof error === "object" && "providerThrottleReasons" in error && Array.isArray((error as { providerThrottleReasons?: unknown }).providerThrottleReasons))
+        ? ((error as { providerThrottleReasons?: unknown[] }).providerThrottleReasons || []).filter((x): x is string => typeof x === "string").slice(0, 3)
+        : [];
       const meta = await loadTaskMeta(taskId);
       meta.status = "failed";
       meta.currentAgent = this.agent;
@@ -104,6 +119,10 @@ export abstract class WorkerBase {
         status: "failed",
         parseRetries,
         validationPassed: false,
+        providerAttempts,
+        providerBackoffRetries,
+        providerBackoffWaitMs,
+        providerRateLimitWaitMs,
       };
       await logTiming(taskPath, timing);
 
@@ -112,6 +131,12 @@ export abstract class WorkerBase {
         await logTaskEvent(
           taskPath,
           `${this.agent} parsing retries used before failure: ${parseRetries} (extra ${parseRetryAdditionalDurationMs}ms)${parseFailureReasons.length ? ` | reasons: ${parseFailureReasons.join(" | ")}` : ""}`,
+        );
+      }
+      if (providerBackoffRetries > 0 || providerRateLimitWaitMs > 0) {
+        await logTaskEvent(
+          taskPath,
+          `${this.agent} provider control stats before failure: attempts=${providerAttempts} | backoff_retries=${providerBackoffRetries} | backoff_wait_ms=${providerBackoffWaitMs} | rate_limit_wait_ms=${providerRateLimitWaitMs}${providerThrottleReasons.length ? ` | reasons: ${providerThrottleReasons.join(" | ")}` : ""}`,
         );
       }
       await logTaskEvent(taskPath, `${this.agent} failed: ${humanMessage}`);
@@ -128,6 +153,11 @@ export abstract class WorkerBase {
           parseRetries,
           parseRetryAdditionalDurationMs,
           parseFailureReasons,
+          providerAttempts,
+          providerBackoffRetries,
+          providerBackoffWaitMs,
+          providerRateLimitWaitMs,
+          providerThrottleReasons,
         },
       });
       await fs.unlink(workingFile).catch(() => undefined);
@@ -154,6 +184,10 @@ export abstract class WorkerBase {
     model?: string;
     parseRetries?: number;
     validationPassed?: boolean;
+    providerAttempts?: number;
+    providerBackoffRetries?: number;
+    providerBackoffWaitMs?: number;
+    providerRateLimitWaitMs?: number;
   }): Promise<void> {
     const taskPath = taskDir(args.taskId);
     const endedAt = nowIso();
@@ -184,6 +218,10 @@ export abstract class WorkerBase {
       model: args.model,
       parseRetries: args.parseRetries,
       validationPassed: args.validationPassed,
+      providerAttempts: args.providerAttempts,
+      providerBackoffRetries: args.providerBackoffRetries,
+      providerBackoffWaitMs: args.providerBackoffWaitMs,
+      providerRateLimitWaitMs: args.providerRateLimitWaitMs,
     });
     meta.currentStage = args.stage;
     meta.currentAgent = this.agent;
@@ -204,6 +242,10 @@ export abstract class WorkerBase {
       status: "done",
       parseRetries: args.parseRetries,
       validationPassed: args.validationPassed,
+      providerAttempts: args.providerAttempts,
+      providerBackoffRetries: args.providerBackoffRetries,
+      providerBackoffWaitMs: args.providerBackoffWaitMs,
+      providerRateLimitWaitMs: args.providerRateLimitWaitMs,
     });
     await logTaskEvent(taskPath, `${this.agent} finished ${args.stage} in ${durationMs}ms`);
     await logDaemon(`${this.agent} finished ${args.stage} for ${args.taskId} in ${durationMs}ms`);

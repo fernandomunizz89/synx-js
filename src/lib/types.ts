@@ -106,6 +106,10 @@ export interface TaskMetaHistoryItem {
   model?: string;
   parseRetries?: number;
   validationPassed?: boolean;
+  providerAttempts?: number;
+  providerBackoffRetries?: number;
+  providerBackoffWaitMs?: number;
+  providerRateLimitWaitMs?: number;
 }
 
 export interface TaskMeta {
@@ -135,6 +139,10 @@ export interface TimingEntry {
   status: "done" | "failed";
   parseRetries?: number;
   validationPassed?: boolean;
+  providerAttempts?: number;
+  providerBackoffRetries?: number;
+  providerBackoffWaitMs?: number;
+  providerRateLimitWaitMs?: number;
 }
 
 export interface ProviderRequest {
@@ -154,6 +162,10 @@ export interface ProviderResult {
   model: string;
   parseRetries: number;
   validationPassed: boolean;
+  providerAttempts: number;
+  providerBackoffRetries: number;
+  providerBackoffWaitMs: number;
+  providerRateLimitWaitMs: number;
 }
 
 export interface DoctorCheck {

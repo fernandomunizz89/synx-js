@@ -86,6 +86,53 @@ export async function logQueueLatency(entry: QueueLatencyLogEntry): Promise<void
   await appendText(path.join(logsDir(), "queue-latency.jsonl"), `${JSON.stringify(payload)}\n`);
 }
 
+export interface ProviderThrottleLogEntry {
+  at?: string;
+  agent: AgentName;
+  taskId?: string;
+  stage?: string;
+  provider: string;
+  model: string;
+  event: "rate_limit_wait" | "backoff_scheduled" | "backoff_retry" | "backoff_recovered" | "backoff_exhausted";
+  attempt: number;
+  maxAttempts: number;
+  retriesUsed: number;
+  transient: boolean;
+  statusCode?: number;
+  errorCode?: string;
+  reason?: string;
+  waitMs?: number;
+  rateLimitWaitMs?: number;
+  backoffWaitMs?: number;
+  requestLimit?: number;
+  rateLimitWindowMs?: number;
+}
+
+export async function logProviderThrottle(entry: ProviderThrottleLogEntry): Promise<void> {
+  const payload = {
+    at: entry.at || nowIso(),
+    agent: entry.agent,
+    taskId: entry.taskId || "",
+    stage: entry.stage || "",
+    provider: entry.provider,
+    model: entry.model,
+    event: entry.event,
+    attempt: entry.attempt,
+    maxAttempts: entry.maxAttempts,
+    retriesUsed: entry.retriesUsed,
+    transient: entry.transient,
+    statusCode: typeof entry.statusCode === "number" ? entry.statusCode : 0,
+    errorCode: entry.errorCode ? trimText(entry.errorCode, 80) : "",
+    reason: entry.reason ? trimText(entry.reason, 240) : "",
+    waitMs: typeof entry.waitMs === "number" ? entry.waitMs : 0,
+    rateLimitWaitMs: typeof entry.rateLimitWaitMs === "number" ? entry.rateLimitWaitMs : 0,
+    backoffWaitMs: typeof entry.backoffWaitMs === "number" ? entry.backoffWaitMs : 0,
+    requestLimit: typeof entry.requestLimit === "number" ? entry.requestLimit : 0,
+    rateLimitWindowMs: typeof entry.rateLimitWindowMs === "number" ? entry.rateLimitWindowMs : 0,
+  };
+  await appendText(path.join(logsDir(), "provider-throttle.jsonl"), `${JSON.stringify(payload)}\n`);
+}
+
 export interface ProviderParseRetryLogEntry {
   at?: string;
   agent: AgentName;
@@ -192,6 +239,7 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     "filesReviewed",
     "recommendedChecks",
     "parseFailureReasons",
+    "providerThrottleReasons",
   ];
   for (const field of listFields) {
     if (Array.isArray(row[field])) {
@@ -227,6 +275,10 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     "retryAdditionalTimeMs",
     "parseRetries",
     "parseRetryAdditionalDurationMs",
+    "providerAttempts",
+    "providerBackoffRetries",
+    "providerBackoffWaitMs",
+    "providerRateLimitWaitMs",
   ];
   for (const field of numericFields) {
     if (typeof row[field] === "number" && Number.isFinite(row[field])) {
