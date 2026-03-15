@@ -159,8 +159,10 @@ export interface CypressSelectorPreflightResult {
 export interface TestCapabilities {
   hasUnitTestScript: boolean;
   hasE2EScript: boolean;
+  hasE2ESpecFiles: boolean;
   unitScripts: string[];
   e2eScripts: string[];
+  e2eSpecFiles: string[];
 }
 
 function normalizeInputPath(filePath: string): string {
@@ -476,9 +478,10 @@ export async function runCommand(args: {
     });
 
     const limit = (value: string, chunk: Buffer): string => {
-      if (value.length >= maxOutputChars) return value;
       const appended = value + chunk.toString("utf8");
-      return appended.length > maxOutputChars ? appended.slice(0, maxOutputChars) : appended;
+      if (appended.length <= maxOutputChars) return appended;
+      // Keep the tail so we preserve final assertion/failure lines.
+      return appended.slice(appended.length - maxOutputChars);
     };
 
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -614,7 +617,7 @@ function buildScriptCommand(
   }
 }
 
-const BASE_CHECK_SCRIPT_ORDER = ["check", "test", "lint"] as const;
+const BASE_CHECK_SCRIPT_ORDER = ["check", "test", "lint", "build"] as const;
 const UNIT_SCRIPT_CANDIDATES = ["test", "unit", "test:unit", "test:ci"] as const;
 const E2E_SCRIPT_CANDIDATES = [
   "e2e",
@@ -626,6 +629,36 @@ const E2E_SCRIPT_CANDIDATES = [
   "cypress",
   "cypress:run",
 ] as const;
+
+const E2E_SPEC_FILE_PATTERN = /\.(?:cy|spec)\.[cm]?[jt]sx?$/i;
+const E2E_SPEC_DIR_CANDIDATES = ["e2e", "cypress/e2e"] as const;
+
+async function collectE2eSpecFiles(workspaceRoot: string): Promise<string[]> {
+  const out: string[] = [];
+
+  async function walk(dirPath: string): Promise<void> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const absolutePath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        if (IGNORED_DIRS.has(entry.name)) continue;
+        await walk(absolutePath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!E2E_SPEC_FILE_PATTERN.test(entry.name)) continue;
+      out.push(normalizeInputPath(path.relative(workspaceRoot, absolutePath)));
+    }
+  }
+
+  for (const relativeDir of E2E_SPEC_DIR_CANDIDATES) {
+    const absoluteDir = path.join(workspaceRoot, relativeDir);
+    if (!(await exists(absoluteDir))) continue;
+    await walk(absoluteDir);
+  }
+
+  return unique(out);
+}
 
 function compactCommandPreview(value: string, maxChars = 1200): string {
   if (value.length <= maxChars) return value;
@@ -737,6 +770,7 @@ async function buildCheckDiagnostics(args: {
   const combined = `${args.stdout}\n${args.stderr}`;
   const genericPatterns = [
     /\b(assertionerror|typeerror|referenceerror|syntaxerror|failed|error)\b/i,
+    /\bts\d{4}\b/i,
     /\bexpected\b.+\bto\b/i,
     /\btimed out\b/i,
     /\bdoes not provide an export named\b/i,
@@ -749,9 +783,16 @@ async function buildCheckDiagnostics(args: {
     /\bfailing\b/i,
     /\bconfigfile is invalid\b/i,
     /\byour configfile is invalid\b/i,
+    /\bsupportfile\b/i,
+    /\bproject does not contain a default supportfile\b/i,
+    /\bcypress\/support\/e2e\.[jt]sx?\b/i,
+    /\bts\d{4}\b/i,
     /\bexports is not defined in es module scope\b/i,
     /\breferenceerror:\s*exports is not defined\b/i,
+    /\bdoes not provide an export named\b/i,
     /\bcypress\.config\.[cm]?[jt]s\b/i,
+    /\bno spec files were found\b/i,
+    /\bcan'?t run because no spec files were found\b/i,
     /[A-Za-z0-9_./-]+\.(?:cy|spec)\.[cm]?[jt]sx?:\d+:\d+/,
   ];
 
@@ -773,9 +814,23 @@ async function buildCheckDiagnostics(args: {
 
   const combinedDiagnostics = unique([...reportDiagnostics, ...lineDiagnostics]).slice(0, 10);
   if (args.isCypress && combinedDiagnostics.length === 0) {
+    if (/project does not contain a default supportfile|supportfile to exist|support-file-missing-or-invalid|supportfile is not necessary/i.test(combined)) {
+      return {
+        diagnostics: ["Cypress supportFile is missing or invalid; create cypress/support/e2e.ts or set supportFile=false in cypress config."],
+        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
+      };
+    }
     if (/configfile is invalid|your configfile is invalid|cypress\.config\.[cm]?[jt]s|exports is not defined in es module scope|referenceerror:\s*exports is not defined/i.test(combined)) {
       return {
         diagnostics: ["Cypress config is invalid at runtime (config file could not be loaded)."],
+        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
+      };
+    }
+    if (/no spec files were found|can'?t run because no spec files were found/i.test(combined)) {
+      return {
+        diagnostics: [
+          "Cypress did not find E2E spec files; add specs under cypress/e2e/** or e2e/** and ensure Cypress specPattern includes them.",
+        ],
         artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
       };
     }
@@ -793,15 +848,19 @@ async function buildCheckDiagnostics(args: {
 }
 
 export async function detectTestCapabilities(workspaceRoot: string): Promise<TestCapabilities> {
-  const scripts = await readPackageScripts(path.resolve(workspaceRoot));
+  const normalizedRoot = path.resolve(workspaceRoot);
+  const scripts = await readPackageScripts(normalizedRoot);
   const unitScripts = UNIT_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
   const e2eScripts = E2E_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name]));
+  const e2eSpecFiles = await collectE2eSpecFiles(normalizedRoot);
 
   return {
     hasUnitTestScript: unitScripts.length > 0,
     hasE2EScript: e2eScripts.length > 0,
+    hasE2ESpecFiles: e2eSpecFiles.length > 0,
     unitScripts,
     e2eScripts,
+    e2eSpecFiles,
   };
 }
 
@@ -894,6 +953,19 @@ function collectSelectorsFromSpec(content: string): string[] {
   return unique(selectors);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasNativeDataCySelector(content: string, selector: string): boolean {
+  const escapedSelector = escapeRegExp(selector);
+  const nativeTagPattern = new RegExp(
+    `<\\s*[a-z][a-z0-9:-]*\\b[^>]*\\bdata-cy\\s*=\\s*["']${escapedSelector}["'][^>]*>`,
+    "i",
+  );
+  return nativeTagPattern.test(content);
+}
+
 export async function runCypressSelectorPreflight(workspaceRoot: string): Promise<CypressSelectorPreflightResult> {
   const root = path.resolve(workspaceRoot);
   const allFiles = await walkFiles(root, {
@@ -935,9 +1007,7 @@ export async function runCypressSelectorPreflight(workspaceRoot: string): Promis
     };
     requiredSelectors.push(usage);
 
-    const markerA = `data-cy="${selector}"`;
-    const markerB = `data-cy='${selector}'`;
-    const existsInSource = sourceContent.some((entry) => entry.raw.includes(markerA) || entry.raw.includes(markerB));
+    const existsInSource = sourceContent.some((entry) => hasNativeDataCySelector(entry.raw, selector));
     if (!existsInSource) {
       missingSelectors.push(usage);
     }

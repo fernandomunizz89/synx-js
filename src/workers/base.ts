@@ -1,7 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { exists, moveFile, readJson, writeJson } from "../lib/fs.js";
-import { logDaemon, logTaskEvent, logTiming } from "../lib/logging.js";
+import { logAgentAudit, logDaemon, logTaskEvent, logTiming } from "../lib/logging.js";
 import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
 import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
@@ -38,6 +38,14 @@ export abstract class WorkerBase {
 
       await logDaemon(`${this.agent} started ${request.stage} for ${taskId}`);
       await logTaskEvent(taskPath, `${this.agent} started ${request.stage}`);
+      await logAgentAudit(taskPath, {
+        taskId,
+        stage: request.stage,
+        agent: this.agent,
+        event: "stage_started",
+        inputRef: request.inputRef,
+        status: "in_progress",
+      });
 
       startedAt = nowIso();
       await this.processTask(taskId, request);
@@ -67,6 +75,15 @@ export abstract class WorkerBase {
       const humanMessage = providerErrorToHuman(error instanceof Error ? error.message : String(error));
       await logTaskEvent(taskPath, `${this.agent} failed: ${humanMessage}`);
       await logDaemon(`${this.agent} failed for ${taskId}: ${humanMessage}`);
+      await logAgentAudit(taskPath, {
+        taskId,
+        stage: this.workingFileName.replace(".working.json", ""),
+        agent: this.agent,
+        event: "stage_failed",
+        status: "failed",
+        durationMs,
+        error: humanMessage,
+      });
       await fs.unlink(workingFile).catch(() => undefined);
       return false;
     } finally {
@@ -144,6 +161,17 @@ export abstract class WorkerBase {
     });
     await logTaskEvent(taskPath, `${this.agent} finished ${args.stage} in ${durationMs}ms`);
     await logDaemon(`${this.agent} finished ${args.stage} for ${args.taskId} in ${durationMs}ms`);
+    await logAgentAudit(taskPath, {
+      taskId: args.taskId,
+      stage: args.stage,
+      agent: this.agent,
+      event: "stage_finished",
+      durationMs,
+      status: "done",
+      nextAgent: args.nextAgent || "",
+      nextStage: args.nextStage,
+      output: args.output,
+    });
 
     if (args.nextAgent && args.nextStage && args.nextRequestFileName && args.nextInputRef) {
       await writeJson(path.join(taskPath, "inbox", args.nextRequestFileName), {
@@ -156,12 +184,41 @@ export abstract class WorkerBase {
       } satisfies StageEnvelope);
 
       await logTaskEvent(taskPath, `Queued next stage ${args.nextStage} for ${args.nextAgent}`);
+      await logAgentAudit(taskPath, {
+        taskId: args.taskId,
+        stage: args.stage,
+        agent: this.agent,
+        event: "handoff_queued",
+        status: "queued",
+        nextAgent: args.nextAgent,
+        nextStage: args.nextStage,
+        inputRef: args.nextInputRef,
+      });
     }
   }
 
   protected async fakeWork(minMs = 300, maxMs = 1100): Promise<void> {
     const duration = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
     await sleep(duration);
+  }
+
+  protected async note(args: {
+    taskId: string;
+    stage: string;
+    message: string;
+    details?: Record<string, unknown>;
+  }): Promise<void> {
+    const taskPath = taskDir(args.taskId);
+    await logTaskEvent(taskPath, `${this.agent} note ${args.stage}: ${args.message}`);
+    await logAgentAudit(taskPath, {
+      taskId: args.taskId,
+      stage: args.stage,
+      agent: this.agent,
+      event: "stage_note",
+      status: "note",
+      note: args.message,
+      output: args.details || {},
+    });
   }
 
   protected async loadTaskInput(taskId: string): Promise<NewTaskInput> {

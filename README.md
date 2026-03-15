@@ -156,20 +156,29 @@ This works well with:
 - `Feature Builder` and `Bug Fixer` apply real workspace edits (not only text handoff).
 - Implementation agents can edit multiple related files when required to complete a real fix/feature.
 - When unit test scripts exist, implementation agents must report unit test files updated for the change.
+- Pre-handover quality gate: `Feature Builder` and `Bug Fixer` now run scoped sanity checks before handoff; if scoped lint/type/syntax blockers remain, handoff is blocked and remediation is attempted first.
+- Scoped quality filtering now ignores out-of-scope failures (existing errors unrelated to files changed in the current stage), reducing noisy loop-backs.
+- JS/TS code-quality bootstrap now attempts to provision linting/typecheck automatically: it can install missing ESLint dependencies, generate a conservative `eslint.config.cjs`, and wire `scripts.lint`/`scripts.typecheck` before validation.
 - For `Feature`, `Bug`, `Refactor`, and `Mixed`, main-flow E2E validation is required by QA.
 - If E2E infrastructure is missing, implementation agents are instructed to add an E2E script/test path as part of remediation.
 - `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
 - Provider calls are stateless per execution: every LLM request is built from explicit current input only (`systemPrompt` + current user payload), without reused chat memory/history.
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
 - QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
+- `Bug Investigator` handoff is now file-centric: suspect files/areas, primary+secondary hypotheses, explicit risk assessment, and builder check list.
+- `Feature Builder` handoff is now file-centric: changed+impacted files, technical risk list, structured risk assessment, review focus, and residual/manual validation notes.
+- `QA Validator` handoff is now audit-focused: files reviewed, validation mode (static vs executed evidence), structured technical risk summary, recommended checks, and residual risks.
+- BF/FB/QA are instructed to avoid false certainty: if build/runtime checks were not fully executed, outputs must explicitly call that out as residual risk.
 - Root-cause-first policy: E2E failures must prioritize application-code fixes; tests are treated as diagnostics and are only changed when evidence shows test defects.
 - QA and implementation agents now derive root-cause focus + source-file hints from failure evidence to guide remediation toward `src/**` first.
 - QA return context is cumulative across retries and is passed forward again on each new remediation loop.
 - QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
 - QA now enriches failed checks (especially Cypress/E2E) with compact diagnostics, artifacts, and runtime QA config notes.
+- QA handoff now also reports code-quality bootstrap actions and keeps reviewed-file paths normalized for cleaner audit trails.
 - QA Cypress selector preflight now ignores scaffold specs like `example.cy.*` when real task specs are present, reducing irrelevant loop-backs.
 - QA verdicts are now evidence-backed: if checks pass and no hard failures exist, unsupported model-only failures are discarded.
 - Cypress QA runs use low-noise runtime overrides (e.g., reduced screenshot/video noise) to prioritize actionable failure context.
+- Agent audit logs now include structured `stage_note` events (for example `execution_context`, `quality_gate_*`, `validation_evidence_snapshot`, `qa_decision`) so retries and handoff decisions are diagnosable without dumping full raw context.
 - QA honors human per-task E2E preferences (policy/framework/objective) and validates against that target.
 - On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.

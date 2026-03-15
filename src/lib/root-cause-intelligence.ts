@@ -22,12 +22,37 @@ const TIMER_SOURCE_HINTS = [
   "src/components/Timer/Timer.tsx",
 ];
 
-const SELECTOR_HINTS: Record<string, string> = {
-  timer: "src/components/Timer/Timer.tsx",
-  "timer-title": "src/components/Timer/Timer.tsx",
-  "timer-display": "src/components/CircularTimer/CircularTimer.tsx",
-  "timer-controls": "src/components/Controls/Controls.tsx",
-  "app-container": "src/components/Layout/Layout.tsx",
+const SELECTOR_HINTS: Record<string, string[]> = {
+  timer: ["src/components/Timer/Timer.tsx"],
+  "timer-title": ["src/components/Timer/Timer.tsx"],
+  "timer-display": [
+    "src/components/CircularTimer/CircularTimer.tsx",
+    "src/components/Timer/Timer.tsx",
+  ],
+  "circular-timer": [
+    "src/components/CircularTimer/CircularTimer.tsx",
+    "src/components/Timer/Timer.tsx",
+  ],
+  "timer-controls": [
+    "src/components/Controls/Controls.tsx",
+    "src/components/Timer/Timer.tsx",
+  ],
+  "start-button": [
+    "src/components/Controls/Controls.tsx",
+    "src/components/Timer/Timer.tsx",
+    "src/components/CircularTimer/CircularTimer.tsx",
+  ],
+  "pause-button": [
+    "src/components/Controls/Controls.tsx",
+    "src/components/Timer/Timer.tsx",
+    "src/components/CircularTimer/CircularTimer.tsx",
+  ],
+  "reset-button": [
+    "src/components/Controls/Controls.tsx",
+    "src/components/Timer/Timer.tsx",
+    "src/components/CircularTimer/CircularTimer.tsx",
+  ],
+  "app-container": ["src/components/Layout/Layout.tsx"],
 };
 
 function unique(values: string[]): string[] {
@@ -60,9 +85,9 @@ function extractSourcePaths(text: string): string[] {
 
 function collectSelectorHints(text: string): string[] {
   const hints: string[] = [];
-  for (const [selector, hint] of Object.entries(SELECTOR_HINTS)) {
+  for (const [selector, selectorHints] of Object.entries(SELECTOR_HINTS)) {
     const selectorPattern = new RegExp(`data-cy\\s*=\\s*["']${selector}["']|\\b${selector}\\b`, "i");
-    if (selectorPattern.test(text)) hints.push(hint);
+    if (selectorPattern.test(text)) hints.push(...selectorHints);
   }
   return unique(hints);
 }

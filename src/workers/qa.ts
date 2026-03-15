@@ -1,6 +1,9 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { DEFAULT_QA_MAX_RETRIES, DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
+import { ensureCodeQualityBootstrap } from "../lib/code-quality-bootstrap.js";
 import { exists, readJson, writeJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { qaOutputSchema } from "../lib/schema.js";
@@ -17,6 +20,7 @@ import {
 } from "../lib/qa-context.js";
 import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
+import { ensureQaCypressBootstrap } from "../lib/qa-cypress-bootstrap.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runCypressSelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
@@ -26,16 +30,141 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
 }
 
-function resolveQaMaxRetries(): number {
-  const raw = Number(process.env.AI_AGENTS_QA_MAX_RETRIES || "");
-  if (Number.isFinite(raw) && raw >= 1) return Math.floor(raw);
-  return DEFAULT_QA_MAX_RETRIES;
+function normalizeIssueLine(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.]+$/, "")
+    .trim();
+}
+
+function uniqueNormalized(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values.map((x) => normalizeIssueLine(x)).filter(Boolean)) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+interface QaRetryConfig {
+  sameIssueMaxRetries: number;
+  diverseIssueMaxRetries: number;
+}
+
+function resolveQaRetryConfig(): QaRetryConfig {
+  const rawSame = Number(process.env.AI_AGENTS_QA_MAX_RETRIES || "");
+  const sameIssueMaxRetries = Number.isFinite(rawSame) && rawSame >= 1
+    ? Math.floor(rawSame)
+    : DEFAULT_QA_MAX_RETRIES;
+
+  const rawDiverse = Number(process.env.AI_AGENTS_QA_MAX_RETRIES_DIVERSE || "");
+  const diverseIssueMaxRetries = Number.isFinite(rawDiverse) && rawDiverse >= sameIssueMaxRetries
+    ? Math.floor(rawDiverse)
+    : Math.max(5, sameIssueMaxRetries + 2);
+
+  return {
+    sameIssueMaxRetries,
+    diverseIssueMaxRetries,
+  };
 }
 
 function trimText(value: string, maxChars = 240): string {
   const next = value.trim();
   if (next.length <= maxChars) return next;
   return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
+function normalizeQaIssueKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[a-z]:\\[^\s]+/g, "<path>")
+    .replace(/\/[a-z0-9_./-]+/g, "<path>")
+    .replace(/\b(exit|code|attempt|retry|line|column)\s*\d+\b/g, "$1")
+    .replace(/\bts\d{4}\b/g, "ts-error")
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function issueTokenSet(value: string): Set<string> {
+  const stopwords = new Set([
+    "the", "and", "for", "with", "that", "this", "from", "into", "should", "failed",
+    "error", "check", "tests", "test", "code", "exit", "retry", "attempt", "qa",
+  ]);
+  const tokens = normalizeQaIssueKey(value)
+    .split(" ")
+    .filter((x) => x.length >= 3 && !stopwords.has(x));
+  return new Set(tokens);
+}
+
+function issuesLookEquivalent(a: string, b: string): boolean {
+  const aa = normalizeQaIssueKey(a);
+  const bb = normalizeQaIssueKey(b);
+  if (!aa || !bb) return false;
+  if (aa === bb) return true;
+  if (aa.includes(bb) || bb.includes(aa)) return true;
+
+  const setA = issueTokenSet(aa);
+  const setB = issueTokenSet(bb);
+  if (!setA.size || !setB.size) return false;
+  let overlap = 0;
+  for (const token of setA) {
+    if (setB.has(token)) overlap += 1;
+  }
+  const jaccard = overlap / (setA.size + setB.size - overlap);
+  return jaccard >= 0.5;
+}
+
+function extractIssueCandidatesFromHistory(history: QaReturnHistoryEntry[]): string[] {
+  return unique(history.flatMap((entry) => [
+    entry.summary,
+    ...entry.failures,
+    ...entry.findings.map((finding) => finding.issue),
+  ]));
+}
+
+function inferPreModelRetryLimit(history: QaReturnHistoryEntry[], config: QaRetryConfig): number {
+  if (history.length < 2) return config.diverseIssueMaxRetries;
+  const issueCandidates = extractIssueCandidatesFromHistory(history);
+  let hasRepeatedIssue = false;
+  for (let i = 0; i < issueCandidates.length; i += 1) {
+    for (let j = i + 1; j < issueCandidates.length; j += 1) {
+      if (issuesLookEquivalent(issueCandidates[i], issueCandidates[j])) {
+        hasRepeatedIssue = true;
+        break;
+      }
+    }
+    if (hasRepeatedIssue) break;
+  }
+  return hasRepeatedIssue ? config.sameIssueMaxRetries : config.diverseIssueMaxRetries;
+}
+
+function resolveDynamicRetryLimit(args: {
+  history: QaReturnHistoryEntry[];
+  currentIssues: string[];
+  config: QaRetryConfig;
+}): number {
+  if (!args.history.length || !args.currentIssues.length) return args.config.diverseIssueMaxRetries;
+
+  const last = args.history[args.history.length - 1];
+  const lastIssues = unique([
+    last.summary,
+    ...last.failures,
+    ...last.findings.map((x) => x.issue),
+  ]);
+  const sameAsLast = args.currentIssues.some((currentIssue) =>
+    lastIssues.some((previousIssue) => issuesLookEquivalent(currentIssue, previousIssue)));
+
+  if (sameAsLast) return args.config.sameIssueMaxRetries;
+
+  const priorIssueCandidates = extractIssueCandidatesFromHistory(args.history);
+  const recurrent = args.currentIssues.some((currentIssue) =>
+    priorIssueCandidates.some((previousIssue) => issuesLookEquivalent(currentIssue, previousIssue)));
+
+  return recurrent ? args.config.sameIssueMaxRetries : args.config.diverseIssueMaxRetries;
 }
 
 function qaReturnHistoryPath(taskId: string): string {
@@ -357,8 +486,14 @@ function defaultSelectorTargetHint(selector: string): string {
       return "src/components/Timer/Timer.tsx";
     case "timer-display":
       return "src/components/CircularTimer/CircularTimer.tsx";
+    case "circular-timer":
+      return "src/components/CircularTimer/CircularTimer.tsx";
     case "timer-controls":
       return "src/components/Controls/Controls.tsx";
+    case "start-button":
+    case "pause-button":
+    case "reset-button":
+      return "src/components/Controls/Controls.tsx or src/components/CircularTimer/CircularTimer.tsx (attach on native clickable DOM/SVG element, not component props)";
     case "app-container":
       return "src/components/Layout/Layout.tsx";
     default:
@@ -389,6 +524,65 @@ function buildSelectorPreflightReturnContext(
   });
 }
 
+function isMissingE2eSpecText(value: string): boolean {
+  const lower = value.toLowerCase();
+  return /no spec files were found|can'?t run because no spec files were found|did not find e2e spec files/.test(lower);
+}
+
+function hasMissingE2eSpecSignal(checks: Array<{
+  command: string;
+  stdoutPreview: string;
+  stderrPreview: string;
+  diagnostics?: string[];
+}>): boolean {
+  const corpus = checks
+    .flatMap((check) => [check.command, check.stdoutPreview, check.stderrPreview, ...(check.diagnostics || [])])
+    .join("\n")
+    .toLowerCase();
+  return isMissingE2eSpecText(corpus);
+}
+
+function buildMissingE2eSpecReturnContext(checks: Array<{
+  command: string;
+  status: "passed" | "failed" | "skipped";
+  exitCode: number | null;
+  diagnostics?: string[];
+}>): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  const output: Array<{
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+    evidence: string[];
+    recommendedAction: string;
+  }> = [];
+
+  for (const check of checks) {
+    if (check.status !== "failed") continue;
+    if (!isE2eCheckCommand(check.command)) continue;
+    const diagnostics = (check.diagnostics || []).filter((item) => item.trim());
+    const signal = diagnostics.find((item) => isMissingE2eSpecText(item));
+    if (!signal) continue;
+    output.push({
+      issue: "Cypress E2E spec files are missing.",
+      expectedResult: "At least one runnable E2E spec should exist under e2e/** or cypress/e2e/** and be matched by Cypress specPattern.",
+      receivedResult: signal,
+      evidence: unique([
+        `Command: ${check.command}`,
+        ...diagnostics.slice(0, 4),
+      ]),
+      recommendedAction: "Create at least one E2E spec file (for example e2e/main-flow.cy.ts), ensure cypress.config.ts specPattern includes it, and re-run Cypress.",
+    });
+  }
+
+  return output;
+}
+
 function hasConfigFailureSignal(checks: Array<{
   command: string;
   stdoutPreview: string;
@@ -405,7 +599,7 @@ function hasConfigFailureSignal(checks: Array<{
 
 function isConfigRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
-  return /cypress config|cypress configuration|cypress\.config|baseurl|specpattern|config mismatch|config file/.test(lower);
+  return /configfile is invalid|your configfile is invalid|invalid cypress config|cypress configuration.+invalid|failed to load cypress config|cannot find.+cypress\.config|missing.+baseurl|missing.+specpattern|baseurl.+(missing|invalid)|specpattern.+(missing|invalid)|config mismatch/.test(lower);
 }
 
 function filterUnsupportedConfigFailures(
@@ -524,6 +718,230 @@ function filterUnsupportedSelectorReturnContext(
   });
 }
 
+function hasImportExportFailureSignal(checks: Array<{
+  command: string;
+  stdoutPreview: string;
+  stderrPreview: string;
+  diagnostics?: string[];
+}>): boolean {
+  const corpus = checks
+    .flatMap((check) => [check.command, check.stdoutPreview, check.stderrPreview, ...(check.diagnostics || [])])
+    .join("\n")
+    .toLowerCase();
+
+  return /does not provide an export named|import\/export mismatch|cannot find module|requested module .* does not provide an export named|missing export\b/.test(corpus);
+}
+
+function isImportExportRelatedText(value: string): boolean {
+  const lower = value.toLowerCase();
+  return /does not provide an export named|import\/export mismatch|missing useTimer export|requested module .* does not provide an export named|cannot find module|incorrect import|import statement|default import|named import|missing export\b|missing export 'usetimer'|missing export "usetimer"|export not confirmed|export .* not confirmed/.test(lower);
+}
+
+function filterUnsupportedImportExportFailures(
+  failures: string[],
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>,
+): string[] {
+  if (hasImportExportFailureSignal(checks)) return failures;
+  return failures.filter((item) => !isImportExportRelatedText(item));
+}
+
+function filterUnsupportedImportExportReturnContext(
+  items: Array<{
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+    evidence: string[];
+    recommendedAction: string;
+  }>,
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>,
+): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  if (hasImportExportFailureSignal(checks)) return items;
+  return items.filter((item) => {
+    return !(
+      isImportExportRelatedText(item.issue)
+      || isImportExportRelatedText(item.expectedResult)
+      || isImportExportRelatedText(item.receivedResult)
+      || isImportExportRelatedText(item.recommendedAction)
+    );
+  });
+}
+
+function isLowSignalQaText(value: string): boolean {
+  const lower = value.toLowerCase().trim();
+  if (!lower) return true;
+  return /acceptance criteria and validation checks should pass|address this blocker directly and verify with relevant checks|qa validation failed|no detailed assertion context/.test(lower);
+}
+
+function hasOnlyRootCauseHintEvidence(evidence: string[]): boolean {
+  const cleaned = evidence
+    .map((entry) => entry.trim())
+    .filter((entry) => entry && !/\[none\]/i.test(entry));
+  if (!cleaned.length) return false;
+  return cleaned.every((entry) => /^likely source root-cause paths:/i.test(entry));
+}
+
+function pickBestFailedCheckForContextItem(args: {
+  item: {
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+  };
+  failedChecks: Array<{
+    command: string;
+    status: "passed" | "failed" | "skipped";
+    exitCode: number | null;
+    diagnostics?: string[];
+  }>;
+}): {
+  command: string;
+  status: "passed" | "failed" | "skipped";
+  exitCode: number | null;
+  diagnostics?: string[];
+} | null {
+  if (!args.failedChecks.length) return null;
+  const corpus = `${args.item.issue}\n${args.item.expectedResult}\n${args.item.receivedResult}`.toLowerCase();
+
+  const scored = args.failedChecks.map((check) => {
+    const checkCorpus = `${check.command}\n${(check.diagnostics || []).join("\n")}`.toLowerCase();
+    let score = 0;
+    if (/\bcypress\b/.test(corpus) && /\bcypress\b/.test(checkCorpus)) score += 4;
+    if (/\be2e\b|timer|ui|dom/.test(corpus) && isE2eCheckCommand(check.command)) score += 3;
+    if (/\btypescript\b|type error|ts\d{4}\b/.test(corpus) && /\btsc\b|typecheck|lint/.test(checkCorpus)) score += 3;
+    if (/\bimport\b|\bexport\b|\bmodule\b/.test(corpus)
+      && /does not provide an export named|cannot find module|import\/export mismatch|requested module/.test(checkCorpus)) {
+      score += 3;
+    }
+    if (isE2eCheckCommand(check.command)) score += 1;
+    return { check, score };
+  }).sort((a, b) => b.score - a.score);
+
+  return scored[0]?.check || null;
+}
+
+function enrichSparseReturnContextWithCheckEvidence(args: {
+  items: Array<{
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+    evidence: string[];
+    recommendedAction: string;
+  }>;
+  executedChecks: Array<{
+    command: string;
+    status: "passed" | "failed" | "skipped";
+    exitCode: number | null;
+    diagnostics?: string[];
+    qaConfigNotes?: string[];
+    artifacts?: string[];
+  }>;
+}): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  const failedChecks = args.executedChecks.filter((check) => check.status === "failed");
+  if (!failedChecks.length) return args.items;
+
+  return args.items.map((item) => {
+    const hasEvidence = item.evidence.some((entry) => entry.trim() && !/\[none\]/i.test(entry));
+    const needsEvidence = !hasEvidence;
+    const needsResult = isLowSignalQaText(item.receivedResult);
+    const needsAction = isLowSignalQaText(item.recommendedAction);
+    if (!needsEvidence && !needsResult && !needsAction) return item;
+
+    const matchedCheck = pickBestFailedCheckForContextItem({ item, failedChecks });
+    if (!matchedCheck) return item;
+
+    const diagnostics = (matchedCheck.diagnostics || []).map((entry) => trimText(entry, 200)).slice(0, 4);
+    const sourceLocations = extractSourceLocations(diagnostics);
+    const evidence = unique([
+      ...item.evidence,
+      `Command: ${matchedCheck.command}`,
+      ...diagnostics,
+      ...(args.executedChecks.find((check) => check.command === matchedCheck.command)?.qaConfigNotes || [])
+        .map((entry) => trimText(entry, 180)),
+      ...(args.executedChecks.find((check) => check.command === matchedCheck.command)?.artifacts || [])
+        .map((entry) => `Artifact: ${trimText(entry, 160)}`),
+    ])
+      .filter((entry) => entry.trim() && !/\[none\]/i.test(entry))
+      .slice(0, 6);
+
+    const receivedResult = needsResult
+      ? (diagnostics[0] || `Command exited with code ${matchedCheck.exitCode ?? "unknown"}: ${matchedCheck.command}`)
+      : item.receivedResult;
+
+    let recommendedAction = item.recommendedAction.trim();
+    if (needsAction) {
+      recommendedAction = isE2eCheckCommand(matchedCheck.command)
+        ? `Reproduce with "${matchedCheck.command}", fix the source-code root cause first, then re-run this E2E check.`
+        : `Fix the failing behavior surfaced by "${matchedCheck.command}" and re-run the same validation command.`;
+    }
+
+    if (sourceLocations.length && !recommendedAction.includes(sourceLocations[0])) {
+      recommendedAction = `${recommendedAction} Inspect ${sourceLocations.join(", ")} first.`;
+    }
+
+    return {
+      ...item,
+      receivedResult,
+      evidence,
+      recommendedAction,
+    };
+  });
+}
+
+function pruneLowSignalReturnContextItems(items: Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}>): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  const hasRichItem = items.some((item) => (
+    item.evidence.length > 0
+    && !hasOnlyRootCauseHintEvidence(item.evidence)
+    && !isLowSignalQaText(item.receivedResult)
+  ));
+  if (!hasRichItem) return items;
+
+  const filtered = items.filter((item) => {
+    if (/qa retry limit reached/i.test(item.issue)) return false;
+    const hasEvidence = item.evidence.some((entry) => entry.trim() && !/\[none\]/i.test(entry));
+    const rootCauseHintOnly = hasOnlyRootCauseHintEvidence(item.evidence);
+    const genericExpected = isLowSignalQaText(item.expectedResult);
+    const genericReceived = isLowSignalQaText(item.receivedResult);
+    const genericAction = isLowSignalQaText(item.recommendedAction);
+    if (rootCauseHintOnly && (genericReceived || genericAction)) return false;
+    return hasEvidence || !(genericExpected && genericReceived && genericAction);
+  });
+
+  return filtered.length ? filtered : items;
+}
+
 function enrichReturnContextWithRootCauseHints(items: Array<{
   issue: string;
   expectedResult: string;
@@ -593,6 +1011,96 @@ async function loadReportedUnitTests(taskId: string): Promise<string[]> {
   return unique(reported);
 }
 
+type RiskLevel = "low" | "medium" | "high" | "unknown";
+
+const RISK_LEVEL_SCORE: Record<RiskLevel, number> = {
+  unknown: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+function normalizeRiskLevel(value: string | undefined): RiskLevel {
+  const normalized = (value || "").trim().toLowerCase();
+  if (normalized === "low" || normalized === "medium" || normalized === "high" || normalized === "unknown") {
+    return normalized;
+  }
+  return "unknown";
+}
+
+function raiseRisk(current: RiskLevel, candidate: RiskLevel): RiskLevel {
+  return RISK_LEVEL_SCORE[candidate] > RISK_LEVEL_SCORE[current] ? candidate : current;
+}
+
+function extractFileHintsFromLines(lines: string[]): string[] {
+  const out: string[] = [];
+  const pattern = /([A-Za-z0-9_./-]+\.[cm]?[jt]sx?|[A-Za-z0-9_./-]+\.(json|cjs|mjs|css|scss|md|yml|yaml))/g;
+  for (const line of lines) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(line))) {
+      const normalized = match[1].replace(/^[./]+/, "").trim();
+      if (normalized) out.push(normalized);
+    }
+  }
+  return unique(out);
+}
+
+function normalizeWorkspacePathLabel(workspaceRoot: string, filePath: string): string {
+  const root = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  const rootNoLead = root.replace(/^\/+/, "");
+  let next = filePath.replace(/\\/g, "/").trim();
+  if (!next) return "";
+  next = next.replace(/:\d+:\d+$/, "");
+  if (next.startsWith(root)) {
+    next = next.slice(root.length);
+  } else if (next.startsWith(rootNoLead)) {
+    next = next.slice(rootNoLead.length);
+  }
+  next = next.replace(/^\/+/, "");
+  next = next.replace(/^\.\//, "");
+  return next;
+}
+
+function collapseWorkspacePathLabels(args: {
+  workspaceRoot: string;
+  candidates: string[];
+  preferredPaths: string[];
+}): string[] {
+  const { workspaceRoot } = args;
+  const preferred = unique(args.preferredPaths.map((filePath) => normalizeWorkspacePathLabel(workspaceRoot, filePath)).filter(Boolean));
+  const preferredByBase = new Map<string, string[]>();
+  for (const filePath of preferred) {
+    const base = path.basename(filePath);
+    const list = preferredByBase.get(base) || [];
+    list.push(filePath);
+    preferredByBase.set(base, list);
+  }
+
+  const out: string[] = [];
+  for (const rawCandidate of args.candidates) {
+    const candidate = normalizeWorkspacePathLabel(workspaceRoot, rawCandidate);
+    if (!candidate) continue;
+    if (candidate.includes("/") || existsSync(path.join(workspaceRoot, candidate))) {
+      out.push(candidate);
+      continue;
+    }
+    const preferredMatch = preferredByBase.get(candidate) || [];
+    if (preferredMatch.length === 1) {
+      out.push(preferredMatch[0]);
+      continue;
+    }
+    out.push(candidate);
+  }
+  return unique(out);
+}
+
+function deriveQaValidationMode(checks: Array<{ status: "passed" | "failed" | "skipped" }>): "static_review" | "executed_checks" | "mixed" {
+  if (!checks.length) return "static_review";
+  const hasExecuted = checks.some((check) => check.status === "passed" || check.status === "failed");
+  if (!hasExecuted) return "static_review";
+  return "mixed";
+}
+
 export class QaWorker extends WorkerBase {
   readonly agent = "QA Validator" as const;
   readonly requestFileName = STAGE_FILE_NAMES.qa;
@@ -607,21 +1115,33 @@ export class QaWorker extends WorkerBase {
     const qaPreferences = resolveTaskQaPreferences(baseInput.task);
     const meta = await loadTaskMeta(taskId);
     const workspaceRoot = process.cwd();
+    const qualityBootstrap = await ensureCodeQualityBootstrap({ workspaceRoot });
+    const shouldPrepareCypress = qaPreferences.e2ePolicy !== "skip"
+      && (qaPreferences.e2eFramework === "cypress" || qaPreferences.e2eFramework === "auto");
+    const cypressBootstrap = shouldPrepareCypress
+      ? await ensureQaCypressBootstrap({ workspaceRoot })
+      : { checks: [], notes: [], warnings: [], changedFiles: [] };
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const reportedUnitTests = await loadReportedUnitTests(taskId);
-    const changedFiles = await getGitChangedFiles(workspaceRoot);
-    const shouldRunCypressPreflight = qaPreferences.e2ePolicy !== "skip"
-      && (qaPreferences.e2eFramework === "cypress" || qaPreferences.e2eFramework === "auto");
+    const changedFiles = unique([
+      ...(await getGitChangedFiles(workspaceRoot)),
+      ...cypressBootstrap.changedFiles,
+      ...qualityBootstrap.changedFiles,
+    ]);
+    const shouldRunCypressPreflight = shouldPrepareCypress;
     const selectorPreflight = shouldRunCypressPreflight
       ? await runCypressSelectorPreflight(workspaceRoot)
       : null;
     const missingSelectorFindings = selectorPreflight?.missingSelectors || [];
     const skipHeavyE2ERun = missingSelectorFindings.length > 0;
-    const executedChecks = await runProjectChecks({
-      workspaceRoot,
-      timeoutMsPerCheck: 150_000,
-      includeE2E: qaPreferences.e2ePolicy !== "skip" && !skipHeavyE2ERun,
-    });
+    const executedChecks = [
+      ...cypressBootstrap.checks,
+      ...(await runProjectChecks({
+        workspaceRoot,
+        timeoutMsPerCheck: 150_000,
+        includeE2E: qaPreferences.e2ePolicy !== "skip" && !skipHeavyE2ERun,
+      })),
+    ];
     if (missingSelectorFindings.length) {
       executedChecks.push({
         command: "cypress selector preflight",
@@ -640,15 +1160,20 @@ export class QaWorker extends WorkerBase {
     }
     const previousQaAttempts = meta.history.filter((x) => x.stage === "qa").length;
     const currentQaAttempt = previousQaAttempts + 1;
-    const maxQaRetries = resolveQaMaxRetries();
+    const retryConfig = resolveQaRetryConfig();
     const previousReturnHistory = await loadQaReturnHistory(taskId);
+    const maxQaRetriesHint = inferPreModelRetryLimit(previousReturnHistory, retryConfig);
     const compactChecks = compactChecksForModel(executedChecks);
     const checkDrivenReturnContext = buildCheckDrivenReturnContext({ executedChecks: compactChecks });
     const selectorPreflightReturnContext = buildSelectorPreflightReturnContext(missingSelectorFindings);
+    const missingE2eSpecReturnContext = buildMissingE2eSpecReturnContext(compactChecks);
 
     const hardFailures: string[] = [];
     if (!changedFiles.length) {
       hardFailures.push("No code changes detected in git diff.");
+    }
+    for (const warning of cypressBootstrap.warnings.slice(0, 6)) {
+      hardFailures.push(`QA Cypress bootstrap warning: ${trimText(warning, 180)}`);
     }
     for (const item of missingSelectorFindings.slice(0, 8)) {
       hardFailures.push(`Missing selector hook: data-cy="${item.selector}" (referenced in ${item.specPaths.join(", ")}).`);
@@ -662,6 +1187,9 @@ export class QaWorker extends WorkerBase {
           ? `Check failed: ${check.command} (exit ${check.exitCode ?? "unknown"}) | ${trimText(detail, 160)}`
           : `Check failed: ${check.command} (exit ${check.exitCode ?? "unknown"})`,
       );
+    }
+    if (hasMissingE2eSpecSignal(compactChecks)) {
+      hardFailures.push("Cypress did not find runnable E2E spec files under e2e/** or cypress/e2e/**.");
     }
 
     const requiresE2E = qaPreferences.e2eRequired;
@@ -686,6 +1214,25 @@ export class QaWorker extends WorkerBase {
     if (skippedChecks.length === executedChecks.length) {
       hardFailures.push("No automated checks were executed (check/test/lint/e2e scripts not found).");
     }
+    await this.note({
+      taskId,
+      stage: "qa",
+      message: "validation_evidence_snapshot",
+      details: {
+        attempt: currentQaAttempt,
+        maxRetriesHint: maxQaRetriesHint,
+        changedFiles: changedFiles.length,
+        executedChecks: executedChecks.map((check) => ({
+          command: check.command,
+          status: check.status,
+          exitCode: check.exitCode,
+        })).slice(0, 6),
+        hardFailures: hardFailures.length,
+        missingSelectors: missingSelectorFindings.length,
+        requiresE2E,
+        e2eFramework: qaPreferences.e2eFramework,
+      },
+    });
 
     const remediationAgent: AgentName = baseInput.task.typeHint === "Bug" ? "Bug Fixer" : "Feature Builder";
 
@@ -693,12 +1240,20 @@ export class QaWorker extends WorkerBase {
       ...baseInput,
       qaControl: {
         currentAttempt: currentQaAttempt,
-        maxRetries: maxQaRetries,
+        maxRetries: maxQaRetriesHint,
       },
       validationEvidence: {
         changedFiles,
         executedChecks: compactChecks,
         reportedUnitTests,
+        codeQualityBootstrap: {
+          notes: qualityBootstrap.notes.slice(0, 6),
+          warnings: qualityBootstrap.warnings.slice(0, 6),
+        },
+        cypressBootstrap: {
+          notes: cypressBootstrap.notes.slice(0, 6),
+          warnings: cypressBootstrap.warnings.slice(0, 6),
+        },
         selectorPreflight: {
           skippedHeavyE2ERun: skipHeavyE2ERun,
           missingSelectors: missingSelectorFindings,
@@ -711,6 +1266,8 @@ export class QaWorker extends WorkerBase {
 MANDATORY VALIDATION CONTRACT:
 - Use "validationEvidence.changedFiles" and "validationEvidence.executedChecks" as primary evidence.
 - Use "validationEvidence.reportedUnitTests" as additional evidence from implementation stages.
+- Use "validationEvidence.codeQualityBootstrap" to report lint/typecheck bootstrap actions before validation.
+- Use "validationEvidence.cypressBootstrap" to report setup/install/config actions taken before validation.
 - Use "validationEvidence.selectorPreflight.missingSelectors" to report missing data-cy hooks with exact selector names and referenced spec files.
 - If any check failed, verdict must be "fail".
 - If changedFiles is empty, verdict must be "fail".
@@ -728,23 +1285,34 @@ MANDATORY VALIDATION CONTRACT:
 - If failures suggest import/export mismatch, call out the exact symbol/file contract mismatch in returnContext.
 - If failures suggest Cypress config mismatch (baseUrl/specPattern/configFile), call out exact config edits needed.
 - If failures suggest flawed E2E test logic (scoping/order/assertion form), call out exact test file fixes.
+- If failures show missing E2E spec files, explicitly request creation of runnable specs under e2e/** or cypress/e2e/** and reference specPattern alignment.
 - Populate "testCases" as a real QA would: include concrete expectedResult vs actualResult and status.
 - Keep "testCases" concise and evidence-driven (max 6).
+- Explicitly fill filesReviewed, validationMode, technicalRiskSummary, recommendedChecks, manualValidationNeeded, and residualRisks.
+- Do not claim full certainty unless checks were truly executed.
+- If part of the conclusion is static analysis only, state it in residualRisks/manualValidationNeeded.
 - If verdict is "pass", set "nextAgent" to "PR Writer".
-- This QA attempt is ${currentQaAttempt} of max ${maxQaRetries} before forced human escalation.
+- This QA attempt is ${currentQaAttempt} of max ${maxQaRetriesHint} before forced human escalation.
 - Keep failures specific and actionable.
 `;
 
-    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${strictContract}`;
+    const roleContract = buildAgentRoleContract("QA Validator", {
+      stage: "qa",
+      taskTypeHint: baseInput.task.typeHint,
+      qaAttempt: currentQaAttempt,
+    });
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
     const result = await provider.generateStructured({
       agent: "QA Validator",
+      taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
+    output.filesReviewed = unique([...output.filesReviewed, ...output.changedFiles]);
     output.executedChecks = compactChecks;
     output.failures = filterUnsupportedConfigFailures(
       unique([...output.failures, ...hardFailures]),
@@ -754,6 +1322,10 @@ MANDATORY VALIDATION CONTRACT:
       output.failures,
       output.executedChecks,
       missingSelectorFindings,
+    );
+    output.failures = filterUnsupportedImportExportFailures(
+      output.failures,
+      output.executedChecks,
     );
     const hasEvidenceBackedFailure = output.executedChecks.some((check) => check.status === "failed") || hardFailures.length > 0;
     if (!hasEvidenceBackedFailure) {
@@ -767,6 +1339,16 @@ MANDATORY VALIDATION CONTRACT:
       output.returnContext = [];
     }
 
+    const currentIssueCandidates = unique([
+      ...output.failures,
+      ...output.returnContext.map((item) => item.issue),
+    ]);
+    const maxQaRetries = resolveDynamicRetryLimit({
+      history: previousReturnHistory,
+      currentIssues: currentIssueCandidates,
+      config: retryConfig,
+    });
+
     output.nextAgent = output.verdict === "pass" ? "PR Writer" : remediationAgent;
     const escalatedToHuman = output.verdict === "fail" && currentQaAttempt >= maxQaRetries;
     if (escalatedToHuman) {
@@ -775,9 +1357,23 @@ MANDATORY VALIDATION CONTRACT:
         `QA retry limit reached (${currentQaAttempt}/${maxQaRetries}). Escalating to human review.`,
       ]);
     }
+    await this.note({
+      taskId,
+      stage: "qa",
+      message: "qa_decision",
+      details: {
+        attempt: currentQaAttempt,
+        maxRetries: maxQaRetries,
+        verdict: output.verdict,
+        nextAgent: output.nextAgent,
+        escalatedToHuman,
+        failures: output.failures.length,
+        returnContext: output.returnContext.length,
+      },
+    });
 
     const returnContextAfterConfigFilter = filterUnsupportedConfigReturnContext(
-      [...output.returnContext, ...checkDrivenReturnContext, ...selectorPreflightReturnContext],
+      [...output.returnContext, ...checkDrivenReturnContext, ...selectorPreflightReturnContext, ...missingE2eSpecReturnContext],
       output.executedChecks,
     );
     const modelAndCheckReturnContext = filterUnsupportedSelectorReturnContext(
@@ -785,8 +1381,16 @@ MANDATORY VALIDATION CONTRACT:
       output.executedChecks,
       missingSelectorFindings,
     );
+    const sanitizedReturnContext = filterUnsupportedImportExportReturnContext(
+      modelAndCheckReturnContext,
+      output.executedChecks,
+    );
+    const evidenceEnrichedReturnContext = enrichSparseReturnContextWithCheckEvidence({
+      items: sanitizedReturnContext,
+      executedChecks: output.executedChecks,
+    });
     output.returnContext = compactQaReturnContextItems([
-      ...modelAndCheckReturnContext,
+      ...evidenceEnrichedReturnContext,
       ...buildFallbackQaReturnContextItems({
         failures: output.failures,
         changedFiles: output.changedFiles,
@@ -795,10 +1399,23 @@ MANDATORY VALIDATION CONTRACT:
           status: x.status,
           exitCode: x.exitCode,
         })),
-        existing: modelAndCheckReturnContext,
+        existing: sanitizedReturnContext,
       }),
     ]);
     output.returnContext = enrichReturnContextWithRootCauseHints(output.returnContext, output.failures);
+    output.returnContext = pruneLowSignalReturnContextItems(output.returnContext);
+    output.filesReviewed = unique([
+      ...output.filesReviewed,
+      ...extractFileHintsFromLines([
+        ...output.returnContext.flatMap((item) => [item.issue, item.expectedResult, item.receivedResult, ...item.evidence]),
+        ...output.executedChecks.flatMap((check) => [check.stdoutPreview, check.stderrPreview, ...(check.diagnostics || [])]),
+      ]),
+    ]);
+    output.filesReviewed = collapseWorkspacePathLabels({
+      workspaceRoot,
+      candidates: output.filesReviewed,
+      preferredPaths: output.changedFiles,
+    });
     output.testCases = compactQaTestCases([
       ...output.testCases,
       ...buildFallbackQaTestCases({
@@ -812,6 +1429,56 @@ MANDATORY VALIDATION CONTRACT:
         })),
       }),
     ]);
+    output.validationMode = deriveQaValidationMode(output.executedChecks);
+    output.recommendedChecks = uniqueNormalized([
+      ...output.recommendedChecks,
+      ...output.executedChecks
+        .filter((check) => check.status !== "passed")
+        .map((check) => `Re-run and confirm: ${check.command}`),
+      ...output.e2ePlan,
+    ]).slice(0, 12);
+    const technicalRiskSummary = output.technicalRiskSummary;
+    technicalRiskSummary.buildRisk = normalizeRiskLevel(technicalRiskSummary.buildRisk);
+    technicalRiskSummary.syntaxRisk = normalizeRiskLevel(technicalRiskSummary.syntaxRisk);
+    technicalRiskSummary.importExportRisk = normalizeRiskLevel(technicalRiskSummary.importExportRisk);
+    technicalRiskSummary.referenceRisk = normalizeRiskLevel(technicalRiskSummary.referenceRisk);
+    technicalRiskSummary.logicRisk = normalizeRiskLevel(technicalRiskSummary.logicRisk);
+    technicalRiskSummary.regressionRisk = normalizeRiskLevel(technicalRiskSummary.regressionRisk);
+    if (!output.changedFiles.length) {
+      technicalRiskSummary.buildRisk = raiseRisk(technicalRiskSummary.buildRisk, "high");
+      technicalRiskSummary.regressionRisk = raiseRisk(technicalRiskSummary.regressionRisk, "high");
+    }
+    if (output.executedChecks.some((check) => check.status === "failed")) {
+      technicalRiskSummary.buildRisk = raiseRisk(technicalRiskSummary.buildRisk, "medium");
+      technicalRiskSummary.regressionRisk = raiseRisk(technicalRiskSummary.regressionRisk, "medium");
+    }
+    const failureCorpus = output.failures.join("\n");
+    if (/syntaxerror|ts\d{4}|parse error|unexpected token/i.test(failureCorpus)) {
+      technicalRiskSummary.syntaxRisk = raiseRisk(technicalRiskSummary.syntaxRisk, "high");
+    }
+    if (/does not provide an export named|cannot find module|import\/export|named export/i.test(failureCorpus)) {
+      technicalRiskSummary.importExportRisk = raiseRisk(technicalRiskSummary.importExportRisk, "high");
+      technicalRiskSummary.referenceRisk = raiseRisk(technicalRiskSummary.referenceRisk, "medium");
+    }
+    if (/undefined|not defined|null|referenceerror|cannot read/i.test(failureCorpus)) {
+      technicalRiskSummary.referenceRisk = raiseRisk(technicalRiskSummary.referenceRisk, "high");
+    }
+    if (/countdown|state|logic|behavior|assertion/i.test(failureCorpus)) {
+      technicalRiskSummary.logicRisk = raiseRisk(technicalRiskSummary.logicRisk, "medium");
+    }
+    output.manualValidationNeeded = uniqueNormalized([
+      ...output.manualValidationNeeded,
+      ...(requiresE2E ? [`Manual runtime validation for ${qaPreferences.e2eFramework} flow is still recommended.`] : []),
+      ...(output.verdict === "pass" ? ["Smoke-test core user flow manually in runtime environment."] : []),
+    ]).slice(0, 10);
+    output.residualRisks = uniqueNormalized([
+      ...output.residualRisks,
+      `Validation mode used: ${output.validationMode}.`,
+      output.validationMode === "static_review"
+        ? "No command-level validation evidence was executed in this QA pass."
+        : "Command evidence exists, but environment-specific runtime behavior can still differ.",
+      `Technical risk snapshot: build=${technicalRiskSummary.buildRisk}, syntax=${technicalRiskSummary.syntaxRisk}, import/export=${technicalRiskSummary.importExportRisk}, logic=${technicalRiskSummary.logicRisk}.`,
+    ]).slice(0, 12);
 
     let qaReturnHistory = previousReturnHistory;
     if (output.verdict === "fail") {
@@ -883,11 +1550,22 @@ ${output.verdict}
 - E2E framework: ${qaPreferences.e2eFramework}
 - Objective: ${qaPreferences.objective}
 
+## Code Quality Bootstrap
+${qualityBootstrap.notes.length ? qualityBootstrap.notes.map((x) => `- ${x}`).join("\n") : "- [none]"}
+${qualityBootstrap.warnings.length ? qualityBootstrap.warnings.map((x) => `- WARNING: ${x}`).join("\n") : ""}
+
+## Cypress Bootstrap
+${cypressBootstrap.notes.length ? cypressBootstrap.notes.map((x) => `- ${x}`).join("\n") : "- [none]"}
+${cypressBootstrap.warnings.length ? cypressBootstrap.warnings.map((x) => `- WARNING: ${x}`).join("\n") : ""}
+
 ## E2E Plan
 ${output.e2ePlan.length ? output.e2ePlan.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Changed Files (git diff)
 ${output.changedFiles.length ? output.changedFiles.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Files Reviewed
+${output.filesReviewed.length ? output.filesReviewed.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Unit Tests Reported By Implementation
 ${reportedUnitTests.length ? reportedUnitTests.map((x) => `- ${x}`).join("\n") : "- [none]"}
@@ -897,6 +1575,26 @@ ${output.executedChecks.length ? output.executedChecks.map((x) => {
         const diag = x.diagnostics?.[0] ? ` | diag=${trimText(x.diagnostics[0], 120)}` : "";
         return `- ${x.status.toUpperCase()} | ${x.command} | exit=${x.exitCode ?? "null"} | ${x.durationMs}ms${diag}`;
       }).join("\n") : "- [none]"}
+
+## Validation Mode
+- ${output.validationMode}
+
+## Technical Risk Summary
+- Build risk: ${output.technicalRiskSummary.buildRisk}
+- Syntax risk: ${output.technicalRiskSummary.syntaxRisk}
+- Import/export risk: ${output.technicalRiskSummary.importExportRisk}
+- Reference risk: ${output.technicalRiskSummary.referenceRisk}
+- Logic risk: ${output.technicalRiskSummary.logicRisk}
+- Regression risk: ${output.technicalRiskSummary.regressionRisk}
+
+## Recommended Checks
+${output.recommendedChecks.length ? output.recommendedChecks.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Manual Validation Needed
+${output.manualValidationNeeded.length ? output.manualValidationNeeded.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Residual Risks
+${output.residualRisks.length ? output.residualRisks.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
 ## Cumulative QA Return History
 ${formatReturnHistoryForView(output.qaHandoffContext?.history || [])}

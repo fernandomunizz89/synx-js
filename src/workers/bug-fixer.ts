@@ -1,12 +1,16 @@
 import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
+import { ensureCodeQualityBootstrap } from "../lib/code-quality-bootstrap.js";
 import { enforceCypressConfigScriptConsistency } from "../lib/cypress-recovery.js";
 import { extractQaHandoffContext } from "../lib/qa-context.js";
 import { deriveQaFileHints, synthesizeQaSelectorHotfixEdits } from "../lib/qa-remediation.js";
 import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { normalizeBuilderLikeModelOutput } from "../lib/model-output-recovery.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
+import { runPostEditSanityChecks } from "../lib/post-edit-sanity.js";
+import { ARTIFACT_FILES, loadTaskArtifact } from "../lib/task-artifacts.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { bugFixerOutputSchema } from "../lib/schema.js";
@@ -37,6 +41,23 @@ function extractQaFailures(previousStage: unknown): string[] {
 
 function contextMentionsE2e(text: string): boolean {
   return /\be2e\b|playwright|cypress/i.test(text);
+}
+
+function textSignalsMissingE2eSpecs(text: string): boolean {
+  return /no spec files were found|can'?t run because no spec files were found|did not find e2e spec files|missing e2e spec/i.test(text);
+}
+
+function hasQaMissingE2eSpecSignal(args: {
+  qaFailures: string[];
+  latestFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
+  cumulativeFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
+}): boolean {
+  const corpus = [
+    ...args.qaFailures,
+    ...args.latestFindings.flatMap((item) => [item.issue, item.expectedResult, item.receivedResult, item.recommendedAction, ...item.evidence]),
+    ...args.cumulativeFindings.flatMap((item) => [item.issue, item.expectedResult, item.receivedResult, item.recommendedAction, ...item.evidence]),
+  ].join("\n").toLowerCase();
+  return textSignalsMissingE2eSpecs(corpus);
 }
 
 function formatQaFindingsForView(
@@ -213,6 +234,61 @@ function hasSourceEdits(edits: Array<{ path: string }>): boolean {
   return edits.some((edit) => edit.path.replace(/\\/g, "/").startsWith("src/"));
 }
 
+function extractSymbolContractFileHints(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const hints: string[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const modulePath = typeof row.modulePath === "string" ? row.modulePath.trim() : "";
+    const importerPath = typeof row.importerPath === "string" ? row.importerPath.trim() : "";
+    if (modulePath) hints.push(modulePath);
+    if (importerPath) hints.push(importerPath);
+  }
+  return unique(hints);
+}
+
+function normalizeIssueLine(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.]+$/, "")
+    .trim();
+}
+
+function uniqueNormalized(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values.map((x) => normalizeIssueLine(x)).filter(Boolean)) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function resolveQualityRepairMaxAttempts(): number {
+  const raw = Number(process.env.AI_AGENTS_QUALITY_REPAIR_MAX_ATTEMPTS || "");
+  if (Number.isFinite(raw) && raw >= 1) {
+    return Math.min(5, Math.floor(raw));
+  }
+  return 3;
+}
+
+function buildFailureSignature(lines: string[]): string {
+  return uniqueNormalized(lines)
+    .map((line) => line.toLowerCase().replace(/\d+/g, "#"))
+    .sort()
+    .join(" | ");
+}
+
+function normalizePathToken(value: string): string {
+  return value
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^[./]+/, "");
+}
+
 export class BugFixerWorker extends WorkerBase {
   readonly agent = "Bug Fixer" as const;
   readonly requestFileName = STAGE_FILE_NAMES.bugFixer;
@@ -226,9 +302,14 @@ export class BugFixerWorker extends WorkerBase {
     const workspaceRoot = process.cwd();
     const baseInput = await this.buildAgentInput(taskId, request);
     const qaPreferences = resolveTaskQaPreferences(baseInput.task);
+    const qualityBootstrap = await ensureCodeQualityBootstrap({ workspaceRoot });
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const qaFailures = extractQaFailures(baseInput.previousStage);
     const qaHandoffContext = extractQaHandoffContext(baseInput.previousStage);
+    const projectProfile = await loadTaskArtifact(taskId, ARTIFACT_FILES.projectProfile);
+    const bugBrief = await loadTaskArtifact(taskId, ARTIFACT_FILES.bugBrief);
+    const symbolContracts = await loadTaskArtifact(taskId, ARTIFACT_FILES.symbolContract);
+    const symbolContractFileHints = extractSymbolContractFileHints(symbolContracts);
     const latestQaFindings = compactQaFindingsForModel(qaHandoffContext?.latestFindings ?? []);
     const cumulativeQaFindings = compactQaFindingsForModel(qaHandoffContext?.cumulativeFindings ?? [], 8);
     const qaFileHints = deriveQaFileHints([
@@ -246,12 +327,33 @@ export class BugFixerWorker extends WorkerBase {
     const previousSkippedSnippetPaths = await loadPreviousSkippedSnippetPaths(taskId);
     const mustChangeStrategy = (qaHandoffContext?.attempt ?? 0) >= 2 || repeatedIssues.length > 0;
     const requiresE2eMainFlow = qaPreferences.e2eRequired;
-    const mustCreateE2eInfra = requiresE2eMainFlow && !testCapabilities.hasE2EScript;
+    const qaSignalsMissingE2eSpecs = hasQaMissingE2eSpecSignal({
+      qaFailures,
+      latestFindings: latestQaFindings,
+      cumulativeFindings: cumulativeQaFindings,
+    });
+    const missingE2eInfra = !testCapabilities.hasE2EScript || !testCapabilities.hasE2ESpecFiles || qaSignalsMissingE2eSpecs;
+    const mustCreateE2eInfra = requiresE2eMainFlow && missingE2eInfra;
     const requiresE2eRepair = [
       ...qaFailures,
       ...latestQaFindings.map((x) => `${x.issue} ${x.expectedResult} ${x.receivedResult}`),
       ...cumulativeQaFindings.map((x) => `${x.issue} ${x.expectedResult} ${x.receivedResult}`),
     ].some((x) => contextMentionsE2e(x));
+    await this.note({
+      taskId,
+      stage: "bug-fixer",
+      message: "execution_context",
+      details: {
+        qaAttempt: qaHandoffContext?.attempt ?? 0,
+        qaFailures: qaFailures.length,
+        latestFindings: latestQaFindings.length,
+        cumulativeFindings: cumulativeQaFindings.length,
+        mustChangeStrategy,
+        requiresE2eMainFlow,
+        mustCreateE2eInfra,
+        requiresE2eRepair,
+      },
+    });
     const workspaceContext = await buildWorkspaceContextSnapshot({
       workspaceRoot,
       query: buildQaFeedbackQuery({
@@ -265,6 +367,7 @@ export class BugFixerWorker extends WorkerBase {
         ...(baseInput.task.extraContext.relatedFiles || []),
         ...qaFileHints,
         ...rootCauseFocus.sourceHints,
+        ...symbolContractFileHints,
       ]),
       limits: contextLimitsForIteration(qaHandoffContext?.attempt ?? 0),
     });
@@ -285,6 +388,11 @@ export class BugFixerWorker extends WorkerBase {
         cumulativeExpectedVsReceived: cumulativeQaFindings,
         repeatedIssues,
         history: compactQaHistoryForModel(qaHandoffContext?.history ?? []),
+      },
+      upstreamHandoff: {
+        projectProfile,
+        bugBrief,
+        symbolContracts,
       },
       executionContract: {
         mustProduceRealEdits: true,
@@ -310,11 +418,13 @@ MANDATORY EXECUTION CONTRACT:
 - Follow executionContract.qaPreferences.objective as the human-defined validation target.
 - If executionContract.requiresE2eMainFlow is true, include runnable e2e command(s) in "testsToRun".
 - If executionContract.qaPreferences.e2eFramework is cypress or playwright, include the corresponding framework command in "testsToRun".
-- If executionContract.mustCreateE2eInfra is true, create missing e2e script/config and at least one e2e test for the main flow.
+- If executionContract.mustCreateE2eInfra is true, create missing e2e script/config and at least one runnable e2e spec for the main flow.
 - If executionContract.requiresE2eRepair is true, fix existing e2e coverage gaps called out by QA.
 - If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
 - Use qaFeedback.latestExpectedVsReceived.expectedResult vs receivedResult as explicit fix targets.
 - Use qaFeedback.latestExpectedVsReceived.recommendedAction and evidence to choose concrete edits.
+- Use upstreamHandoff.projectProfile, upstreamHandoff.bugBrief, and upstreamHandoff.symbolContracts as primary context before proposing edits.
+- If upstreamHandoff.symbolContracts defines import/export expectations, edits MUST satisfy those contracts.
 - Treat tests as diagnostic signals: prioritize fixing root cause in application/source code first (typically src/**).
 - Do not change tests only to "make green" when behavior is broken in app code.
 - Modify tests only when evidence shows the test itself is wrong, brittle, or misaligned with intended behavior.
@@ -323,12 +433,16 @@ MANDATORY EXECUTION CONTRACT:
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
 - If QA evidence points to Cypress/E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
 - If QA findings mention missing data-cy selectors, add those data-cy attributes directly in the relevant UI components.
+- Never place data-cy on custom React component invocations (capitalized JSX tags like <Controls ...>); attach data-cy only to native DOM/SVG elements actually rendered in the browser.
 - If QA findings mention import/export mismatch (e.g., "does not provide an export named"), reconcile import/export contracts in source code.
 - If QA findings mention Cypress config issues (baseUrl/specPattern/configFile), fix and unify Cypress config so tests run consistently.
 - If QA findings mention flaky/incorrect E2E test logic (e.g., variable scope across then blocks), patch the test code itself.
 - If QA findings show identical timer values across assertions (e.g., expected "25:00" to not equal "25:00"), adjust E2E timing/assertion flow so countdown changes are observable.
+- If QA findings mention missing E2E selectors, either add matching data-cy attributes in source or update E2E spec to canonical selectors that already exist in source.
+- Resolve lint/type issues before handoff (for example TS6198 and no-unused-vars on hook destructuring or config parameters).
 - If executionContract.previousSkippedSnippetPaths is non-empty, avoid replace_snippet for those paths and use full-file replace edits derived from current workspace content.
 - Use exact file structures from workspaceContext; do not invent class names or JSX wrappers that are not present in the file content.
+- Before finalizing edits, self-check for obvious syntax/import/type mismatches introduced by your changes.
 - If executionContract.mustChangeStrategy is true, do not repeat the previous failed approach.
 - If executionContract.mustChangeStrategy is true, include "Iteration Strategy: ..." as the first item in changesMade.
 - Use repository paths that exist in workspaceContext.files when possible.
@@ -359,9 +473,15 @@ Return exactly this JSON shape:
 }
 `;
 
-    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${strictContract}`;
+    const roleContract = buildAgentRoleContract("Bug Fixer", {
+      stage: "bug-fixer",
+      taskTypeHint: baseInput.task.typeHint,
+      qaAttempt: qaHandoffContext?.attempt ?? 0,
+    });
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
     const result = await provider.generateStructured({
       agent: "Bug Fixer",
+      taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
@@ -369,6 +489,12 @@ Return exactly this JSON shape:
     });
     const normalizedModelOutput = normalizeBuilderLikeModelOutput(result.parsed);
     const output = bugFixerOutputSchema.parse(normalizedModelOutput.payload);
+    if (qualityBootstrap.notes.length) {
+      output.changesMade = unique([...qualityBootstrap.notes, ...output.changesMade]);
+    }
+    if (qualityBootstrap.warnings.length) {
+      output.risks = unique([...output.risks, ...qualityBootstrap.warnings]);
+    }
     if (normalizedModelOutput.notes.length) {
       output.risks = unique([...output.risks, ...normalizedModelOutput.notes]);
     }
@@ -414,7 +540,7 @@ Return exactly this JSON shape:
     if (mustCreateE2eInfra && !hasE2eInfraEdits(output.edits)) {
       output.risks = unique([
         ...output.risks,
-        "No E2E infrastructure edits were proposed although the project has no E2E script.",
+        "No E2E infrastructure edits were proposed although E2E script/spec infrastructure is missing.",
       ]);
     }
     if (latestQaFindings.length && !output.changesMade.length) {
@@ -484,11 +610,183 @@ Return exactly this JSON shape:
     }
 
     output.filesChanged = effectiveChanged.length ? effectiveChanged : gitChangedFiles;
-    output.risks = unique([
+    let stageScopeFiles = unique([
+      ...applied.changedFiles,
+      ...output.edits.map((edit) => edit.path),
+      ...qualityBootstrap.changedFiles,
+    ]).map((x) => normalizePathToken(x));
+    output.risks = uniqueNormalized([
       ...output.risks,
       ...applied.warnings,
       ...applied.skippedEdits.map((x) => `Skipped edit: ${x}`),
     ]);
+    let postEditSanity = await runPostEditSanityChecks({
+      workspaceRoot,
+      changedFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
+      scopeFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
+      timeoutMsPerCheck: 120_000,
+    });
+    await this.note({
+      taskId,
+      stage: "bug-fixer",
+      message: "quality_gate_initial",
+      details: {
+        scopeFiles: stageScopeFiles.length,
+        checks: postEditSanity.checks.slice(0, 3).map((check) => ({
+          command: check.command,
+          status: check.status,
+          exitCode: check.exitCode,
+        })),
+        blockingFailures: postEditSanity.blockingFailureSummaries.length,
+        outOfScopeFailures: postEditSanity.outOfScopeFailureSummaries.length,
+      },
+    });
+
+    let qualityRepairAttempted = false;
+    let qualityRepairAttempts = 0;
+    const maxQualityRepairAttempts = resolveQualityRepairMaxAttempts();
+    const blockingSignatureCounts = new Map<string, number>();
+    while (postEditSanity.blockingFailureSummaries.length && qualityRepairAttempts < maxQualityRepairAttempts) {
+      qualityRepairAttempted = true;
+      qualityRepairAttempts += 1;
+      const blockingSignature = buildFailureSignature(postEditSanity.blockingFailureSummaries);
+      const signatureAttempts = (blockingSignatureCounts.get(blockingSignature) || 0) + 1;
+      blockingSignatureCounts.set(blockingSignature, signatureAttempts);
+      await this.note({
+        taskId,
+        stage: "bug-fixer",
+        message: "quality_repair_attempt_started",
+        details: {
+          attempt: qualityRepairAttempts,
+          maxAttempts: maxQualityRepairAttempts,
+          blockingFailures: postEditSanity.blockingFailureSummaries.slice(0, 3),
+          signature: blockingSignature,
+          signatureAttempts,
+        },
+      });
+      if (signatureAttempts > 3) {
+        output.risks = uniqueNormalized([
+          ...output.risks,
+          `Quality repair halted: blocking failure signature repeated ${signatureAttempts - 1} times without progress.`,
+        ]);
+        break;
+      }
+      const repairContext = await buildWorkspaceContextSnapshot({
+        workspaceRoot,
+        query: postEditSanity.blockingFailureSummaries.join("\n"),
+        relatedFiles: stageScopeFiles,
+        limits: {
+          maxContextFiles: 8,
+          maxTotalContextChars: 12_000,
+          maxFileContextChars: 2_400,
+          maxScanFiles: 800,
+        },
+      });
+      const repairInput = {
+        ...modelInput,
+        workspaceContext: repairContext,
+        qualityGate: {
+          mode: "pre_handover_repair",
+          blockingFailures: postEditSanity.blockingFailureSummaries,
+          scopeFiles: stageScopeFiles,
+          attempt: qualityRepairAttempts,
+          maxAttempts: maxQualityRepairAttempts,
+        },
+      };
+      const repairPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(repairInput, null, 2))}\n\n${roleContract}\n\n${strictContract}\n\nQUALITY GATE REMEDIATION:\n- Current attempt: ${qualityRepairAttempts}/${maxQualityRepairAttempts}.\n- Fix every blocking failure from qualityGate.blockingFailures before handover.\n- Keep edits scoped to qualityGate.scopeFiles when possible.\n- Do not create unrelated behavior changes.\n- If diagnostics mention TS6198 or no-unused-vars, remove or rename unused bindings so lint/typecheck passes.\n- If diagnostics mention TS2322 / IntrinsicAttributes, align props with existing component contracts instead of widening APIs blindly.\n- Return valid JSON with concrete edits only.`;
+      const repairResult = await provider.generateStructured({
+        agent: "Bug Fixer",
+        taskType: baseInput.task.typeHint,
+        systemPrompt: repairPrompt,
+        input: repairInput,
+        expectedJsonSchemaDescription:
+          '{ "implementationSummary": "string", "filesChanged": ["string"], "changesMade": ["string"], "unitTestsAdded": ["string"], "testsToRun": ["string"], "risks": ["string"], "edits": [{ "path": "string", "action": "create | replace | replace_snippet | delete", "content": "string (required for create/replace)", "find": "string (required for replace_snippet)", "replace": "string (required for replace_snippet)" }], "nextAgent": "Reviewer" }',
+      });
+      const normalizedRepairOutput = normalizeBuilderLikeModelOutput(repairResult.parsed);
+      const repairOutput = bugFixerOutputSchema.parse(normalizedRepairOutput.payload);
+      const repairApplied = await applyWorkspaceEdits({
+        workspaceRoot,
+        edits: repairOutput.edits,
+      });
+      stageScopeFiles = unique([
+        ...stageScopeFiles,
+        ...repairOutput.edits.map((edit) => edit.path),
+        ...repairApplied.changedFiles,
+      ]).map((x) => normalizePathToken(x));
+      if (!repairApplied.changedFiles.length && !repairOutput.edits.length) {
+        output.risks = uniqueNormalized([
+          ...output.risks,
+          `Quality repair attempt ${qualityRepairAttempts} produced no file changes.`,
+        ]);
+        break;
+      }
+      output.filesChanged = unique([...output.filesChanged, ...repairApplied.changedFiles]);
+      output.changesMade = unique([
+        ...output.changesMade,
+        `Quality repair pass ${qualityRepairAttempts}/${maxQualityRepairAttempts}: attempted to resolve pre-handover lint/type/syntax blockers.`,
+        ...repairOutput.changesMade,
+      ]);
+      output.risks = uniqueNormalized([
+        ...output.risks,
+        ...repairOutput.risks,
+        ...repairApplied.warnings,
+      ]);
+      postEditSanity = await runPostEditSanityChecks({
+        workspaceRoot,
+        changedFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
+        scopeFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
+        timeoutMsPerCheck: 120_000,
+      });
+      await this.note({
+        taskId,
+        stage: "bug-fixer",
+        message: "quality_repair_attempt_result",
+        details: {
+          attempt: qualityRepairAttempts,
+          changedFiles: repairApplied.changedFiles.slice(0, 8),
+          blockingFailures: postEditSanity.blockingFailureSummaries.length,
+          outOfScopeFailures: postEditSanity.outOfScopeFailureSummaries.length,
+        },
+      });
+    }
+
+    if (postEditSanity.blockingFailureSummaries.length) {
+      output.risks = uniqueNormalized([...output.risks, ...postEditSanity.blockingFailureSummaries]);
+    }
+    if (postEditSanity.outOfScopeFailureSummaries.length) {
+      output.risks = uniqueNormalized([
+        ...output.risks,
+        `Ignored ${postEditSanity.outOfScopeFailureSummaries.length} out-of-scope quality failures not linked to files changed in this stage.`,
+      ]);
+    }
+    if (postEditSanity.blockingFailureSummaries.length) {
+      await this.note({
+        taskId,
+        stage: "bug-fixer",
+        message: "quality_gate_blocked",
+        details: {
+          attempts: qualityRepairAttempts,
+          blockingFailures: postEditSanity.blockingFailureSummaries.slice(0, 3),
+        },
+      });
+      throw new Error(
+        `Pre-handover quality gate blocked Bug Fixer handoff (${qualityRepairAttempted ? `after ${qualityRepairAttempts} remediation attempt(s)` : "no remediation attempt"}): ${postEditSanity.blockingFailureSummaries[0]}`,
+      );
+    }
+    await this.note({
+      taskId,
+      stage: "bug-fixer",
+      message: "quality_gate_passed",
+      details: {
+        attempts: qualityRepairAttempts,
+        checksExecuted: postEditSanity.checks.length,
+        filesChanged: output.filesChanged.length,
+      },
+    });
+    const sanityCheckLines = postEditSanity.checks.map((check) => {
+      const detail = check.diagnostics?.[0] ? ` | diag=${trimText(check.diagnostics[0], 120)}` : "";
+      return `- ${check.status.toUpperCase()} | ${check.command} | exit=${check.exitCode ?? "null"} | ${check.durationMs}ms${detail}`;
+    });
 
     const view = `# HANDOFF
 
@@ -504,8 +802,20 @@ ${output.filesChanged.length ? output.filesChanged.map((x) => `- ${x}`).join("\n
 ## Changes Made
 ${output.changesMade.length ? output.changesMade.map((x, index) => `${index + 1}. ${x}`).join("\n") : "- [none]"}
 
+## Code Quality Bootstrap
+${qualityBootstrap.notes.length ? qualityBootstrap.notes.map((x) => `- ${x}`).join("\n") : "- [none]"}
+${qualityBootstrap.warnings.length ? qualityBootstrap.warnings.map((x) => `- WARNING: ${x}`).join("\n") : ""}
+
 ## QA Context Received (Latest Return)
 ${formatQaFindingsForView(latestQaFindings)}
+
+## Upstream Symbol Contracts
+${Array.isArray(symbolContracts) && symbolContracts.length
+  ? (symbolContracts as Array<{ expectedImportShape?: string; mismatchSummary?: string }>)
+    .slice(0, 6)
+    .map((item) => `- ${item.expectedImportShape || "[unknown import shape]"} | ${item.mismatchSummary || "[no mismatch summary]"}`)
+    .join("\n")
+  : "- [none]"}
 
 ## Unit Tests Added/Updated
 ${output.unitTestsAdded.length ? output.unitTestsAdded.map((x) => `- ${x}`).join("\n") : "- [none reported]"}
@@ -515,6 +825,9 @@ ${output.testsToRun.length ? output.testsToRun.map((x, index) => `${index + 1}. 
 
 ## Risks
 ${output.risks.length ? output.risks.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Post-Edit Sanity Checks
+${sanityCheckLines.length ? sanityCheckLines.join("\n") : "- [not run]"}
 
 ## Applied Edits
 ${output.edits.length ? output.edits.map((x) => `- ${x.action.toUpperCase()} ${x.path}`).join("\n") : "- [none]"}
