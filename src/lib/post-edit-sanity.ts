@@ -13,6 +13,15 @@ export interface PostEditSanityResult {
   failureSummaries: string[];
   blockingFailureSummaries: string[];
   outOfScopeFailureSummaries: string[];
+  metrics: {
+    plannedChecks: number;
+    executedChecks: number;
+    cheapChecksExecuted: number;
+    heavyChecksExecuted: number;
+    fullBuildChecksExecuted: number;
+    heavyChecksSkipped: number;
+    earlyInScopeFailures: number;
+  };
 }
 
 interface SanityCommand {
@@ -20,6 +29,8 @@ interface SanityCommand {
   command: string;
   args: string[];
   note: string;
+  category: "cheap" | "heavy";
+  isFullBuild?: boolean;
 }
 
 function unique(values: string[]): string[] {
@@ -110,21 +121,40 @@ function intersectsScope(paths: string[], scope: Set<string>): boolean {
   });
 }
 
+function inferScriptCategory(script: string, scriptBody: string): "cheap" | "heavy" {
+  if (script === "build") return "heavy";
+  if (script === "check" && /\b(build|test|cypress|playwright|e2e|vitest|jest|mocha)\b/i.test(scriptBody)) {
+    return "heavy";
+  }
+  return "cheap";
+}
+
 function chooseSanityScripts(args: {
   scripts: Record<string, string>;
   changedFiles: string[];
-}): string[] {
-  const out: string[] = [];
+}): Array<{ script: string; category: "cheap" | "heavy" }> {
+  const out: Array<{ script: string; category: "cheap" | "heavy" }> = [];
   const changedCode = args.changedFiles.some(looksLikeCodeFile);
   const scripts = args.scripts;
 
-  if (scripts.lint) out.push("lint");
-  if (scripts.typecheck) out.push("typecheck");
-  if (scripts.check && !out.includes("check")) out.push("check");
-  if (changedCode && scripts.build && !out.includes("build")) out.push("build");
+  if (scripts.lint) out.push({ script: "lint", category: "cheap" });
+  if (scripts.typecheck) out.push({ script: "typecheck", category: "cheap" });
 
-  // Keep this lightweight: enough to catch syntax/type issues without full test pipeline.
-  return unique(out).slice(0, 2);
+  if (scripts.check && !out.some((item) => item.script === "check")) {
+    const checkCategory = inferScriptCategory("check", scripts.check);
+    if (!(checkCategory === "heavy" && scripts.build)) {
+      out.push({ script: "check", category: checkCategory });
+    }
+  }
+  if (changedCode && scripts.build && !out.some((item) => item.script === "build")) {
+    out.push({ script: "build", category: "heavy" });
+  }
+
+  const dedup = new Map<string, { script: string; category: "cheap" | "heavy" }>();
+  for (const item of out) {
+    if (!dedup.has(item.script)) dedup.set(item.script, item);
+  }
+  return Array.from(dedup.values());
 }
 
 function hasChangedFile(changedFiles: string[], pattern: RegExp): boolean {
@@ -139,6 +169,7 @@ function buildTypeScriptNoEmitCommand(manager: PackageManager): SanityCommand {
         command: "pnpm",
         args: ["exec", "tsc", "--noEmit"],
         note: "Language-aware sanity check for TypeScript (compile/type/syntax without emit).",
+        category: "cheap",
       };
     case "yarn":
       return {
@@ -146,6 +177,7 @@ function buildTypeScriptNoEmitCommand(manager: PackageManager): SanityCommand {
         command: "yarn",
         args: ["tsc", "--noEmit"],
         note: "Language-aware sanity check for TypeScript (compile/type/syntax without emit).",
+        category: "cheap",
       };
     case "bun":
       return {
@@ -153,6 +185,7 @@ function buildTypeScriptNoEmitCommand(manager: PackageManager): SanityCommand {
         command: "bunx",
         args: ["tsc", "--noEmit"],
         note: "Language-aware sanity check for TypeScript (compile/type/syntax without emit).",
+        category: "cheap",
       };
     case "npm":
     default:
@@ -161,6 +194,7 @@ function buildTypeScriptNoEmitCommand(manager: PackageManager): SanityCommand {
         command: "npx",
         args: ["tsc", "--noEmit"],
         note: "Language-aware sanity check for TypeScript (compile/type/syntax without emit).",
+        category: "cheap",
       };
   }
 }
@@ -201,6 +235,7 @@ function buildFallbackLanguageCommands(args: {
         command: "python3",
         args: ["-m", "py_compile", ...pyFiles],
         note: "Language-aware sanity check for Python syntax in changed files.",
+        category: "cheap",
       });
     }
   }
@@ -211,6 +246,7 @@ function buildFallbackLanguageCommands(args: {
       command: "go",
       args: ["test", "./...", "-run", "^$"],
       note: "Language-aware sanity check for Go compile/link without running test bodies.",
+      category: "cheap",
     });
   }
 
@@ -220,6 +256,7 @@ function buildFallbackLanguageCommands(args: {
       command: "cargo",
       args: ["check"],
       note: "Language-aware sanity check for Rust compilation.",
+      category: "cheap",
     });
   }
 
@@ -229,6 +266,7 @@ function buildFallbackLanguageCommands(args: {
       command: "mvn",
       args: ["-q", "-DskipTests", "compile"],
       note: "Language-aware sanity check for Java compilation (Maven).",
+      category: "cheap",
     });
   } else if (hasJavaChanges && existsSync(path.join(workspaceRoot, "gradlew"))) {
     out.push({
@@ -236,6 +274,7 @@ function buildFallbackLanguageCommands(args: {
       command: "./gradlew",
       args: ["-q", "classes"],
       note: "Language-aware sanity check for Java/Kotlin compilation (Gradle wrapper).",
+      category: "cheap",
     });
   }
 
@@ -247,18 +286,20 @@ function resolveSanityCommands(args: {
   changedFiles: string[];
   scripts: Record<string, string>;
   manager: PackageManager;
-}): SanityCommand[] {
+}): { cheap: SanityCommand[]; heavy: SanityCommand[] } {
   const scriptChoices = chooseSanityScripts({
     scripts: args.scripts,
     changedFiles: args.changedFiles,
   });
-  const scriptCommands: SanityCommand[] = scriptChoices.map((script) => {
-    const command = buildScriptCommand(args.manager, script);
+  const scriptCommands: SanityCommand[] = scriptChoices.map((item) => {
+    const command = buildScriptCommand(args.manager, item.script);
     return {
       label: `${command.command} ${command.args.join(" ")}`,
       command: command.command,
       args: command.args,
-      note: "Script-based post-edit sanity check.",
+      note: item.category === "heavy" ? "Heavy script-based sanity check." : "Cheap script-based sanity check.",
+      category: item.category,
+      isFullBuild: item.script === "build",
     };
   });
 
@@ -266,10 +307,244 @@ function resolveSanityCommands(args: {
     workspaceRoot: args.workspaceRoot,
     changedFiles: args.changedFiles,
     manager: args.manager,
-    scriptsChosen: scriptChoices,
+    scriptsChosen: scriptChoices.map((item) => item.script),
   });
 
-  return [...scriptCommands, ...fallbackCommands].slice(0, 3);
+  const allCommands = [...scriptCommands, ...fallbackCommands];
+  const seen = new Set<string>();
+  const deduped = allCommands.filter((cmd) => {
+    const key = `${cmd.command}::${cmd.args.join(" ")}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const cheap = deduped.filter((cmd) => cmd.category === "cheap").slice(0, 3);
+  const heavy = deduped.filter((cmd) => cmd.category === "heavy").slice(0, 1);
+  return { cheap, heavy };
+}
+
+function isCodeSourceFile(filePath: string): boolean {
+  return /\.(ts|tsx|js|jsx|mjs|cjs)$/i.test(filePath);
+}
+
+function parseRelativeImports(content: string): Array<{ localName: string; importKind: "named" | "default"; importedName: string; spec: string }> {
+  const out: Array<{ localName: string; importKind: "named" | "default"; importedName: string; spec: string }> = [];
+  const regex = /import\s+([^;]+?)\s+from\s+['"]([^'"]+)['"]/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(content))) {
+    const clause = match[1].trim();
+    const spec = match[2].trim();
+    if (!spec.startsWith(".")) continue;
+    if (clause.includes("{")) {
+      const [defaultPart] = clause.split("{");
+      const defaultName = defaultPart.replace(/,/g, "").trim();
+      if (defaultName && !defaultName.startsWith("*")) {
+        out.push({
+          localName: defaultName,
+          importKind: "default",
+          importedName: "default",
+          spec,
+        });
+      }
+      const namedPart = clause.slice(clause.indexOf("{") + 1, clause.lastIndexOf("}"));
+      for (const row of namedPart.split(",")) {
+        const token = row.trim();
+        if (!token) continue;
+        const [importedRaw, localRaw] = token.split(/\s+as\s+/i).map((x) => x.trim()).filter(Boolean);
+        const importedName = importedRaw || "";
+        const localName = localRaw || importedName;
+        if (!importedName || !localName) continue;
+        out.push({
+          localName,
+          importKind: "named",
+          importedName,
+          spec,
+        });
+      }
+      continue;
+    }
+    const defaultName = clause.trim();
+    if (!defaultName || defaultName.startsWith("*")) continue;
+    out.push({
+      localName: defaultName,
+      importKind: "default",
+      importedName: "default",
+      spec,
+    });
+  }
+  return out;
+}
+
+function resolveRelativeImportPath(args: {
+  workspaceRoot: string;
+  fromFile: string;
+  spec: string;
+}): string | null {
+  const fromAbs = path.join(args.workspaceRoot, args.fromFile);
+  const base = path.resolve(path.dirname(fromAbs), args.spec);
+  const workspaceRoot = path.resolve(args.workspaceRoot);
+  if (!(base === workspaceRoot || base.startsWith(`${workspaceRoot}${path.sep}`))) {
+    return null;
+  }
+
+  const hasExtension = path.extname(base).length > 0;
+  const candidates: string[] = [];
+  if (hasExtension) {
+    candidates.push(base);
+  } else {
+    const extensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json"];
+    for (const ext of extensions) {
+      candidates.push(`${base}${ext}`);
+      candidates.push(path.join(base, `index${ext}`));
+    }
+  }
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return normalizePathToken(path.relative(args.workspaceRoot, candidate));
+    }
+  }
+  return null;
+}
+
+function jsxTagHasProps(attributeChunk: string): boolean {
+  return /\b[A-Za-z_][A-Za-z0-9_:-]*\s*=/.test(attributeChunk);
+}
+
+function componentAppearsNoProps(args: {
+  source: string;
+  componentLocalName: string;
+  importKind: "named" | "default";
+  importedName: string;
+}): boolean {
+  const escaped = args.importedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (args.importKind === "named") {
+    const hasNamedProps = new RegExp(`export\\s+const\\s+${escaped}\\s*=\\s*\\((\\s*[^)\\s][^)]*)\\)\\s*=>`).test(args.source)
+      || new RegExp(`export\\s+function\\s+${escaped}\\s*\\((\\s*[^)\\s][^)]*)\\)`).test(args.source);
+    if (hasNamedProps) return false;
+    const hasNamedNoProps = new RegExp(`export\\s+const\\s+${escaped}\\s*=\\s*\\(\\s*\\)\\s*=>`).test(args.source)
+      || new RegExp(`export\\s+function\\s+${escaped}\\s*\\(\\s*\\)`).test(args.source)
+      || new RegExp(`const\\s+${escaped}\\s*:\\s*React\\.FC\\s*=\\s*\\(\\s*\\)\\s*=>`).test(args.source);
+    return hasNamedNoProps;
+  }
+  const hasDefaultProps = /export\s+default\s+function\s+\w*\s*\((\s*[^)\s][^)]*)\)/.test(args.source)
+    || /const\s+\w+\s*:\s*React\.FC<[^>]+>\s*=\s*\((\s*[^)\s][^)]*)\)\s*=>[\s\S]*export\s+default\s+\w+/.test(args.source);
+  if (hasDefaultProps) return false;
+  const hasDefaultNoProps = /export\s+default\s+function\s+\w*\s*\(\s*\)/.test(args.source)
+    || /export\s+default\s*\(\s*\)\s*=>/.test(args.source)
+    || /const\s+\w+\s*:\s*React\.FC\s*=\s*\(\s*\)\s*=>[\s\S]*export\s+default\s+\w+/.test(args.source);
+  return hasDefaultNoProps;
+}
+
+async function runCheapStaticHeuristics(args: {
+  workspaceRoot: string;
+  changedFiles: string[];
+}): Promise<ValidationCheckResult[]> {
+  const workspaceRoot = path.resolve(args.workspaceRoot);
+  const changedCodeFiles = unique(
+    args.changedFiles
+      .map((filePath) => normalizePathToken(filePath))
+      .filter((filePath) => isCodeSourceFile(filePath) && existsSync(path.join(workspaceRoot, filePath))),
+  );
+  if (!changedCodeFiles.length) return [];
+
+  const importFindings: string[] = [];
+  const propFindings: string[] = [];
+  const sourceCache = new Map<string, string>();
+
+  for (const relativePath of changedCodeFiles) {
+    const absPath = path.join(workspaceRoot, relativePath);
+    const source = await fs.readFile(absPath, "utf8").catch(() => "");
+    if (!source) continue;
+    sourceCache.set(relativePath, source);
+
+    const imports = parseRelativeImports(source);
+    for (const row of imports) {
+      const resolved = resolveRelativeImportPath({
+        workspaceRoot,
+        fromFile: relativePath,
+        spec: row.spec,
+      });
+      if (!resolved) {
+        importFindings.push(`${relativePath}: unresolved relative import '${row.spec}'.`);
+      }
+    }
+  }
+
+  for (const relativePath of changedCodeFiles.filter((filePath) => /\.(tsx|jsx)$/i.test(filePath))) {
+    const source = sourceCache.get(relativePath) || await fs.readFile(path.join(workspaceRoot, relativePath), "utf8").catch(() => "");
+    if (!source) continue;
+    const imports = parseRelativeImports(source);
+    const importByLocal = new Map(imports.map((row) => [row.localName, row]));
+    const jsxRegex = /<([A-Z][A-Za-z0-9_]*)\b([^>]*)>/g;
+    let match: RegExpExecArray | null;
+    while ((match = jsxRegex.exec(source))) {
+      const localName = match[1];
+      const attrs = match[2] || "";
+      if (!jsxTagHasProps(attrs)) continue;
+      const importInfo = importByLocal.get(localName);
+      if (!importInfo) continue;
+      const resolvedComponentPath = resolveRelativeImportPath({
+        workspaceRoot,
+        fromFile: relativePath,
+        spec: importInfo.spec,
+      });
+      if (!resolvedComponentPath || !/\.(tsx|jsx|ts|js)$/i.test(resolvedComponentPath)) continue;
+      const componentSource = sourceCache.get(resolvedComponentPath)
+        || await fs.readFile(path.join(workspaceRoot, resolvedComponentPath), "utf8").catch(() => "");
+      if (!componentSource) continue;
+      sourceCache.set(resolvedComponentPath, componentSource);
+      if (!componentAppearsNoProps({
+        source: componentSource,
+        componentLocalName: localName,
+        importKind: importInfo.importKind,
+        importedName: importInfo.importedName,
+      })) {
+        continue;
+      }
+      propFindings.push(
+        `${relativePath}: JSX <${localName} ...> passes props, but ${resolvedComponentPath} appears to define ${localName} without props.`,
+      );
+    }
+  }
+
+  const now = Date.now();
+  const checks: ValidationCheckResult[] = [];
+  checks.push({
+    command: "heuristic: relative-import-resolution",
+    status: importFindings.length ? "failed" : "passed",
+    category: "cheap",
+    exitCode: importFindings.length ? 1 : 0,
+    timedOut: false,
+    durationMs: Math.max(0, Date.now() - now),
+    stdoutPreview: importFindings.slice(0, 3).join("\n"),
+    stderrPreview: "",
+    diagnostics: importFindings.slice(0, 6),
+    qaConfigNotes: ["Cheap static heuristic: validate relative imports only in changed files."],
+    artifacts: [],
+  });
+  checks.push({
+    command: "heuristic: react-props-contract",
+    status: propFindings.length ? "failed" : "passed",
+    category: "cheap",
+    exitCode: propFindings.length ? 1 : 0,
+    timedOut: false,
+    durationMs: Math.max(0, Date.now() - now),
+    stdoutPreview: propFindings.slice(0, 3).join("\n"),
+    stderrPreview: "",
+    diagnostics: propFindings.slice(0, 6),
+    qaConfigNotes: ["Cheap static heuristic: detect prop usage against components that appear to declare no props."],
+    artifacts: [],
+  });
+  return checks;
+}
+
+function checkFailureIsInScope(check: ValidationCheckResult, scopeSet: Set<string>): boolean {
+  const paths = extractPathTokens([
+    ...(check.diagnostics || []),
+    check.stderrPreview,
+    check.stdoutPreview,
+  ].join("\n"));
+  return intersectsScope(paths, scopeSet);
 }
 
 export async function runPostEditSanityChecks(args: {
@@ -281,19 +556,33 @@ export async function runPostEditSanityChecks(args: {
   const workspaceRoot = path.resolve(args.workspaceRoot);
   const scripts = await readPackageScripts(workspaceRoot);
   const manager = selectPackageManager(workspaceRoot);
-  const selectedCommands = resolveSanityCommands({
+  const commandPlan = resolveSanityCommands({
     workspaceRoot,
     changedFiles: args.changedFiles,
     scripts,
     manager,
   });
+  const heuristicChecks = await runCheapStaticHeuristics({
+    workspaceRoot,
+    changedFiles: args.changedFiles,
+  });
+  const metrics = {
+    plannedChecks: heuristicChecks.length + commandPlan.cheap.length + commandPlan.heavy.length,
+    executedChecks: 0,
+    cheapChecksExecuted: 0,
+    heavyChecksExecuted: 0,
+    fullBuildChecksExecuted: 0,
+    heavyChecksSkipped: 0,
+    earlyInScopeFailures: 0,
+  };
 
-  if (!selectedCommands.length) {
+  if (!commandPlan.cheap.length && !commandPlan.heavy.length && !heuristicChecks.length) {
     return {
       checks: [],
       failureSummaries: [],
       blockingFailureSummaries: [],
       outOfScopeFailureSummaries: [],
+      metrics,
     };
   }
 
@@ -301,7 +590,16 @@ export async function runPostEditSanityChecks(args: {
   const checks: ValidationCheckResult[] = [];
   const scopeSet = new Set((args.scopeFiles || []).map((x) => normalizePathToken(x)).filter(Boolean));
 
-  for (const sanityCommand of selectedCommands) {
+  for (const heuristicCheck of heuristicChecks) {
+    checks.push(heuristicCheck);
+    metrics.executedChecks += 1;
+    metrics.cheapChecksExecuted += 1;
+    if (heuristicCheck.status === "failed" && checkFailureIsInScope(heuristicCheck, scopeSet)) {
+      metrics.earlyInScopeFailures += 1;
+    }
+  }
+
+  for (const sanityCommand of commandPlan.cheap) {
     const result = await runCommand({
       command: sanityCommand.command,
       commandArgs: sanityCommand.args,
@@ -313,6 +611,7 @@ export async function runPostEditSanityChecks(args: {
     checks.push({
       command: sanityCommand.label,
       status: result.exitCode === 0 && !result.timedOut ? "passed" : "failed",
+      category: "cheap",
       exitCode: result.exitCode,
       timedOut: result.timedOut,
       durationMs: result.durationMs,
@@ -322,6 +621,63 @@ export async function runPostEditSanityChecks(args: {
       qaConfigNotes: [sanityCommand.note],
       artifacts: [],
     });
+    metrics.executedChecks += 1;
+    metrics.cheapChecksExecuted += 1;
+    const latest = checks[checks.length - 1];
+    if (latest.status === "failed" && checkFailureIsInScope(latest, scopeSet)) {
+      metrics.earlyInScopeFailures += 1;
+    }
+  }
+
+  const skipHeavy = metrics.earlyInScopeFailures > 0;
+  if (skipHeavy && commandPlan.heavy.length) {
+    for (const skipped of commandPlan.heavy) {
+      checks.push({
+        command: skipped.label,
+        status: "skipped",
+        category: "heavy",
+        exitCode: null,
+        timedOut: false,
+        durationMs: 0,
+        stdoutPreview: "",
+        stderrPreview: "",
+        diagnostics: [],
+        qaConfigNotes: [
+          `${skipped.note} Skipped because cheap in-scope failures were already found.`,
+        ],
+        artifacts: [],
+      });
+      metrics.heavyChecksSkipped += 1;
+    }
+  } else {
+    for (const sanityCommand of commandPlan.heavy) {
+      const result = await runCommand({
+        command: sanityCommand.command,
+        commandArgs: sanityCommand.args,
+        cwd: workspaceRoot,
+        timeoutMs,
+        maxOutputChars: 8_000,
+      });
+      const diagnostics = extractDiagnostics(result.stdout, result.stderr);
+      checks.push({
+        command: sanityCommand.label,
+        status: result.exitCode === 0 && !result.timedOut ? "passed" : "failed",
+        category: "heavy",
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+        durationMs: result.durationMs,
+        stdoutPreview: result.stdout.slice(0, 1000),
+        stderrPreview: result.stderr.slice(0, 1000),
+        diagnostics,
+        qaConfigNotes: [sanityCommand.note],
+        artifacts: [],
+      });
+      metrics.executedChecks += 1;
+      metrics.heavyChecksExecuted += 1;
+      if (sanityCommand.isFullBuild) {
+        metrics.fullBuildChecksExecuted += 1;
+      }
+    }
   }
 
   const failureSummaries: string[] = [];
@@ -351,5 +707,6 @@ export async function runPostEditSanityChecks(args: {
     failureSummaries: unique(failureSummaries),
     blockingFailureSummaries: unique(blockingFailureSummaries),
     outOfScopeFailureSummaries: unique(outOfScopeFailureSummaries),
+    metrics,
   };
 }

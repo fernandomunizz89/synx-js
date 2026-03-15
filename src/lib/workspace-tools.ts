@@ -136,6 +136,7 @@ export interface CommandResult {
 export interface ValidationCheckResult {
   command: string;
   status: "passed" | "failed" | "skipped";
+  category?: "cheap" | "heavy";
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
