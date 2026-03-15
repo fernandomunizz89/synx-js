@@ -66,3 +66,26 @@ The CLI is ready for future iterations:
 - Final guardrail update (`evidence-backed QA verdict`) removed hallucinated fail loops when checks are green.
 - Best observed run reached PR with zero QA returns (`4mld`, history=6).
 - End-to-end wall time dropped significantly versus earlier baseline runs for the same task profile.
+
+## 2026-03-15 provider stateless + dynamic temperature
+### Technical changes
+- Added low-risk runtime performance optimizations:
+  - in-memory cache for `loadResolvedProjectConfig()` (with mtime-based invalidation, per process cwd)
+  - in-memory cache for `loadPromptFile()` (with mtime-based invalidation and prompt-root change reset)
+  - optional cache disable flags: `AI_AGENTS_DISABLE_CONFIG_CACHE=1`, `AI_AGENTS_DISABLE_PROMPT_CACHE=1`
+- Added engine polling controls:
+  - `AI_AGENTS_POLL_INTERVAL_MS` for idle loop tuning
+  - `AI_AGENTS_MAX_IMMEDIATE_CYCLES` to allow bounded immediate re-polls after processing work
+  - bounded immediate cycles prevent accidental hot infinite loops
+- OpenAI-compatible provider now resolves temperature dynamically per call using explicit precedence:
+  - agent + task type env override
+  - agent env override
+  - task type env override
+  - internal defaults
+- Added resilient temperature parsing:
+  - only numeric values in `[0, 2]` are accepted
+  - invalid env values are ignored without breaking execution
+- Preserved stateless call behavior and made it explicit in provider code:
+  - each call sends only current `systemPrompt` + current request payload
+  - no chat-history reuse between calls
+- Propagated `taskType` into `ProviderRequest` and through all worker provider calls.

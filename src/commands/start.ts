@@ -16,6 +16,22 @@ import { createStartProgressRenderer } from "../lib/start-progress.js";
 import { exists, readJson } from "../lib/fs.js";
 import { runtimeDir } from "../lib/paths.js";
 
+function resolvePollIntervalMs(): number {
+  const raw = Number(process.env.AI_AGENTS_POLL_INTERVAL_MS || "");
+  if (!Number.isFinite(raw)) return POLL_INTERVAL_MS;
+  const normalized = Math.floor(raw);
+  return normalized >= 200 ? normalized : POLL_INTERVAL_MS;
+}
+
+function resolveMaxImmediateCycles(): number {
+  const raw = Number(process.env.AI_AGENTS_MAX_IMMEDIATE_CYCLES || "1");
+  if (!Number.isFinite(raw)) return 1;
+  const normalized = Math.floor(raw);
+  if (normalized < 0) return 0;
+  if (normalized > 20) return 20;
+  return normalized;
+}
+
 function processIsRunning(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
@@ -104,16 +120,21 @@ export const startCommand = new Command("start")
 
     const engineStartedAtMs = Date.now();
     const progress = createStartProgressRenderer({ enabled: options.progress !== false });
+    const pollIntervalMs = resolvePollIntervalMs();
+    const maxImmediateCycles = resolveMaxImmediateCycles();
 
     let loop = 0;
+    let immediateCycleStreak = 0;
     try {
       while (true) {
         loop += 1;
         const taskIds = await allTaskIds();
+        let processedAny = false;
 
         for (const taskId of taskIds) {
           for (const worker of workers) {
-            await worker.tryProcess(taskId);
+            const processed = await worker.tryProcess(taskId);
+            if (processed) processedAny = true;
           }
         }
 
@@ -135,7 +156,12 @@ export const startCommand = new Command("start")
           metas,
         });
 
-        await sleep(POLL_INTERVAL_MS);
+        if (processedAny && immediateCycleStreak < maxImmediateCycles) {
+          immediateCycleStreak += 1;
+          continue;
+        }
+        immediateCycleStreak = 0;
+        await sleep(pollIntervalMs);
       }
     } finally {
       progress.stop();

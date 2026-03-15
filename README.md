@@ -159,6 +159,7 @@ This works well with:
 - For `Feature`, `Bug`, `Refactor`, and `Mixed`, main-flow E2E validation is required by QA.
 - If E2E infrastructure is missing, implementation agents are instructed to add an E2E script/test path as part of remediation.
 - `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
+- Provider calls are stateless per execution: every LLM request is built from explicit current input only (`systemPrompt` + current user payload), without reused chat memory/history.
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
 - QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
 - Root-cause-first policy: E2E failures must prioritize application-code fixes; tests are treated as diagnostics and are only changed when evidence shows test defects.
@@ -191,6 +192,68 @@ This works well with:
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
 - `AI_AGENTS_QA_MAX_RETRIES`: max QA fail loops before escalation to human review (default: `3`).
+
+## Performance controls
+- `AI_AGENTS_DISABLE_CONFIG_CACHE=1`: disables in-memory cache for resolved global+local config.
+- `AI_AGENTS_DISABLE_PROMPT_CACHE=1`: disables in-memory cache for prompt file contents.
+- `AI_AGENTS_POLL_INTERVAL_MS=<ms>`: engine loop sleep interval when idle (default: `1200`, minimum accepted: `200`).
+- `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>`: max immediate no-sleep cycles after processing work (default: `1`, max: `20`).
+
+## Temperature resolution (OpenAI-compatible provider)
+Each provider call resolves temperature with this precedence:
+1. `AI_AGENTS_TEMPERATURE_<AGENT>_<TASK_TYPE>`
+2. `AI_AGENTS_TEMPERATURE_<AGENT>`
+3. `AI_AGENTS_TEMPERATURE_<TASK_TYPE>`
+4. Internal defaults
+
+Validation rules:
+- values must be numeric between `0` and `2`
+- invalid env values are ignored (safe fallback is used)
+- execution never crashes because of invalid temperature config
+
+Internal agent defaults:
+- `Dispatcher`: `0.1`
+- `Spec Planner`: `0.1`
+- `Bug Investigator`: `0.1`
+- `Bug Fixer`: `0.05`
+- `Feature Builder`: `0.05`
+- `Reviewer`: `0.05`
+- `QA Validator`: `0.05`
+- `PR Writer`: `0.3`
+- `Human Review`: `0.1`
+
+Internal task-type defaults:
+- `Feature`: `0.1`
+- `Bug`: `0.05`
+- `Refactor`: `0.05`
+- `Research`: `0.2`
+- `Documentation`: `0.3`
+- `Mixed`: `0.1`
+
+Agent env examples:
+- `AI_AGENTS_TEMPERATURE_DISPATCHER=0.1`
+- `AI_AGENTS_TEMPERATURE_SPEC_PLANNER=0.1`
+- `AI_AGENTS_TEMPERATURE_BUG_INVESTIGATOR=0.1`
+- `AI_AGENTS_TEMPERATURE_BUG_FIXER=0.05`
+- `AI_AGENTS_TEMPERATURE_FEATURE_BUILDER=0.05`
+- `AI_AGENTS_TEMPERATURE_REVIEWER=0.05`
+- `AI_AGENTS_TEMPERATURE_QA_VALIDATOR=0.05`
+- `AI_AGENTS_TEMPERATURE_PR_WRITER=0.3`
+- `AI_AGENTS_TEMPERATURE_HUMAN_REVIEW=0.1`
+
+Agent + task env examples:
+- `AI_AGENTS_TEMPERATURE_DISPATCHER_FEATURE=0.1`
+- `AI_AGENTS_TEMPERATURE_DISPATCHER_BUG=0.1`
+- `AI_AGENTS_TEMPERATURE_SPEC_PLANNER_FEATURE=0.1`
+- `AI_AGENTS_TEMPERATURE_SPEC_PLANNER_BUG=0.1`
+
+Task-only env examples:
+- `AI_AGENTS_TEMPERATURE_FEATURE=0.1`
+- `AI_AGENTS_TEMPERATURE_BUG=0.05`
+- `AI_AGENTS_TEMPERATURE_REFACTOR=0.05`
+- `AI_AGENTS_TEMPERATURE_RESEARCH=0.2`
+- `AI_AGENTS_TEMPERATURE_DOCUMENTATION=0.3`
+- `AI_AGENTS_TEMPERATURE_MIXED=0.1`
 
 If a model is slow locally, start by lowering context and setting a timeout:
 ```bash

@@ -228,3 +228,58 @@ Quality gates now enforced by the pipeline:
 
 Advanced tuning:
 - set `AI_AGENTS_QA_MAX_RETRIES` to control how many QA fail loops are allowed before forced human escalation
+- set `AI_AGENTS_PROVIDER_TIMEOUT_MS` to control provider timeout per call
+- set `AI_AGENTS_OPENAI_MAX_TOKENS` to cap completion tokens for OpenAI-compatible providers
+- set `AI_AGENTS_DISABLE_CONFIG_CACHE=1` to disable resolved-config in-memory cache
+- set `AI_AGENTS_DISABLE_PROMPT_CACHE=1` to disable prompt-file in-memory cache
+- set `AI_AGENTS_POLL_INTERVAL_MS=<ms>` to adjust idle polling interval (default `1200`, min `200`)
+- set `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>` to limit immediate no-sleep cycles after processing work (default `1`)
+
+## Stateless LLM calls
+OpenAI-compatible calls are stateless by design.
+Each call is isolated and includes only explicit current context:
+- system prompt for the current stage
+- user payload built from current stage input
+
+No previous conversational memory/history is reused between calls.
+
+## Temperature by agent and task type
+OpenAI-compatible provider resolves temperature in this order:
+1. `AI_AGENTS_TEMPERATURE_<AGENT>_<TASK_TYPE>`
+2. `AI_AGENTS_TEMPERATURE_<AGENT>`
+3. `AI_AGENTS_TEMPERATURE_<TASK_TYPE>`
+4. Internal defaults
+
+Validation behavior:
+- accepts only numeric values between `0` and `2`
+- invalid values are ignored and fallback is applied
+- invalid env vars never break pipeline execution
+
+Agent defaults:
+- `Dispatcher`: `0.1`
+- `Spec Planner`: `0.1`
+- `Bug Investigator`: `0.1`
+- `Bug Fixer`: `0.05`
+- `Feature Builder`: `0.05`
+- `Reviewer`: `0.05`
+- `QA Validator`: `0.05`
+- `PR Writer`: `0.3`
+- `Human Review`: `0.1`
+
+Task-type defaults:
+- `Feature`: `0.1`
+- `Bug`: `0.05`
+- `Refactor`: `0.05`
+- `Research`: `0.2`
+- `Documentation`: `0.3`
+- `Mixed`: `0.1`
+
+Environment variable examples:
+- `AI_AGENTS_TEMPERATURE_DISPATCHER=0.1`
+- `AI_AGENTS_TEMPERATURE_BUG_FIXER=0.05`
+- `AI_AGENTS_TEMPERATURE_QA_VALIDATOR=0.05`
+- `AI_AGENTS_TEMPERATURE_PR_WRITER=0.3`
+- `AI_AGENTS_TEMPERATURE_DISPATCHER_FEATURE=0.1`
+- `AI_AGENTS_TEMPERATURE_DISPATCHER_BUG=0.1`
+- `AI_AGENTS_TEMPERATURE_FEATURE=0.1`
+- `AI_AGENTS_TEMPERATURE_BUG=0.05`
