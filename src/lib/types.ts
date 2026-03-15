@@ -139,6 +139,7 @@ export interface TimingEntry {
 
 export interface ProviderRequest {
   agent: AgentName;
+  taskType?: TaskType;
   systemPrompt: string;
   input: unknown;
   expectedJsonSchemaDescription: string;
