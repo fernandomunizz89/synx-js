@@ -164,11 +164,15 @@ This works well with:
 - QA return context is cumulative across retries and is passed forward again on each new remediation loop.
 - QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
 - QA now enriches failed checks (especially Cypress/E2E) with compact diagnostics, artifacts, and runtime QA config notes.
+- QA Cypress selector preflight now ignores scaffold specs like `example.cy.*` when real task specs are present, reducing irrelevant loop-backs.
 - Cypress QA runs use low-noise runtime overrides (e.g., reduced screenshot/video noise) to prioritize actionable failure context.
 - QA honors human per-task E2E preferences (policy/framework/objective) and validates against that target.
 - On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
 - Stage inputs now include original task input and prior stage output, so each agent works with real upstream context.
+- `Bug Fixer` and `Feature Builder` now auto-recover malformed `replace_snippet` model outputs to avoid hard pipeline failures.
+- Cypress config recovery now auto-generates `cypress.config.cjs`, rewires scripts to use it, and keeps `cypress.config.ts` lint-safe.
+- When QA reports timer-not-advancing evidence, deterministic remediations can patch both `e2e/timer.cy.ts` and `src/hooks/useTimer.ts`.
 
 ## Real code edits and QA evidence
 - Implementation agents (`Feature Builder`, `Bug Fixer`) accept concrete edit operations (`create`, `replace`, `replace_snippet`, `delete`) and apply them safely inside the workspace root.
