@@ -1,7 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { exists, moveFile, readJson, writeJson } from "../lib/fs.js";
-import { logAgentAudit, logDaemon, logTaskEvent, logTiming } from "../lib/logging.js";
+import { logAgentAudit, logDaemon, logQueueLatency, logTaskEvent, logTiming } from "../lib/logging.js";
 import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
 import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
@@ -29,6 +29,13 @@ export abstract class WorkerBase {
     try {
       await moveFile(inboxFile, workingFile);
       const request = await readJson<StageEnvelope>(workingFile);
+      const stageStartAt = nowIso();
+      const requestCreatedAt = typeof request.createdAt === "string" ? request.createdAt : "";
+      const requestCreatedAtMs = requestCreatedAt ? new Date(requestCreatedAt).getTime() : Number.NaN;
+      const stageStartAtMs = new Date(stageStartAt).getTime();
+      const queueLatencyMs = Number.isFinite(requestCreatedAtMs) && Number.isFinite(stageStartAtMs) && stageStartAtMs >= requestCreatedAtMs
+        ? stageStartAtMs - requestCreatedAtMs
+        : -1;
 
       const meta = await loadTaskMeta(taskId);
       meta.status = "in_progress";
@@ -37,7 +44,22 @@ export abstract class WorkerBase {
       await saveTaskMeta(taskId, meta);
 
       await logDaemon(`${this.agent} started ${request.stage} for ${taskId}`);
-      await logTaskEvent(taskPath, `${this.agent} started ${request.stage}`);
+      await logTaskEvent(
+        taskPath,
+        queueLatencyMs >= 0
+          ? `${this.agent} started ${request.stage} | queue wait ${queueLatencyMs}ms`
+          : `${this.agent} started ${request.stage}`,
+      );
+      if (queueLatencyMs >= 0 && requestCreatedAt) {
+        await logQueueLatency({
+          taskId,
+          stage: request.stage,
+          agent: this.agent,
+          requestCreatedAt,
+          startedAt: stageStartAt,
+          queueLatencyMs,
+        });
+      }
       await logAgentAudit(taskPath, {
         taskId,
         stage: request.stage,
@@ -45,9 +67,13 @@ export abstract class WorkerBase {
         event: "stage_started",
         inputRef: request.inputRef,
         status: "in_progress",
+        output: queueLatencyMs >= 0 ? {
+          queueLatencyMs,
+          requestCreatedAt,
+        } : {},
       });
 
-      startedAt = nowIso();
+      startedAt = stageStartAt;
       await this.processTask(taskId, request);
       await fs.unlink(workingFile).catch(() => undefined);
       return true;
