@@ -157,6 +157,8 @@ This works well with:
 - Implementation agents can edit multiple related files when required to complete a real fix/feature.
 - When unit test scripts exist, implementation agents must report unit test files updated for the change.
 - Pre-handover quality gate: `Feature Builder` and `Bug Fixer` now run scoped sanity checks before handoff; if scoped lint/type/syntax blockers remain, handoff is blocked and remediation is attempted first.
+- Sanity checks now run in cheap-first order: lightweight static heuristics + scoped lint/type checks execute before heavy checks (for example full build).
+- When cheap in-scope failures are already conclusive, heavy checks are skipped in that pass to reduce unnecessary cost/time.
 - Scoped quality filtering now ignores out-of-scope failures (existing errors unrelated to files changed in the current stage), reducing noisy loop-backs.
 - JS/TS code-quality bootstrap now attempts to provision linting/typecheck automatically: it can install missing ESLint dependencies, generate a conservative `eslint.config.cjs`, and wire `scripts.lint`/`scripts.typecheck` before validation.
 - For `Feature`, `Bug`, `Refactor`, and `Mixed`, main-flow E2E validation is required by QA.
@@ -179,6 +181,7 @@ This works well with:
 - QA verdicts are now evidence-backed: if checks pass and no hard failures exist, unsupported model-only failures are discarded.
 - Cypress QA runs use low-noise runtime overrides (e.g., reduced screenshot/video noise) to prioritize actionable failure context.
 - Agent audit logs now include structured `stage_note` events (for example `execution_context`, `quality_gate_*`, `validation_evidence_snapshot`, `qa_decision`) so retries and handoff decisions are diagnosable without dumping full raw context.
+- Quality-gate notes now expose compact counters (`cheapChecksExecuted`, `heavyChecksExecuted`, `heavyChecksSkipped`, `fullBuildChecksExecuted`, `earlyInScopeFailures`) for quick before/after benchmarking.
 - QA honors human per-task E2E preferences (policy/framework/objective) and validates against that target.
 - On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
 - QA retry loop is capped. After the retry limit is reached, the task is escalated to `waiting_human`.
