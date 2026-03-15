@@ -147,6 +147,13 @@ export interface ValidationCheckResult {
   artifacts?: string[];
 }
 
+interface FallbackValidationCommand {
+  label: string;
+  command: string;
+  args: string[];
+  qaConfigNotes: string[];
+}
+
 export interface CypressSelectorUsage {
   selector: string;
   specPaths: string[];
@@ -735,6 +742,128 @@ function isCypressScript(script: string, scripts: Record<string, string>): boole
   return scriptName.includes("cypress") || /\bcypress\b/.test(body);
 }
 
+function hasChangedFile(changedFiles: string[], pattern: RegExp): boolean {
+  return changedFiles.some((file) => pattern.test(file.toLowerCase()));
+}
+
+function buildTypeScriptFallbackCommand(manager: "npm" | "pnpm" | "yarn" | "bun"): FallbackValidationCommand {
+  switch (manager) {
+    case "pnpm":
+      return {
+        label: "pnpm exec tsc --noEmit",
+        command: "pnpm",
+        args: ["exec", "tsc", "--noEmit"],
+        qaConfigNotes: ["Language-aware fallback check: TypeScript compile/type validation without emit."],
+      };
+    case "yarn":
+      return {
+        label: "yarn tsc --noEmit",
+        command: "yarn",
+        args: ["tsc", "--noEmit"],
+        qaConfigNotes: ["Language-aware fallback check: TypeScript compile/type validation without emit."],
+      };
+    case "bun":
+      return {
+        label: "bunx tsc --noEmit",
+        command: "bunx",
+        args: ["tsc", "--noEmit"],
+        qaConfigNotes: ["Language-aware fallback check: TypeScript compile/type validation without emit."],
+      };
+    case "npm":
+    default:
+      return {
+        label: "npx tsc --noEmit",
+        command: "npx",
+        args: ["tsc", "--noEmit"],
+        qaConfigNotes: ["Language-aware fallback check: TypeScript compile/type validation without emit."],
+      };
+  }
+}
+
+function buildFallbackValidationCommands(args: {
+  workspaceRoot: string;
+  changedFiles?: string[];
+  manager: "npm" | "pnpm" | "yarn" | "bun";
+}): FallbackValidationCommand[] {
+  const workspaceRoot = path.resolve(args.workspaceRoot);
+  const changedFiles = unique((args.changedFiles || []).map((file) => normalizeInputPath(file)));
+  const out: FallbackValidationCommand[] = [];
+
+  const hasTypeScriptChanges = hasChangedFile(changedFiles, /\.(ts|tsx)$/);
+  const hasPythonChanges = hasChangedFile(changedFiles, /\.py$/);
+  const hasGoChanges = hasChangedFile(changedFiles, /\.go$/);
+  const hasRustChanges = hasChangedFile(changedFiles, /\.rs$/);
+  const hasJavaChanges = hasChangedFile(changedFiles, /\.java$/);
+
+  if (
+    hasTypeScriptChanges
+    && (existsSync(path.join(workspaceRoot, "tsconfig.json")) || existsSync(path.join(workspaceRoot, "tsconfig.app.json")))
+  ) {
+    out.push(buildTypeScriptFallbackCommand(args.manager));
+  }
+
+  if (
+    hasPythonChanges
+    && (
+      existsSync(path.join(workspaceRoot, "pyproject.toml"))
+      || existsSync(path.join(workspaceRoot, "requirements.txt"))
+      || existsSync(path.join(workspaceRoot, "setup.py"))
+    )
+  ) {
+    const pyFiles = changedFiles.filter((file) => /\.py$/i.test(file)).slice(0, 20);
+    if (pyFiles.length) {
+      out.push({
+        label: `python3 -m py_compile ${pyFiles.join(" ")}`,
+        command: "python3",
+        args: ["-m", "py_compile", ...pyFiles],
+        qaConfigNotes: ["Language-aware fallback check: Python syntax validation for changed files."],
+      });
+    }
+  }
+
+  if (hasGoChanges && existsSync(path.join(workspaceRoot, "go.mod"))) {
+    out.push({
+      label: "go test ./... -run ^$",
+      command: "go",
+      args: ["test", "./...", "-run", "^$"],
+      qaConfigNotes: ["Language-aware fallback check: Go compile/link validation without running test bodies."],
+    });
+  }
+
+  if (hasRustChanges && existsSync(path.join(workspaceRoot, "Cargo.toml"))) {
+    out.push({
+      label: "cargo check",
+      command: "cargo",
+      args: ["check"],
+      qaConfigNotes: ["Language-aware fallback check: Rust compilation validation."],
+    });
+  }
+
+  if (hasJavaChanges && existsSync(path.join(workspaceRoot, "pom.xml"))) {
+    out.push({
+      label: "mvn -q -DskipTests compile",
+      command: "mvn",
+      args: ["-q", "-DskipTests", "compile"],
+      qaConfigNotes: ["Language-aware fallback check: Java compilation validation (Maven)."],
+    });
+  } else if (hasJavaChanges && existsSync(path.join(workspaceRoot, "gradlew"))) {
+    out.push({
+      label: "./gradlew -q classes",
+      command: "./gradlew",
+      args: ["-q", "classes"],
+      qaConfigNotes: ["Language-aware fallback check: Java/Kotlin compilation validation (Gradle wrapper)."],
+    });
+  }
+
+  return out;
+}
+
+function isCommandUnavailableResult(stdout: string, stderr: string, exitCode: number | null): boolean {
+  if (exitCode === 127) return true;
+  const corpus = `${stdout}\n${stderr}`.toLowerCase();
+  return /\bcommand not found\b|is not recognized as an internal|no such file or directory/.test(corpus);
+}
+
 async function buildCypressQaOverrides(workspaceRoot: string, script: string): Promise<{
   extraArgs: string[];
   reportPath: string;
@@ -869,6 +998,7 @@ export async function runProjectChecks(args: {
   workspaceRoot: string;
   timeoutMsPerCheck?: number;
   includeE2E?: boolean;
+  changedFiles?: string[];
 }): Promise<ValidationCheckResult[]> {
   const workspaceRoot = path.resolve(args.workspaceRoot);
   const scripts = await readPackageScripts(workspaceRoot);
@@ -876,22 +1006,27 @@ export async function runProjectChecks(args: {
   const includeE2E = args.includeE2E ?? true;
   const availableE2e = includeE2E ? E2E_SCRIPT_CANDIDATES.filter((name) => Boolean(scripts[name])) : [];
   const available = unique([...availableBase, ...availableE2e]);
+  const manager = selectPackageManager(workspaceRoot);
+  const fallbackCommands = buildFallbackValidationCommands({
+    workspaceRoot,
+    changedFiles: args.changedFiles,
+    manager,
+  });
 
-  if (!available.length) {
+  if (!available.length && !fallbackCommands.length) {
     return [
       {
-        command: "[no package scripts]",
+        command: "[no executable validation checks]",
         status: "skipped",
         exitCode: 0,
         timedOut: false,
         durationMs: 0,
         stdoutPreview: "",
-        stderrPreview: "No check/test/lint/e2e scripts found in package.json",
+        stderrPreview: "No check/test/lint/e2e scripts found in package.json and no language-aware fallback check matched changed files.",
       },
     ];
   }
 
-  const manager = selectPackageManager(workspaceRoot);
   const timeoutMs = args.timeoutMsPerCheck ?? 120_000;
   const results: ValidationCheckResult[] = [];
 
@@ -934,6 +1069,43 @@ export async function runProjectChecks(args: {
       qaConfigNotes,
       artifacts: diagnostics.artifacts,
     });
+  }
+
+  if (!available.length) {
+    for (const fallback of fallbackCommands) {
+      const result = await runCommand({
+        command: fallback.command,
+        commandArgs: fallback.args,
+        cwd: workspaceRoot,
+        timeoutMs,
+        maxOutputChars: 10_000,
+      });
+      const unavailable = isCommandUnavailableResult(result.stdout, result.stderr, result.exitCode);
+      const diagnostics = await buildCheckDiagnostics({
+        workspaceRoot,
+        isCypress: false,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      });
+      const status = unavailable
+        ? "skipped"
+        : (result.exitCode === 0 && !result.timedOut ? "passed" : "failed");
+
+      results.push({
+        command: `${fallback.command} ${fallback.args.join(" ")}`,
+        status,
+        exitCode: result.exitCode,
+        timedOut: result.timedOut,
+        durationMs: result.durationMs,
+        stdoutPreview: compactCommandPreview(result.stdout),
+        stderrPreview: unavailable
+          ? `Fallback check skipped because command is unavailable in this environment: ${fallback.label}`
+          : compactCommandPreview(result.stderr),
+        diagnostics: diagnostics.diagnostics,
+        qaConfigNotes: fallback.qaConfigNotes,
+        artifacts: diagnostics.artifacts,
+      });
+    }
   }
 
   return results;
