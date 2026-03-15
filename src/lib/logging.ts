@@ -22,6 +22,70 @@ export async function writeDaemonState(state: unknown): Promise<void> {
   await writeJson(path.join(logsDir(), "..", "runtime", "daemon-state.json"), state);
 }
 
+export interface PollingCycleLogEntry {
+  at?: string;
+  loop: number;
+  pollIntervalMs: number;
+  maxImmediateCycles: number;
+  taskCount: number;
+  activeTaskCount: number;
+  processedStages: number;
+  processedTasks: number;
+  immediateCycleStreak: number;
+  immediateCyclesTotal: number;
+  sleepsAvoidedTotal: number;
+  sleepsTotal: number;
+  loopDurationMs: number;
+  action: "immediate" | "sleep";
+  reason: string;
+  sleepMs: number;
+}
+
+export async function logPollingCycle(entry: PollingCycleLogEntry): Promise<void> {
+  const payload = {
+    at: entry.at || nowIso(),
+    loop: entry.loop,
+    pollIntervalMs: entry.pollIntervalMs,
+    maxImmediateCycles: entry.maxImmediateCycles,
+    taskCount: entry.taskCount,
+    activeTaskCount: entry.activeTaskCount,
+    processedStages: entry.processedStages,
+    processedTasks: entry.processedTasks,
+    immediateCycleStreak: entry.immediateCycleStreak,
+    immediateCyclesTotal: entry.immediateCyclesTotal,
+    sleepsAvoidedTotal: entry.sleepsAvoidedTotal,
+    sleepsTotal: entry.sleepsTotal,
+    loopDurationMs: entry.loopDurationMs,
+    action: entry.action,
+    reason: trimText(entry.reason, 220),
+    sleepMs: entry.sleepMs,
+  };
+  await appendText(path.join(logsDir(), "polling-metrics.jsonl"), `${JSON.stringify(payload)}\n`);
+}
+
+export interface QueueLatencyLogEntry {
+  at?: string;
+  taskId: string;
+  stage: string;
+  agent: AgentName;
+  requestCreatedAt: string;
+  startedAt: string;
+  queueLatencyMs: number;
+}
+
+export async function logQueueLatency(entry: QueueLatencyLogEntry): Promise<void> {
+  const payload = {
+    at: entry.at || nowIso(),
+    taskId: entry.taskId,
+    stage: entry.stage,
+    agent: entry.agent,
+    requestCreatedAt: entry.requestCreatedAt,
+    startedAt: entry.startedAt,
+    queueLatencyMs: entry.queueLatencyMs,
+  };
+  await appendText(path.join(logsDir(), "queue-latency.jsonl"), `${JSON.stringify(payload)}\n`);
+}
+
 export interface ProviderParseRetryLogEntry {
   at?: string;
   agent: AgentName;

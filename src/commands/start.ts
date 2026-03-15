@@ -2,11 +2,11 @@ import { Command } from "commander";
 import path from "node:path";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { allTaskIds, loadTaskMeta } from "../lib/task.js";
-import { writeDaemonState, logDaemon } from "../lib/logging.js";
+import { writeDaemonState, logDaemon, logPollingCycle } from "../lib/logging.js";
 import { workers } from "../workers/index.js";
 import { POLL_INTERVAL_MS } from "../lib/constants.js";
 import { sleep, nowIso } from "../lib/utils.js";
-import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles } from "../lib/runtime.js";
+import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles, processIsRunning } from "../lib/runtime.js";
 import { checkProviderHealth } from "../lib/provider-health.js";
 import { loadResolvedProjectConfig } from "../lib/config.js";
 import { providerHealthToHuman } from "../lib/human-messages.js";
@@ -24,25 +24,57 @@ function resolvePollIntervalMs(): number {
 }
 
 function resolveMaxImmediateCycles(): number {
-  const raw = Number(process.env.AI_AGENTS_MAX_IMMEDIATE_CYCLES || "1");
-  if (!Number.isFinite(raw)) return 1;
+  const raw = Number(process.env.AI_AGENTS_MAX_IMMEDIATE_CYCLES || "3");
+  if (!Number.isFinite(raw)) return 3;
   const normalized = Math.floor(raw);
   if (normalized < 0) return 0;
   if (normalized > 20) return 20;
   return normalized;
 }
 
-function processIsRunning(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "EPERM") {
-      return true;
+interface LoopActionDecision {
+  action: "immediate" | "sleep";
+  reason: string;
+}
+
+function decideLoopAction(args: {
+  processedStages: number;
+  activeTaskCount: number;
+  immediateCycleStreak: number;
+  maxImmediateCycles: number;
+  wasPreviousLoopProductive: boolean;
+}): LoopActionDecision {
+  if (args.processedStages > 0) {
+    if (args.immediateCycleStreak < args.maxImmediateCycles) {
+      return {
+        action: "immediate",
+        reason: "stage(s) were processed this loop; run another immediate cycle for lower handoff latency.",
+      };
     }
-    return false;
+    return {
+      action: "sleep",
+      reason: `immediate cycle budget reached (${args.immediateCycleStreak}/${args.maxImmediateCycles}).`,
+    };
   }
+
+  if (args.activeTaskCount > 0 && args.wasPreviousLoopProductive && args.immediateCycleStreak < args.maxImmediateCycles) {
+    return {
+      action: "immediate",
+      reason: "active tasks remain after a productive loop; run one more aggressive check before sleeping.",
+    };
+  }
+
+  if (args.activeTaskCount > 0) {
+    return {
+      action: "sleep",
+      reason: "active tasks exist but no stage was processable in this loop.",
+    };
+  }
+
+  return {
+    action: "sleep",
+    reason: "no active tasks available; sleeping with low CPU profile.",
+  };
 }
 
 export const startCommand = new Command("start")
@@ -125,42 +157,102 @@ export const startCommand = new Command("start")
 
     let loop = 0;
     let immediateCycleStreak = 0;
+    let immediateCyclesTotal = 0;
+    let sleepsAvoidedTotal = 0;
+    let sleepsTotal = 0;
+    let totalProcessedStages = 0;
+    let totalProcessedTasks = 0;
+    let wasPreviousLoopProductive = false;
     try {
       while (true) {
+        const loopStartedAtMs = Date.now();
         loop += 1;
         const taskIds = await allTaskIds();
-        let processedAny = false;
+        let processedStages = 0;
+        const processedTaskIds = new Set<string>();
 
         for (const taskId of taskIds) {
           for (const worker of workers) {
             const processed = await worker.tryProcess(taskId);
-            if (processed) processedAny = true;
+            if (processed) {
+              processedStages += 1;
+              processedTaskIds.add(taskId);
+            }
           }
         }
-
-        await writeDaemonState({
-          pid: process.pid,
-          lastHeartbeatAt: nowIso(),
-          loop,
-          taskCount: taskIds.length,
-          workerCount: workers.length,
-        });
+        totalProcessedStages += processedStages;
+        totalProcessedTasks += processedTaskIds.size;
 
         const metaResults = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
         const metas = metaResults
           .filter((item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof loadTaskMeta>>> => item.status === "fulfilled")
           .map((item) => item.value);
+        const activeTaskCount = metas.filter((meta) => ["new", "in_progress", "waiting_agent"].includes(meta.status)).length;
         progress.render({
           loop,
           engineStartedAtMs,
           metas,
         });
 
-        if (processedAny && immediateCycleStreak < maxImmediateCycles) {
+        const decision = decideLoopAction({
+          processedStages,
+          activeTaskCount,
+          immediateCycleStreak,
+          maxImmediateCycles,
+          wasPreviousLoopProductive,
+        });
+
+        if (decision.action === "immediate") {
           immediateCycleStreak += 1;
-          continue;
+          immediateCyclesTotal += 1;
+          sleepsAvoidedTotal += 1;
+        } else {
+          immediateCycleStreak = 0;
+          sleepsTotal += 1;
         }
-        immediateCycleStreak = 0;
+
+        const loopDurationMs = Date.now() - loopStartedAtMs;
+        await writeDaemonState({
+          pid: process.pid,
+          lastHeartbeatAt: nowIso(),
+          loop,
+          taskCount: taskIds.length,
+          workerCount: workers.length,
+          activeTaskCount,
+          processedStagesLastLoop: processedStages,
+          processedTasksLastLoop: processedTaskIds.size,
+          totalProcessedStages,
+          totalProcessedTasks,
+          immediateCycleStreak,
+          immediateCyclesTotal,
+          sleepsAvoidedTotal,
+          sleepsTotal,
+          loopAction: decision.action,
+          loopActionReason: decision.reason,
+          loopDurationMs,
+          pollIntervalMs,
+          maxImmediateCycles,
+        });
+        await logPollingCycle({
+          loop,
+          pollIntervalMs,
+          maxImmediateCycles,
+          taskCount: taskIds.length,
+          activeTaskCount,
+          processedStages,
+          processedTasks: processedTaskIds.size,
+          immediateCycleStreak,
+          immediateCyclesTotal,
+          sleepsAvoidedTotal,
+          sleepsTotal,
+          loopDurationMs,
+          action: decision.action,
+          reason: decision.reason,
+          sleepMs: decision.action === "sleep" ? pollIntervalMs : 0,
+        });
+
+        wasPreviousLoopProductive = processedStages > 0;
+        if (decision.action === "immediate") continue;
         await sleep(pollIntervalMs);
       }
     } finally {

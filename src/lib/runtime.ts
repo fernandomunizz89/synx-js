@@ -51,7 +51,7 @@ const WORKING_TO_REQUEST_FILE: Record<string, string> = {
   "07-pr.working.json": STAGE_FILE_NAMES.pr,
 };
 
-function processIsRunning(pid: number): boolean {
+export function processIsRunning(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
