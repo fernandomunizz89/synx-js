@@ -433,10 +433,9 @@ function buildCheckDrivenReturnContext(args: {
         : `Apply targeted code/test fixes near ${sourceLocations.join(", ")} and re-run this command.`;
     }
 
-    const timerDidNotAdvancePattern = /expected ['"]25:00['"] to not equal ['"]25:00['"]|to not equal ['"]\d{1,2}:\d{2}['"]/i;
-    if (e2eCheck && timerDidNotAdvancePattern.test(receivedResult)) {
+    if (e2eCheck && hasStaticValueMismatchSignal(receivedResult)) {
       recommendedAction =
-        "Timer value did not advance between reads; first inspect/fix timer runtime logic in source (hooks/store/components), then update E2E timing/assertion flow only if needed, and re-run this E2E command.";
+        "A runtime value expected to change remained identical across assertions. Inspect and fix source/state update logic first, then adjust E2E timing/assertion flow only if evidence confirms a test defect, and re-run this E2E command.";
     }
 
     if (cypressCheck && diagnostics.length < 2) {
@@ -470,6 +469,11 @@ function buildCheckDrivenReturnContext(args: {
   return items;
 }
 
+function hasStaticValueMismatchSignal(value: string): boolean {
+  const repeatedExpectationPattern = /expected ['"]([^'"]+)['"] to not equal ['"]\1['"]/i;
+  return repeatedExpectationPattern.test(value);
+}
+
 function buildSelectorPreflightDiagnostics(
   missingSelectors: Array<{ selector: string; specPaths: string[] }>,
 ): string[] {
@@ -480,25 +484,23 @@ function buildSelectorPreflightDiagnostics(
 }
 
 function defaultSelectorTargetHint(selector: string): string {
-  switch (selector) {
-    case "timer":
-    case "timer-title":
-      return "src/components/Timer/Timer.tsx";
-    case "timer-display":
-      return "src/components/CircularTimer/CircularTimer.tsx";
-    case "circular-timer":
-      return "src/components/CircularTimer/CircularTimer.tsx";
-    case "timer-controls":
-      return "src/components/Controls/Controls.tsx";
-    case "start-button":
-    case "pause-button":
-    case "reset-button":
-      return "src/components/Controls/Controls.tsx or src/components/CircularTimer/CircularTimer.tsx (attach on native clickable DOM/SVG element, not component props)";
-    case "app-container":
-      return "src/components/Layout/Layout.tsx";
-    default:
-      return "the component that renders this element";
+  const lower = selector.toLowerCase();
+  if (/(app|layout|container|root|shell|page)/.test(lower)) {
+    return "the top-level application container element";
   }
+  if (/(title|heading|header|hero)/.test(lower)) {
+    return "the native heading element for this view";
+  }
+  if (/(display|value|status|label|counter|text|badge)/.test(lower)) {
+    return "the DOM element that renders the target value/text";
+  }
+  if (/(button|btn|control|toggle|submit|reset|start|stop|pause|play)/.test(lower)) {
+    return "the native clickable element (<button>/<a>/<input>) for this action";
+  }
+  if (/(input|field|search|email|password|textarea|select|form)/.test(lower)) {
+    return "the native form control element for this interaction";
+  }
+  return "the source component that renders this element in the browser DOM";
 }
 
 function buildSelectorPreflightReturnContext(
@@ -668,7 +670,7 @@ function hasSelectorFailureSignal(args: {
 
 function isSelectorRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
-  return /\bdata-cy\b|selector hook|missing selector|timer-display|timer-controls|timer-title|app-container/.test(lower);
+  return /\bdata-cy\b|selector hook|missing selector|data-testid|testid/.test(lower);
 }
 
 function filterUnsupportedSelectorFailures(
@@ -734,7 +736,7 @@ function hasImportExportFailureSignal(checks: Array<{
 
 function isImportExportRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
-  return /does not provide an export named|import\/export mismatch|missing useTimer export|requested module .* does not provide an export named|cannot find module|incorrect import|import statement|default import|named import|missing export\b|missing export 'usetimer'|missing export "usetimer"|export not confirmed|export .* not confirmed/.test(lower);
+  return /does not provide an export named|import\/export mismatch|requested module .* does not provide an export named|cannot find module|incorrect import|import statement|default import|named import|missing export\b|export not confirmed|export .* not confirmed/.test(lower);
 }
 
 function filterUnsupportedImportExportFailures(
@@ -821,7 +823,7 @@ function pickBestFailedCheckForContextItem(args: {
     const checkCorpus = `${check.command}\n${(check.diagnostics || []).join("\n")}`.toLowerCase();
     let score = 0;
     if (/\bcypress\b/.test(corpus) && /\bcypress\b/.test(checkCorpus)) score += 4;
-    if (/\be2e\b|timer|ui|dom/.test(corpus) && isE2eCheckCommand(check.command)) score += 3;
+    if (/\be2e\b|\bui\b|\bdom\b|\binteraction\b|\bruntime\b|\bbehavior\b/.test(corpus) && isE2eCheckCommand(check.command)) score += 3;
     if (/\btypescript\b|type error|ts\d{4}\b/.test(corpus) && /\btsc\b|typecheck|lint/.test(checkCorpus)) score += 3;
     if (/\bimport\b|\bexport\b|\bmodule\b/.test(corpus)
       && /does not provide an export named|cannot find module|import\/export mismatch|requested module/.test(checkCorpus)) {
@@ -961,7 +963,7 @@ function enrichReturnContextWithRootCauseHints(items: Array<{
   const hintLine = `Likely source root-cause paths: ${focus.sourceHints.slice(0, 5).join(", ")}`;
   return items.map((item) => {
     const text = `${item.issue}\n${item.expectedResult}\n${item.receivedResult}`.toLowerCase();
-    if (!/\be2e\b|assert|countdown|timer|import\/export|runtime|data-cy|behavior/.test(text)) {
+    if (!/\be2e\b|assert|import\/export|runtime|data-cy|selector|behavior|syntax|type|module|build|lint/.test(text)) {
       return item;
     }
 
@@ -1140,6 +1142,7 @@ export class QaWorker extends WorkerBase {
         workspaceRoot,
         timeoutMsPerCheck: 150_000,
         includeE2E: qaPreferences.e2ePolicy !== "skip" && !skipHeavyE2ERun,
+        changedFiles,
       })),
     ];
     if (missingSelectorFindings.length) {
