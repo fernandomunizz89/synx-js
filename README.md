@@ -165,6 +165,7 @@ This works well with:
 - QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
 - QA now enriches failed checks (especially Cypress/E2E) with compact diagnostics, artifacts, and runtime QA config notes.
 - QA Cypress selector preflight now ignores scaffold specs like `example.cy.*` when real task specs are present, reducing irrelevant loop-backs.
+- QA verdicts are now evidence-backed: if checks pass and no hard failures exist, unsupported model-only failures are discarded.
 - Cypress QA runs use low-noise runtime overrides (e.g., reduced screenshot/video noise) to prioritize actionable failure context.
 - QA honors human per-task E2E preferences (policy/framework/objective) and validates against that target.
 - On repeated QA loops, implementation agents are instructed to change strategy instead of repeating the same failed plan.
