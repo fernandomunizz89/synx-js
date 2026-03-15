@@ -1,10 +1,32 @@
 import { Command } from "commander";
-import { summarizeMetrics } from "../lib/metrics.js";
+import { buildCollaborationMetricsReport, parseMetricsTimestamp } from "../lib/collaboration-metrics.js";
 
 export const metricsCommand = new Command("metrics")
   .description("Show timing summary to identify bottlenecks")
-  .action(async () => {
-    const rows = await summarizeMetrics();
+  .option("--since <timestamp>", "filter metrics from this timestamp (epoch ms, ISO, or YYYYMMDD-HHmmss)")
+  .option("--until <timestamp>", "filter metrics until this timestamp (epoch ms, ISO, or YYYYMMDD-HHmmss)")
+  .option("--json", "output collaboration metrics as JSON")
+  .action(async (options: { since?: string; until?: string; json?: boolean }) => {
+    const sinceMs = parseMetricsTimestamp(options.since);
+    const untilMs = parseMetricsTimestamp(options.until);
+    if (options.since && sinceMs === null) {
+      throw new Error(`Invalid --since timestamp: ${options.since}`);
+    }
+    if (options.until && untilMs === null) {
+      throw new Error(`Invalid --until timestamp: ${options.until}`);
+    }
+
+    const report = await buildCollaborationMetricsReport({
+      sinceMs: sinceMs ?? undefined,
+      untilMs: untilMs ?? undefined,
+    });
+
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
+    const rows = report.stageSummary;
     if (!rows.length) {
       console.log("\nNo timing data found yet.");
       return;
@@ -19,8 +41,57 @@ export const metricsCommand = new Command("metrics")
 
     const slowest = rows[0];
     console.log(`\nCurrent bottleneck candidate: ${slowest.stage} (avg ${slowest.avgMs}ms)`);
+
+    console.log("\nCollaboration metrics");
+    if (typeof report.window.sinceMs === "number" || typeof report.window.untilMs === "number") {
+      console.log(`- Window: ${formatWindow(report.window.sinceMs, report.window.untilMs)}`);
+    } else {
+      console.log("- Window: full available logs");
+    }
+    console.log(`- Tasks: total=${report.taskMetrics.totalTasks} | terminal=${report.taskMetrics.terminalTasks} | success=${report.taskMetrics.successfulTasks} | failed=${report.taskMetrics.failedTasks} | in_progress=${report.taskMetrics.inProgressTasks}`);
+    console.log(`- Success rate (terminal): ${pct(report.taskMetrics.successRate)}`);
+    console.log(`- Avg total/task: ${report.taskMetrics.avgTotalMs}ms | p95: ${report.taskMetrics.p95TotalMs}ms`);
+    console.log(`- Avg time to first diagnosis: ${report.taskMetrics.timeToFirstDiagnosisAvgMs}ms | p95: ${report.taskMetrics.timeToFirstDiagnosisP95Ms}ms`);
+    console.log(`- Avg retries/task: ${report.taskMetrics.avgRetriesPerTask} | handoffs/task: ${report.taskMetrics.avgHandoffsPerTask} | loops/task: ${report.taskMetrics.avgLoopsPerTask}`);
+    console.log(`- QA return rate: ${pct(report.taskMetrics.qaReturnRate)} | full builds/task: ${report.taskMetrics.fullBuildChecksPerTask}`);
+    console.log(`- Queue latency avg: ${report.taskMetrics.avgQueueLatencyMs}ms | p95: ${report.taskMetrics.queueLatencyP95Ms}ms`);
+
+    console.log("\nCollaboration quality");
+    console.log(`- Useful logs: ${report.collaboration.logsUseful} | informative logs: ${report.collaboration.logsInformative} | useful ratio: ${pct(report.collaboration.usefulLogRatio)}`);
+    console.log(`- Loop totals: QA returns=${report.collaboration.loopsByType.qaReturnsTotal} | quality-repair retries=${report.collaboration.loopsByType.qualityRepairRetriesTotal}`);
+
+    console.log("\nBottlenecks");
+    console.log(`- Top stage: ${report.bottlenecks.topStage} (avg ${report.bottlenecks.topStageAvgMs}ms)`);
+    console.log(`- Implementer share of stage time: ${pct(report.bottlenecks.implementerShare)} | avg implementer ms/task: ${report.bottlenecks.implementerAvgMsPerTask}`);
+    console.log(`- Implementer likely bottleneck: ${report.bottlenecks.implementerLikelyBottleneck ? "yes" : "no"}`);
+
+    console.log("\nOperational overhead");
+    console.log(`- Retry-added wait: ${report.operationalCost.retryWaitMs}ms`);
+    console.log(`- Polling sleep time: ${report.operationalCost.pollingSleepMs}ms | loops: ${report.operationalCost.pollingLoops} | processed stages in loops: ${report.operationalCost.pollingProcessedStages}`);
+    console.log(`- Provider throttle events: ${report.operationalCost.throttleEvents}`);
+    console.log(`- Log volume: ${report.operationalCost.logLines} lines | ${report.operationalCost.logBytes} bytes`);
+
+    if (report.failuresByCategory.length) {
+      console.log("\nFailure categories");
+      for (const row of report.failuresByCategory.slice(0, 8)) {
+        console.log(`- ${row.category}: ${row.count}`);
+      }
+    } else {
+      console.log("\nFailure categories");
+      console.log("- none in selected window");
+    }
   });
 
 function pad(value: string, length: number): string {
   return value.padEnd(length, " ");
+}
+
+function pct(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatWindow(sinceMs: number | undefined, untilMs: number | undefined): string {
+  const since = typeof sinceMs === "number" ? new Date(sinceMs).toISOString() : "-inf";
+  const until = typeof untilMs === "number" ? new Date(untilMs).toISOString() : "+inf";
+  return `${since} -> ${until}`;
 }
