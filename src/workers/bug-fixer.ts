@@ -1,8 +1,11 @@
 import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { enforceCypressConfigScriptConsistency } from "../lib/cypress-recovery.js";
 import { extractQaHandoffContext } from "../lib/qa-context.js";
+import { deriveQaFileHints, synthesizeQaSelectorHotfixEdits } from "../lib/qa-remediation.js";
 import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
+import { normalizeBuilderLikeModelOutput } from "../lib/model-output-recovery.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { bugFixerOutputSchema } from "../lib/schema.js";
@@ -69,6 +72,30 @@ function compactQaHistoryForModel(
     returnedTo: entry.returnedTo,
     findingIssues: entry.findings.map((x) => trimText(x.issue, 120)).slice(0, 4),
   }));
+}
+
+function collectQaSignals(args: {
+  qaFailures: string[];
+  latestFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
+  cumulativeFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
+}): string[] {
+  return [
+    ...args.qaFailures,
+    ...args.latestFindings.flatMap((item) => [
+      item.issue,
+      item.expectedResult,
+      item.receivedResult,
+      item.recommendedAction,
+      ...item.evidence,
+    ]),
+    ...args.cumulativeFindings.flatMap((item) => [
+      item.issue,
+      item.expectedResult,
+      item.receivedResult,
+      item.recommendedAction,
+      ...item.evidence,
+    ]),
+  ].filter(Boolean);
 }
 
 function buildQaFeedbackQuery(args: {
@@ -146,6 +173,27 @@ async function loadPreviousBugFixerSignature(taskId: string): Promise<string | n
   }
 }
 
+async function loadPreviousSkippedSnippetPaths(taskId: string): Promise<string[]> {
+  const donePath = path.join(taskDir(taskId), "done", DONE_FILE_NAMES.bugFixer);
+  if (!(await exists(donePath))) return [];
+  try {
+    const envelope = await readJson<{ output?: { risks?: unknown } }>(donePath);
+    const risks = envelope.output?.risks;
+    if (!Array.isArray(risks)) return [];
+    return unique(
+      risks
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => {
+          const match = item.match(/^Skipped edit:\s*([^\s].*?)\s*\(replace_snippet skipped: target snippet not found\)/i);
+          return match ? match[1].trim() : "";
+        })
+        .filter(Boolean),
+    );
+  } catch {
+    return [];
+  }
+}
+
 function hasE2eInfraEdits(edits: Array<{ path: string }>): boolean {
   return edits.some((edit) => {
     const p = edit.path.replace(/\\/g, "/").toLowerCase();
@@ -178,10 +226,15 @@ export class BugFixerWorker extends WorkerBase {
     const qaHandoffContext = extractQaHandoffContext(baseInput.previousStage);
     const latestQaFindings = compactQaFindingsForModel(qaHandoffContext?.latestFindings ?? []);
     const cumulativeQaFindings = compactQaFindingsForModel(qaHandoffContext?.cumulativeFindings ?? [], 8);
+    const qaFileHints = deriveQaFileHints([
+      ...latestQaFindings,
+      ...cumulativeQaFindings,
+    ]);
     const repeatedIssues = (qaHandoffContext?.cumulativeFindings ?? [])
       .filter((item) => item.occurrences >= 2)
       .map((item) => `${item.issue} (x${item.occurrences})`)
       .slice(0, 5);
+    const previousSkippedSnippetPaths = await loadPreviousSkippedSnippetPaths(taskId);
     const mustChangeStrategy = (qaHandoffContext?.attempt ?? 0) >= 2 || repeatedIssues.length > 0;
     const requiresE2eMainFlow = qaPreferences.e2eRequired;
     const mustCreateE2eInfra = requiresE2eMainFlow && !testCapabilities.hasE2EScript;
@@ -199,7 +252,7 @@ export class BugFixerWorker extends WorkerBase {
         latestFindings: latestQaFindings,
         repeatedIssues,
       }),
-      relatedFiles: baseInput.task.extraContext.relatedFiles,
+      relatedFiles: unique([...(baseInput.task.extraContext.relatedFiles || []), ...qaFileHints]),
       limits: contextLimitsForIteration(qaHandoffContext?.attempt ?? 0),
     });
 
@@ -231,6 +284,7 @@ export class BugFixerWorker extends WorkerBase {
         requiresE2eRepair,
         requiresQaFeedbackRemediation: latestQaFindings.length > 0,
         mustChangeStrategy,
+        previousSkippedSnippetPaths,
       },
     };
 
@@ -253,6 +307,9 @@ MANDATORY EXECUTION CONTRACT:
 - If QA findings mention import/export mismatch (e.g., "does not provide an export named"), reconcile import/export contracts in source code.
 - If QA findings mention Cypress config issues (baseUrl/specPattern/configFile), fix and unify Cypress config so tests run consistently.
 - If QA findings mention flaky/incorrect E2E test logic (e.g., variable scope across then blocks), patch the test code itself.
+- If QA findings show identical timer values across assertions (e.g., expected "25:00" to not equal "25:00"), adjust E2E timing/assertion flow so countdown changes are observable.
+- If executionContract.previousSkippedSnippetPaths is non-empty, avoid replace_snippet for those paths and use full-file replace edits derived from current workspace content.
+- Use exact file structures from workspaceContext; do not invent class names or JSX wrappers that are not present in the file content.
 - If executionContract.mustChangeStrategy is true, do not repeat the previous failed approach.
 - If executionContract.mustChangeStrategy is true, include "Iteration Strategy: ..." as the first item in changesMade.
 - Use repository paths that exist in workspaceContext.files when possible.
@@ -291,7 +348,11 @@ Return exactly this JSON shape:
       expectedJsonSchemaDescription:
         '{ "implementationSummary": "string", "filesChanged": ["string"], "changesMade": ["string"], "unitTestsAdded": ["string"], "testsToRun": ["string"], "risks": ["string"], "edits": [{ "path": "string", "action": "create | replace | replace_snippet | delete", "content": "string (required for create/replace)", "find": "string (required for replace_snippet)", "replace": "string (required for replace_snippet)" }], "nextAgent": "Reviewer" }',
     });
-    const output = bugFixerOutputSchema.parse(result.parsed);
+    const normalizedModelOutput = normalizeBuilderLikeModelOutput(result.parsed);
+    const output = bugFixerOutputSchema.parse(normalizedModelOutput.payload);
+    if (normalizedModelOutput.notes.length) {
+      output.risks = unique([...output.risks, ...normalizedModelOutput.notes]);
+    }
     const previousSignature = await loadPreviousBugFixerSignature(taskId);
     const currentSignature = editSignature(output.edits);
     if (mustChangeStrategy && previousSignature && previousSignature === currentSignature) {
@@ -344,23 +405,60 @@ Return exactly this JSON shape:
       ]);
     }
 
+    const cypressRecovery = await enforceCypressConfigScriptConsistency({
+      workspaceRoot,
+      edits: output.edits,
+      signals: collectQaSignals({
+        qaFailures,
+        latestFindings: latestQaFindings,
+        cumulativeFindings: cumulativeQaFindings,
+      }),
+    });
+    output.edits = cypressRecovery.edits;
+    if (cypressRecovery.changed && cypressRecovery.note) {
+      output.changesMade = unique([...output.changesMade, cypressRecovery.note]);
+    }
+    if (cypressRecovery.warning) {
+      output.risks = unique([...output.risks, cypressRecovery.warning]);
+    }
+
+    const selectorHotfix = await synthesizeQaSelectorHotfixEdits({
+      workspaceRoot,
+      findings: latestQaFindings,
+      existingEdits: output.edits,
+    });
+    output.edits = selectorHotfix.edits;
+    if (selectorHotfix.notes.length) {
+      output.changesMade = unique([...output.changesMade, ...selectorHotfix.notes]);
+    }
+    if (selectorHotfix.warnings.length) {
+      output.risks = unique([...output.risks, ...selectorHotfix.warnings]);
+    }
+
+    const gitChangedBefore = await getGitChangedFiles(workspaceRoot);
     const applied = await applyWorkspaceEdits({
       workspaceRoot,
       edits: output.edits,
     });
-
     const gitChangedFiles = await getGitChangedFiles(workspaceRoot);
+    const newlyTrackedGitChanges = gitChangedFiles.filter((file) => !gitChangedBefore.includes(file));
     const effectiveChanged = unique([
-      ...gitChangedFiles,
-      ...output.filesChanged,
-      ...applied.appliedFiles,
+      ...applied.changedFiles,
+      ...newlyTrackedGitChanges,
     ]);
 
-    if (!effectiveChanged.length) {
+    if (!effectiveChanged.length && !gitChangedFiles.length) {
       throw new Error("Bug Fixer completed but no code changes were detected. No usable patch was applied.");
     }
 
-    output.filesChanged = effectiveChanged;
+    if (!effectiveChanged.length && gitChangedFiles.length) {
+      output.risks = unique([
+        ...output.risks,
+        "No net-new edits were applied in this iteration; proceeding with existing workspace changes for validation.",
+      ]);
+    }
+
+    output.filesChanged = effectiveChanged.length ? effectiveChanged : gitChangedFiles;
     output.risks = unique([
       ...output.risks,
       ...applied.warnings,
