@@ -58,7 +58,22 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     keys: keys.slice(0, 12),
   };
 
-  const scalarFields = ["nextAgent", "verdict", "summary", "implementationSummary", "symptomSummary", "technicalContext"];
+  const scalarFields = [
+    "nextAgent",
+    "verdict",
+    "summary",
+    "implementationSummary",
+    "symptomSummary",
+    "technicalContext",
+    "strategy",
+    "retryReason",
+    "failureHypothesis",
+    "changedFromPrevious",
+    "successCriteria",
+    "abandonCriteria",
+    "retryAbortReason",
+    "reason",
+  ];
   for (const field of scalarFields) {
     if (typeof row[field] === "string" && row[field]) {
       summary[field] = trimText(String(row[field]), field === "summary" ? 280 : 180);
@@ -98,6 +113,16 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     "attempt",
     "attempts",
     "maxAttempts",
+    "signatureAttempts",
+    "blockingFailuresBefore",
+    "blockingFailuresAfter",
+    "noProgressStreak",
+    "retryDurationMs",
+    "retryAttempts",
+    "retryProductive",
+    "retryUnproductive",
+    "retryRepeatedStrategy",
+    "retryAdditionalTimeMs",
   ];
   for (const field of numericFields) {
     if (typeof row[field] === "number" && Number.isFinite(row[field])) {
@@ -116,6 +141,18 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
       fullBuildChecksExecuted: typeof metrics.fullBuildChecksExecuted === "number" ? metrics.fullBuildChecksExecuted : 0,
       earlyInScopeFailures: typeof metrics.earlyInScopeFailures === "number" ? metrics.earlyInScopeFailures : 0,
     };
+  }
+
+  const booleanFields = [
+    "strategyChanged",
+    "progressed",
+    "sameSignatureAfter",
+    "retryAbortedEarly",
+  ];
+  for (const field of booleanFields) {
+    if (typeof row[field] === "boolean") {
+      summary[field] = row[field];
+    }
   }
 
   if (Array.isArray(row.executedChecks)) {
