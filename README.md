@@ -167,6 +167,7 @@ This works well with:
 - If E2E infrastructure is missing, implementation agents are instructed to add an E2E script/test path as part of remediation.
 - `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
 - Provider calls are stateless per execution: every LLM request is built from explicit current input only (`systemPrompt` + current user payload), without reused chat memory/history.
+- OpenAI-compatible provider now includes short JSON-format retries (max 2 extra attempts) only for parse-format failures, so malformed formatting does not force full stage reprocessing.
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
 - QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
 - `Bug Investigator` handoff is now file-centric: suspect files/areas, primary+secondary hypotheses, explicit risk assessment, and builder check list.
@@ -205,8 +206,14 @@ This works well with:
 ## Provider stability controls
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
+- `AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES`: extra retries for JSON-format parsing failures in the provider (default: `1`, max: `2`).
 - `AI_AGENTS_QA_MAX_RETRIES`: max QA fail loops before escalation to human review (default: `3`).
 - `AI_AGENTS_QUALITY_REPAIR_MAX_ATTEMPTS`: max quality-gate remediation attempts inside Feature Builder/Bug Fixer (default: `3`, cap: `5`).
+
+JSON parse retry notes:
+- Triggered only when provider text cannot be extracted/parsing as JSON.
+- Retry instruction is strict: JSON only, no markdown fences, no prose before/after, preserve expected schema.
+- Provider writes structured retry logs at `.ai-agents/logs/provider-parse-retries.jsonl`.
 
 ## Performance controls
 - `AI_AGENTS_DISABLE_CONFIG_CACHE=1`: disables in-memory cache for resolved global+local config.
