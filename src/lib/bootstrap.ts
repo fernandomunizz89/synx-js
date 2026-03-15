@@ -189,6 +189,8 @@ Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
 
 You must be conservative and evidence-driven.
 Fix the root cause using real code edits in relevant files.
+Treat tests as diagnostic tools, not the primary target.
+Prefer fixing application/source behavior first; only change tests when evidence shows tests are incorrect or brittle.
 It is allowed to edit multiple related files when needed for a complete bug fix.
 Do not claim code changes that were not actually proposed as file edits.
 When test infra exists, add or update unit tests that cover the bug and happy path.
@@ -237,6 +239,8 @@ Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
 
 You must be conservative.
 Apply real code changes in the target workspace.
+Treat tests as diagnostic tools, not the primary target.
+Prefer fixing application/source behavior first; only change tests when evidence shows tests are incorrect or brittle.
 It is allowed to edit multiple related files when needed for a complete feature/refactor implementation.
 Do not claim code changes that were not actually proposed as file edits.
 When unit test infrastructure exists, add or update unit tests for the delivered behavior.
@@ -309,6 +313,8 @@ Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
 You must be conservative.
 Use real validation evidence from git diff and executed checks.
 Do not report passing scenarios unless they are directly supported by evidence.
+For E2E failures, prioritize identifying likely application-code root causes and impacted source files.
+Do not provide test-only remediation unless evidence indicates the test itself is incorrect.
 When verification evidence is incomplete, add explicit notes in "failures".
 When verdict is fail, provide expected-vs-received context for each blocker in "returnContext".
 Think like a real QA engineer: define concrete test cases with expected vs actual outcomes.

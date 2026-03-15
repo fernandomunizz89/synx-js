@@ -161,6 +161,7 @@ This works well with:
 - `QA Validator` validates real evidence using `git diff` and runnable project scripts (`check`, `test`, `lint`, and common `e2e` script names when present).
 - On QA failure, the task is automatically sent back to the correct implementation agent (`Bug Fixer` for bug tasks, `Feature Builder` for others).
 - QA failure handoff now includes structured `expectedResult` vs `receivedResult` items with evidence and recommended actions.
+- Root-cause-first policy: E2E failures must prioritize application-code fixes; tests are treated as diagnostics and are only changed when evidence shows test defects.
 - QA return context is cumulative across retries and is passed forward again on each new remediation loop.
 - QA now records explicit test cases (`expectedResult` vs `actualResult`) to mirror real QA workflows.
 - QA now enriches failed checks (especially Cypress/E2E) with compact diagnostics, artifacts, and runtime QA config notes.

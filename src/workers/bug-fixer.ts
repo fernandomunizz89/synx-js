@@ -301,6 +301,9 @@ MANDATORY EXECUTION CONTRACT:
 - If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
 - Use qaFeedback.latestExpectedVsReceived.expectedResult vs receivedResult as explicit fix targets.
 - Use qaFeedback.latestExpectedVsReceived.recommendedAction and evidence to choose concrete edits.
+- Treat tests as diagnostic signals: prioritize fixing root cause in application/source code first (typically src/**).
+- Do not change tests only to "make green" when behavior is broken in app code.
+- Modify tests only when evidence shows the test itself is wrong, brittle, or misaligned with intended behavior.
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
 - If QA evidence points to Cypress/E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
 - If QA findings mention missing data-cy selectors, add those data-cy attributes directly in the relevant UI components.

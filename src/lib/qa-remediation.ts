@@ -138,8 +138,6 @@ function shouldRewriteTimerSpec(findings: QaFindingLike[]): boolean {
     /parsing error/.test(combined)
     || /timebefore is not defined/.test(combined)
     || /variable scoping/.test(combined)
-    || /timer is not counting down/.test(combined)
-    || /expected '25:00' to not equal '25:00'/.test(combined)
   );
 }
 
@@ -265,6 +263,7 @@ export async function synthesizeQaSelectorHotfixEdits(args: {
   let nextEdits = [...args.existingEdits];
   const notes: string[] = [];
   const warnings: string[] = [];
+  let runtimePatched = false;
 
   for (const selector of selectors) {
     const defaultPath = SELECTOR_DEFAULT_FILES[selector];
@@ -290,7 +289,21 @@ export async function synthesizeQaSelectorHotfixEdits(args: {
     notes.push(`Auto-remediation applied: ensured data-cy="${selector}" in ${defaultPath}.`);
   }
 
-  if (shouldApplyTimerWaitHotfix(args.findings)) {
+  if (shouldApplyTimerRuntimeHotfix(args.findings)) {
+    const hookBaseContent = await readBaseContent(args.workspaceRoot, nextEdits, TIMER_RUNTIME_HOTFIX_FILE);
+    if (typeof hookBaseContent === "string" && !/setInterval\(/.test(hookBaseContent)) {
+      nextEdits = removeEditsForPath(nextEdits, TIMER_RUNTIME_HOTFIX_FILE);
+      nextEdits.push({
+        path: TIMER_RUNTIME_HOTFIX_FILE,
+        action: "replace",
+        content: TIMER_RUNTIME_SAFE_TEMPLATE,
+      });
+      notes.push(`Auto-remediation applied: implemented active countdown ticking in ${TIMER_RUNTIME_HOTFIX_FILE} so E2E timer assertions can observe state changes.`);
+      runtimePatched = true;
+    }
+  }
+
+  if (shouldApplyTimerWaitHotfix(args.findings) && !runtimePatched) {
     const baseContent = await readBaseContent(args.workspaceRoot, nextEdits, TIMER_WAIT_HOTFIX_FILE);
     if (typeof baseContent === "string") {
       const patched = applyTimerWaitHotfix(baseContent);
@@ -314,19 +327,6 @@ export async function synthesizeQaSelectorHotfixEdits(args: {
       content: TIMER_E2E_SAFE_TEMPLATE,
     });
     notes.push(`Auto-remediation applied: rewrote ${TIMER_WAIT_HOTFIX_FILE} with a syntax-safe countdown scenario aligned to current UI behavior.`);
-  }
-
-  if (shouldApplyTimerRuntimeHotfix(args.findings)) {
-    const hookBaseContent = await readBaseContent(args.workspaceRoot, nextEdits, TIMER_RUNTIME_HOTFIX_FILE);
-    if (typeof hookBaseContent === "string" && !/setInterval\(/.test(hookBaseContent)) {
-      nextEdits = removeEditsForPath(nextEdits, TIMER_RUNTIME_HOTFIX_FILE);
-      nextEdits.push({
-        path: TIMER_RUNTIME_HOTFIX_FILE,
-        action: "replace",
-        content: TIMER_RUNTIME_SAFE_TEMPLATE,
-      });
-      notes.push(`Auto-remediation applied: implemented active countdown ticking in ${TIMER_RUNTIME_HOTFIX_FILE} so E2E timer assertions can observe state changes.`);
-    }
   }
 
   return {

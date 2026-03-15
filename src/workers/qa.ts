@@ -294,19 +294,19 @@ function buildCheckDrivenReturnContext(args: {
     ]).slice(0, 6);
 
     let recommendedAction = e2eCheck
-      ? "Fix the failing E2E assertion or app flow and re-run this E2E command."
+      ? "Investigate and fix the application root cause in source code first; update E2E assertions only if test logic is proven wrong, then re-run this E2E command."
       : "Fix the failing validation target and re-run this command.";
 
     if (sourceLocations.length) {
       recommendedAction = e2eCheck
-        ? `Fix the failing E2E assertion/root cause near ${sourceLocations.join(", ")} and re-run this E2E command.`
+        ? `Inspect and fix the likely source-code root cause near ${sourceLocations.join(", ")}; only adjust test logic if evidence shows test defects, then re-run this E2E command.`
         : `Apply targeted code/test fixes near ${sourceLocations.join(", ")} and re-run this command.`;
     }
 
     const timerDidNotAdvancePattern = /expected ['"]25:00['"] to not equal ['"]25:00['"]|to not equal ['"]\d{1,2}:\d{2}['"]/i;
     if (e2eCheck && timerDidNotAdvancePattern.test(receivedResult)) {
       recommendedAction =
-        "Timer value did not advance between reads; update E2E timing/assertion flow (e.g., wait >=1000ms after start or observe a changed tick), then re-run this E2E command.";
+        "Timer value did not advance between reads; first inspect/fix timer runtime logic in source (hooks/store/components), then update E2E timing/assertion flow only if needed, and re-run this E2E command.";
     }
 
     if (cypressCheck && diagnostics.length < 2) {
@@ -686,6 +686,7 @@ MANDATORY VALIDATION CONTRACT:
 - Each "returnContext" item must include concrete evidence and a recommended action for the next agent.
 - Use executedChecks[].diagnostics, qaConfigNotes, and artifacts to make returnContext specific (avoid screenshot-only guidance).
 - For Cypress/E2E failures, include assertion/location evidence and remediation direction in returnContext.
+- For Cypress/E2E failures, point to likely application-code root cause paths first; do not give test-only remediation unless evidence shows the test is wrong.
 - If failures suggest missing data-cy selectors, list required selectors and target files in returnContext.
 - If failures suggest import/export mismatch, call out the exact symbol/file contract mismatch in returnContext.
 - If failures suggest Cypress config mismatch (baseUrl/specPattern/configFile), call out exact config edits needed.
