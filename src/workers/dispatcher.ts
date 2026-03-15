@@ -46,6 +46,8 @@ export class DispatcherWorker extends WorkerBase {
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
     const result = await provider.generateStructured({
       agent: "Dispatcher",
+      taskId,
+      stage: request.stage,
       taskType: input.typeHint,
       systemPrompt,
       input: modelInput,

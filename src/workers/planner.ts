@@ -46,6 +46,8 @@ export class PlannerWorker extends WorkerBase {
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
     const result = await provider.generateStructured({
       agent: "Spec Planner",
+      taskId,
+      stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,

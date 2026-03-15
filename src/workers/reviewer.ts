@@ -25,6 +25,8 @@ export class ReviewerWorker extends WorkerBase {
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
     const result = await provider.generateStructured({
       agent: "Reviewer",
+      taskId,
+      stage: request.stage,
       taskType: modelInput.task.typeHint,
       systemPrompt,
       input: modelInput,

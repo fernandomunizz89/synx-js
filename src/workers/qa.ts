@@ -1304,6 +1304,8 @@ MANDATORY VALIDATION CONTRACT:
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
     const result = await provider.generateStructured({
       agent: "QA Validator",
+      taskId,
+      stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,

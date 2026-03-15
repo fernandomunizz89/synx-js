@@ -1,6 +1,7 @@
 import type { AgentName, ProviderRequest, ProviderResult, ProviderStageConfig, TaskType } from "../lib/types.js";
 import type { LlmProvider } from "./provider.js";
 import { extractJsonFromText } from "../lib/utils.js";
+import { logProviderParseRetry } from "../lib/logging.js";
 
 interface ChatCompletionsResponse {
   choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
@@ -123,6 +124,25 @@ function resolveMaxTokens(): number | undefined {
   return Math.floor(maxTokensRaw);
 }
 
+function resolveJsonParseRetries(): number {
+  const raw = Number(process.env.AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES || "");
+  if (Number.isFinite(raw) && raw >= 0) {
+    return Math.min(2, Math.floor(raw));
+  }
+  return 1;
+}
+
+function parseFailureReason(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
+}
+
+function shortenText(value: string, maxChars: number): string {
+  const next = value.trim();
+  if (next.length <= maxChars) return next;
+  return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
 function isInputEmbeddedInSystemPrompt(systemPrompt: string, inputJson: string): boolean {
   const maybeEmbeddedSample = inputJson.slice(0, Math.min(240, inputJson.length));
   return maybeEmbeddedSample.length > 32 && systemPrompt.includes(maybeEmbeddedSample);
@@ -149,6 +169,64 @@ function buildStatelessMessages(request: ProviderRequest): Array<{ role: "system
     { role: "system", content: request.systemPrompt },
     { role: "user", content: buildStatelessUserMessage(request) },
   ];
+}
+
+function buildParseRetryMessages(args: {
+  request: ProviderRequest;
+  previousRawText: string;
+  parseError: string;
+  attempt: number;
+  maxAttempts: number;
+}): Array<{ role: "system" | "user"; content: string }> {
+  const base = buildStatelessMessages(args.request);
+  const correction = [
+    `Previous response could not be parsed as valid JSON: ${args.parseError}`,
+    `Retry attempt ${args.attempt}/${args.maxAttempts}.`,
+    "Respond with ONLY valid JSON.",
+    "Do NOT include markdown code fences.",
+    "Do NOT include explanatory text before or after the JSON.",
+    "Preserve exactly the expected JSON shape.",
+    `Expected shape: ${args.request.expectedJsonSchemaDescription}`,
+    "If uncertain, still return best-effort JSON object/array matching the required schema.",
+    "Do not omit required keys.",
+    `Previous invalid response sample:\n${shortenText(args.previousRawText, 1200) || "[empty]"}`,
+  ].join("\n");
+  return [
+    ...base,
+    { role: "user", content: correction },
+  ];
+}
+
+async function callChatCompletions(args: {
+  baseUrl: string;
+  headers: Record<string, string>;
+  timeoutMs: number;
+  payload: Record<string, unknown>;
+}): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${args.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: args.headers,
+      signal: AbortSignal.timeout(args.timeoutMs),
+      body: JSON.stringify(args.payload),
+    });
+  } catch (error) {
+    const name = error && typeof error === "object" && "name" in error ? (error as { name?: string }).name : "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      throw new Error(`Provider request timed out after ${args.timeoutMs}ms.`);
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Provider request failed with ${response.status}: ${body}`);
+  }
+
+  const json = await response.json() as ChatCompletionsResponse;
+  const content = json.choices?.[0]?.message?.content;
+  return typeof content === "string" ? content : (content || []).map((item) => item.text || "").join("\n");
 }
 
 export class OpenAiCompatibleProvider implements LlmProvider {
@@ -178,48 +256,144 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const timeoutMs = resolveTimeoutMs();
     const maxTokens = resolveMaxTokens();
     const temperature = resolveTemperature(request);
+    const parseRetriesMax = resolveJsonParseRetries();
+    const parseAttemptsMax = 1 + parseRetriesMax;
+    const parseFailures: string[] = [];
+    let parseRetriesUsed = 0;
+    let parseRetryAdditionalDurationMs = 0;
+    let lastRawText = "";
+    let lastParseError = "";
 
-    const payload: Record<string, unknown> = {
-      model: this.model,
-      temperature,
-      // Stateless-by-design: each call sends only explicit current context (system + user), no prior chat history.
-      messages: buildStatelessMessages(request),
-    };
-    if (maxTokens) payload.max_tokens = maxTokens;
+    for (let attempt = 1; attempt <= parseAttemptsMax; attempt += 1) {
+      const isRetry = attempt > 1;
+      const messages = isRetry
+        ? buildParseRetryMessages({
+          request,
+          previousRawText: lastRawText,
+          parseError: lastParseError || "Unknown JSON formatting issue.",
+          attempt,
+          maxAttempts: parseAttemptsMax,
+        })
+        : buildStatelessMessages(request);
 
-    let response: Response;
-    try {
-      response = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers,
-        signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify(payload),
-      });
-    } catch (error) {
-      const name = error && typeof error === "object" && "name" in error ? (error as { name?: string }).name : "";
-      if (name === "TimeoutError" || name === "AbortError") {
-        throw new Error(`Provider request timed out after ${timeoutMs}ms.`);
+      if (isRetry) {
+        await logProviderParseRetry({
+          agent: request.agent,
+          taskId: request.taskId,
+          stage: request.stage,
+          provider: "openai-compatible",
+          model: this.model,
+          event: "parse_retry_started",
+          attempt,
+          maxAttempts: parseAttemptsMax,
+          parseRetriesUsed: attempt - 1,
+          reason: "Retrying provider call because previous response could not be parsed as JSON.",
+          parseError: lastParseError,
+          additionalDurationMs: parseRetryAdditionalDurationMs,
+        }).catch(() => undefined);
       }
-      throw error;
+
+      const payload: Record<string, unknown> = {
+        model: this.model,
+        temperature,
+        // Stateless-by-design: each call sends only explicit current context (system + user), no prior chat history.
+        messages,
+      };
+      if (maxTokens) payload.max_tokens = maxTokens;
+
+      const callStartedAt = Date.now();
+      const rawText = await callChatCompletions({
+        baseUrl: this.baseUrl,
+        headers,
+        timeoutMs,
+        payload,
+      });
+      if (isRetry) {
+        parseRetryAdditionalDurationMs += Date.now() - callStartedAt;
+      }
+      lastRawText = rawText;
+
+      try {
+        const parsed = extractJsonFromText(rawText);
+        parseRetriesUsed = attempt - 1;
+
+        if (isRetry) {
+          await logProviderParseRetry({
+            agent: request.agent,
+            taskId: request.taskId,
+            stage: request.stage,
+            provider: "openai-compatible",
+            model: this.model,
+            event: "parse_retry_succeeded",
+            attempt,
+            maxAttempts: parseAttemptsMax,
+            parseRetriesUsed,
+            reason: "Parsing retry succeeded; stage can continue without full reprocessing.",
+            additionalDurationMs: parseRetryAdditionalDurationMs,
+            retryRecoveredStage: true,
+          }).catch(() => undefined);
+        }
+
+        return {
+          rawText,
+          parsed,
+          provider: "openai-compatible",
+          model: this.model,
+          parseRetries: parseRetriesUsed,
+          validationPassed: true,
+        };
+      } catch (error) {
+        const parseError = parseFailureReason(error);
+        parseFailures.push(parseError);
+        lastParseError = parseError;
+
+        await logProviderParseRetry({
+          agent: request.agent,
+          taskId: request.taskId,
+          stage: request.stage,
+          provider: "openai-compatible",
+          model: this.model,
+          event: isRetry ? "parse_retry_failed" : "initial_parse_failed",
+          attempt,
+          maxAttempts: parseAttemptsMax,
+          parseRetriesUsed: attempt - 1,
+          parseError,
+          additionalDurationMs: parseRetryAdditionalDurationMs,
+        }).catch(() => undefined);
+
+        if (attempt >= parseAttemptsMax) {
+          await logProviderParseRetry({
+            agent: request.agent,
+            taskId: request.taskId,
+            stage: request.stage,
+            provider: "openai-compatible",
+            model: this.model,
+            event: "parse_retry_exhausted",
+            attempt,
+            maxAttempts: parseAttemptsMax,
+            parseRetriesUsed: attempt - 1,
+            reason: "All JSON parsing retries were exhausted.",
+            parseError,
+            additionalDurationMs: parseRetryAdditionalDurationMs,
+          }).catch(() => undefined);
+
+          const errorWithMeta = new Error(
+            `Provider JSON parsing failed after ${attempt} attempt(s) (${attempt - 1} retr${attempt - 1 === 1 ? "y" : "ies"}). Last parse error: ${parseError}`,
+          ) as Error & {
+            parseRetries?: number;
+            validationPassed?: boolean;
+            parseRetryAdditionalDurationMs?: number;
+            parseFailureReasons?: string[];
+          };
+          errorWithMeta.parseRetries = attempt - 1;
+          errorWithMeta.validationPassed = false;
+          errorWithMeta.parseRetryAdditionalDurationMs = parseRetryAdditionalDurationMs;
+          errorWithMeta.parseFailureReasons = parseFailures.slice(-3);
+          throw errorWithMeta;
+        }
+      }
     }
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`Provider request failed with ${response.status}: ${body}`);
-    }
-
-    const json = await response.json() as ChatCompletionsResponse;
-    const content = json.choices?.[0]?.message?.content;
-    const rawText = typeof content === "string" ? content : (content || []).map((item) => item.text || "").join("\n");
-    const parsed = extractJsonFromText(rawText);
-
-    return {
-      rawText,
-      parsed,
-      provider: "openai-compatible",
-      model: this.model,
-      parseRetries: 0,
-      validationPassed: true,
-    };
+    throw new Error("Provider JSON parsing failed without a terminal parse attempt.");
   }
 }

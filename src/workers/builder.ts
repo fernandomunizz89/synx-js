@@ -536,6 +536,8 @@ Return exactly this JSON shape:
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
     const result = await provider.generateStructured({
       agent: "Feature Builder",
+      taskId,
+      stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
@@ -839,6 +841,8 @@ Return exactly this JSON shape:
       const retryStartedAt = Date.now();
       const repairResult = await provider.generateStructured({
         agent: "Feature Builder",
+        taskId,
+        stage: request.stage,
         taskType: baseInput.task.typeHint,
         systemPrompt: repairPrompt,
         input: repairInput,
