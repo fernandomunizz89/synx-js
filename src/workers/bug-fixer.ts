@@ -10,6 +10,7 @@ import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferenc
 import { normalizeBuilderLikeModelOutput } from "../lib/model-output-recovery.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { runPostEditSanityChecks } from "../lib/post-edit-sanity.js";
+import { buildFailureSignature, buildRetryStrategyInstructions, decideAdaptiveRetry, resolveQualityRepairMaxAttempts, type RetryStrategy } from "../lib/quality-retry-policy.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../lib/task-artifacts.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
@@ -265,21 +266,6 @@ function uniqueNormalized(values: string[]): string[] {
     out.push(value);
   }
   return out;
-}
-
-function resolveQualityRepairMaxAttempts(): number {
-  const raw = Number(process.env.AI_AGENTS_QUALITY_REPAIR_MAX_ATTEMPTS || "");
-  if (Number.isFinite(raw) && raw >= 1) {
-    return Math.min(5, Math.floor(raw));
-  }
-  return 3;
-}
-
-function buildFailureSignature(lines: string[]): string {
-  return uniqueNormalized(lines)
-    .map((line) => line.toLowerCase().replace(/\d+/g, "#"))
-    .sort()
-    .join(" | ");
 }
 
 function normalizePathToken(value: string): string {
@@ -651,24 +637,81 @@ Return exactly this JSON shape:
     let qualityRepairAttempts = 0;
     const maxQualityRepairAttempts = resolveQualityRepairMaxAttempts();
     const blockingSignatureCounts = new Map<string, number>();
+    let noProgressStreak = 0;
+    let previousRetryState: {
+      strategy: RetryStrategy;
+      signature: string;
+      blockingCount: number;
+      category: string;
+    } | undefined;
+    const retryStats = {
+      attempted: 0,
+      productive: 0,
+      unproductive: 0,
+      repeatedStrategy: 0,
+      additionalTimeMs: 0,
+      abortedEarly: false,
+      abortReason: "",
+    };
     while (postEditSanity.blockingFailureSummaries.length && qualityRepairAttempts < maxQualityRepairAttempts) {
-      qualityRepairAttempted = true;
-      qualityRepairAttempts += 1;
+      const nextAttempt = qualityRepairAttempts + 1;
+      const blockingBeforeCount = postEditSanity.blockingFailureSummaries.length;
       const blockingSignature = buildFailureSignature(postEditSanity.blockingFailureSummaries);
       const signatureAttempts = (blockingSignatureCounts.get(blockingSignature) || 0) + 1;
-      blockingSignatureCounts.set(blockingSignature, signatureAttempts);
+      const retryDecision = decideAdaptiveRetry({
+        attempt: nextAttempt,
+        maxAttempts: maxQualityRepairAttempts,
+        blockingFailures: postEditSanity.blockingFailureSummaries,
+        blockingCount: blockingBeforeCount,
+        signature: blockingSignature,
+        signatureAttempts,
+        noProgressStreak,
+        previousAttempt: previousRetryState,
+      });
+      const strategyChanged = previousRetryState ? previousRetryState.strategy !== retryDecision.strategy : false;
       await this.note({
         taskId,
         stage: "bug-fixer",
         message: "quality_repair_attempt_started",
         details: {
-          attempt: qualityRepairAttempts,
+          attempt: nextAttempt,
           maxAttempts: maxQualityRepairAttempts,
           blockingFailures: postEditSanity.blockingFailureSummaries.slice(0, 3),
           signature: blockingSignature,
           signatureAttempts,
+          strategy: retryDecision.strategy,
+          strategyChanged,
+          retryReason: retryDecision.reason,
+          failureHypothesis: retryDecision.hypothesis,
+          changedFromPrevious: retryDecision.changedFromPrevious,
+          successCriteria: retryDecision.successCriteria,
+          abandonCriteria: retryDecision.abandonCriteria,
+          noProgressStreak,
         },
       });
+      if (!retryDecision.shouldContinue) {
+        retryStats.abortedEarly = true;
+        retryStats.abortReason = retryDecision.reason;
+        output.risks = uniqueNormalized([
+          ...output.risks,
+          `Adaptive retry aborted before attempt ${nextAttempt}: ${retryDecision.reason}`,
+        ]);
+        await this.note({
+          taskId,
+          stage: "bug-fixer",
+          message: "quality_repair_aborted_early",
+          details: {
+            attempt: nextAttempt,
+            reason: retryDecision.reason,
+            noProgressStreak,
+            blockingFailures: postEditSanity.blockingFailureSummaries.slice(0, 3),
+          },
+        });
+        break;
+      }
+      qualityRepairAttempted = true;
+      qualityRepairAttempts = nextAttempt;
+      blockingSignatureCounts.set(blockingSignature, signatureAttempts);
       if (signatureAttempts > 3) {
         output.risks = uniqueNormalized([
           ...output.risks,
@@ -680,12 +723,14 @@ Return exactly this JSON shape:
         workspaceRoot,
         query: postEditSanity.blockingFailureSummaries.join("\n"),
         relatedFiles: stageScopeFiles,
-        limits: {
-          maxContextFiles: 8,
-          maxTotalContextChars: 12_000,
-          maxFileContextChars: 2_400,
-          maxScanFiles: 800,
-        },
+        limits: retryDecision.contextLimits,
+      });
+      const retryInstructions = buildRetryStrategyInstructions({
+        strategy: retryDecision.strategy,
+        attempt: qualityRepairAttempts,
+        maxAttempts: maxQualityRepairAttempts,
+        blockingFailures: postEditSanity.blockingFailureSummaries,
+        changedFromPrevious: retryDecision.changedFromPrevious,
       });
       const repairInput = {
         ...modelInput,
@@ -696,9 +741,17 @@ Return exactly this JSON shape:
           scopeFiles: stageScopeFiles,
           attempt: qualityRepairAttempts,
           maxAttempts: maxQualityRepairAttempts,
+          retryReason: retryDecision.reason,
+          failureHypothesis: retryDecision.hypothesis,
+          strategy: retryDecision.strategy,
+          strategyChanged,
+          changedFromPrevious: retryDecision.changedFromPrevious,
+          successCriteria: retryDecision.successCriteria,
+          abandonCriteria: retryDecision.abandonCriteria,
         },
       };
-      const repairPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(repairInput, null, 2))}\n\n${roleContract}\n\n${strictContract}\n\nQUALITY GATE REMEDIATION:\n- Current attempt: ${qualityRepairAttempts}/${maxQualityRepairAttempts}.\n- Fix every blocking failure from qualityGate.blockingFailures before handover.\n- Keep edits scoped to qualityGate.scopeFiles when possible.\n- Do not create unrelated behavior changes.\n- If diagnostics mention TS6198 or no-unused-vars, remove or rename unused bindings so lint/typecheck passes.\n- If diagnostics mention TS2322 / IntrinsicAttributes, align props with existing component contracts instead of widening APIs blindly.\n- Return valid JSON with concrete edits only.`;
+      const repairPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(repairInput, null, 2))}\n\n${roleContract}\n\n${strictContract}\n\nQUALITY GATE REMEDIATION:\n- Current attempt: ${qualityRepairAttempts}/${maxQualityRepairAttempts}.\n- Fix every blocking failure from qualityGate.blockingFailures before handover.\n- Keep edits scoped to qualityGate.scopeFiles when possible.\n- Do not create unrelated behavior changes.\n- If diagnostics mention TS6198 or no-unused-vars, remove or rename unused bindings so lint/typecheck passes.\n- If diagnostics mention TS2322 / IntrinsicAttributes, align props with existing component contracts instead of widening APIs blindly.\n- Return valid JSON with concrete edits only.\n\n${retryInstructions}`;
+      const retryStartedAt = Date.now();
       const repairResult = await provider.generateStructured({
         agent: "Bug Fixer",
         taskType: baseInput.task.typeHint,
@@ -719,10 +772,50 @@ Return exactly this JSON shape:
         ...repairApplied.changedFiles,
       ]).map((x) => normalizePathToken(x));
       if (!repairApplied.changedFiles.length && !repairOutput.edits.length) {
+        const retryDurationMs = Date.now() - retryStartedAt;
+        retryStats.attempted += 1;
+        retryStats.unproductive += 1;
+        retryStats.additionalTimeMs += retryDurationMs;
+        if (previousRetryState && previousRetryState.strategy === retryDecision.strategy) {
+          retryStats.repeatedStrategy += 1;
+        }
+        noProgressStreak += 1;
+        previousRetryState = {
+          strategy: retryDecision.strategy,
+          signature: blockingSignature,
+          blockingCount: blockingBeforeCount,
+          category: retryDecision.category,
+        };
         output.risks = uniqueNormalized([
           ...output.risks,
           `Quality repair attempt ${qualityRepairAttempts} produced no file changes.`,
         ]);
+        await this.note({
+          taskId,
+          stage: "bug-fixer",
+          message: "quality_repair_attempt_result",
+          details: {
+            attempt: qualityRepairAttempts,
+            strategy: retryDecision.strategy,
+            changedFiles: [],
+            blockingFailuresBefore: blockingBeforeCount,
+            blockingFailuresAfter: blockingBeforeCount,
+            progressed: false,
+            sameSignatureAfter: true,
+            retryDurationMs,
+            noProgressStreak,
+            blockingFailures: blockingBeforeCount,
+            outOfScopeFailures: postEditSanity.outOfScopeFailureSummaries.length,
+            cheapChecksExecuted: postEditSanity.metrics.cheapChecksExecuted,
+            heavyChecksExecuted: postEditSanity.metrics.heavyChecksExecuted,
+            heavyChecksSkipped: postEditSanity.metrics.heavyChecksSkipped,
+            fullBuildChecksExecuted: postEditSanity.metrics.fullBuildChecksExecuted,
+            earlyInScopeFailures: postEditSanity.metrics.earlyInScopeFailures,
+            retryReason: retryDecision.reason,
+            failureHypothesis: retryDecision.hypothesis,
+            changedFromPrevious: retryDecision.changedFromPrevious,
+          },
+        });
         break;
       }
       output.filesChanged = unique([...output.filesChanged, ...repairApplied.changedFiles]);
@@ -742,20 +835,51 @@ Return exactly this JSON shape:
         scopeFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
         timeoutMsPerCheck: 120_000,
       });
+      const retryDurationMs = Date.now() - retryStartedAt;
+      const blockingAfterCount = postEditSanity.blockingFailureSummaries.length;
+      const blockingAfterSignature = buildFailureSignature(postEditSanity.blockingFailureSummaries);
+      const progressed = blockingAfterCount < blockingBeforeCount;
+      retryStats.attempted += 1;
+      retryStats.additionalTimeMs += retryDurationMs;
+      if (progressed) {
+        retryStats.productive += 1;
+        noProgressStreak = 0;
+      } else {
+        retryStats.unproductive += 1;
+        noProgressStreak += 1;
+      }
+      if (previousRetryState && previousRetryState.strategy === retryDecision.strategy) {
+        retryStats.repeatedStrategy += 1;
+      }
+      previousRetryState = {
+        strategy: retryDecision.strategy,
+        signature: blockingAfterSignature || blockingSignature,
+        blockingCount: blockingAfterCount,
+        category: retryDecision.category,
+      };
       await this.note({
         taskId,
         stage: "bug-fixer",
         message: "quality_repair_attempt_result",
         details: {
           attempt: qualityRepairAttempts,
+          strategy: retryDecision.strategy,
           changedFiles: repairApplied.changedFiles.slice(0, 8),
+          blockingFailuresBefore: blockingBeforeCount,
           blockingFailures: postEditSanity.blockingFailureSummaries.length,
           outOfScopeFailures: postEditSanity.outOfScopeFailureSummaries.length,
+          progressed,
+          sameSignatureAfter: blockingAfterSignature === blockingSignature,
+          retryDurationMs,
+          noProgressStreak,
           cheapChecksExecuted: postEditSanity.metrics.cheapChecksExecuted,
           heavyChecksExecuted: postEditSanity.metrics.heavyChecksExecuted,
           heavyChecksSkipped: postEditSanity.metrics.heavyChecksSkipped,
           fullBuildChecksExecuted: postEditSanity.metrics.fullBuildChecksExecuted,
           earlyInScopeFailures: postEditSanity.metrics.earlyInScopeFailures,
+          retryReason: retryDecision.reason,
+          failureHypothesis: retryDecision.hypothesis,
+          changedFromPrevious: retryDecision.changedFromPrevious,
         },
       });
     }
@@ -777,6 +901,13 @@ Return exactly this JSON shape:
         details: {
           attempts: qualityRepairAttempts,
           blockingFailures: postEditSanity.blockingFailureSummaries.slice(0, 3),
+          retryAttempts: retryStats.attempted,
+          retryProductive: retryStats.productive,
+          retryUnproductive: retryStats.unproductive,
+          retryRepeatedStrategy: retryStats.repeatedStrategy,
+          retryAdditionalTimeMs: retryStats.additionalTimeMs,
+          retryAbortedEarly: retryStats.abortedEarly,
+          retryAbortReason: retryStats.abortReason,
         },
       });
       throw new Error(
@@ -791,6 +922,13 @@ Return exactly this JSON shape:
         attempts: qualityRepairAttempts,
         checksExecuted: postEditSanity.checks.length,
         filesChanged: output.filesChanged.length,
+        retryAttempts: retryStats.attempted,
+        retryProductive: retryStats.productive,
+        retryUnproductive: retryStats.unproductive,
+        retryRepeatedStrategy: retryStats.repeatedStrategy,
+        retryAdditionalTimeMs: retryStats.additionalTimeMs,
+        retryAbortedEarly: retryStats.abortedEarly,
+        retryAbortReason: retryStats.abortReason,
         cheapChecksExecuted: postEditSanity.metrics.cheapChecksExecuted,
         heavyChecksExecuted: postEditSanity.metrics.heavyChecksExecuted,
         heavyChecksSkipped: postEditSanity.metrics.heavyChecksSkipped,
@@ -803,6 +941,7 @@ Return exactly this JSON shape:
       return `- ${check.status.toUpperCase()} | ${check.command} | exit=${check.exitCode ?? "null"} | ${check.durationMs}ms${detail}`;
     });
     const sanityMetricsLine = `- planned=${postEditSanity.metrics.plannedChecks} | executed=${postEditSanity.metrics.executedChecks} | cheap=${postEditSanity.metrics.cheapChecksExecuted} | heavy=${postEditSanity.metrics.heavyChecksExecuted} | heavy_skipped=${postEditSanity.metrics.heavyChecksSkipped} | full_build=${postEditSanity.metrics.fullBuildChecksExecuted} | early_in_scope_failures=${postEditSanity.metrics.earlyInScopeFailures}`;
+    const retryMetricsLine = `- attempts=${retryStats.attempted} | productive=${retryStats.productive} | unproductive=${retryStats.unproductive} | repeated_strategy=${retryStats.repeatedStrategy} | additional_time_ms=${retryStats.additionalTimeMs} | aborted_early=${retryStats.abortedEarly ? "yes" : "no"}${retryStats.abortReason ? ` | abort_reason=${trimText(retryStats.abortReason, 120)}` : ""}`;
 
     const view = `# HANDOFF
 
@@ -845,6 +984,9 @@ ${output.risks.length ? output.risks.map((x) => `- ${x}`).join("\n") : "- [none]
 ## Post-Edit Sanity Checks
 ${sanityCheckLines.length ? sanityCheckLines.join("\n") : "- [not run]"}
 ${sanityCheckLines.length ? `\n## Post-Edit Sanity Metrics\n${sanityMetricsLine}` : ""}
+
+## Retry Metrics
+${retryMetricsLine}
 
 ## Applied Edits
 ${output.edits.length ? output.edits.map((x) => `- ${x.action.toUpperCase()} ${x.path}`).join("\n") : "- [none]"}
