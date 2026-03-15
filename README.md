@@ -196,6 +196,7 @@ This works well with:
 ## Performance controls
 - `AI_AGENTS_DISABLE_CONFIG_CACHE=1`: disables in-memory cache for resolved global+local config.
 - `AI_AGENTS_DISABLE_PROMPT_CACHE=1`: disables in-memory cache for prompt file contents.
+- `AI_AGENTS_DISABLE_PROVIDER_CACHE=1`: disables in-memory provider instance reuse.
 - `AI_AGENTS_POLL_INTERVAL_MS=<ms>`: engine loop sleep interval when idle (default: `1200`, minimum accepted: `200`).
 - `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>`: max immediate no-sleep cycles after processing work (default: `1`, max: `20`).
 

@@ -72,7 +72,8 @@ The CLI is ready for future iterations:
 - Added low-risk runtime performance optimizations:
   - in-memory cache for `loadResolvedProjectConfig()` (with mtime-based invalidation, per process cwd)
   - in-memory cache for `loadPromptFile()` (with mtime-based invalidation and prompt-root change reset)
-  - optional cache disable flags: `AI_AGENTS_DISABLE_CONFIG_CACHE=1`, `AI_AGENTS_DISABLE_PROMPT_CACHE=1`
+  - in-memory provider instance reuse keyed by resolved provider config/env values
+  - optional cache disable flags: `AI_AGENTS_DISABLE_CONFIG_CACHE=1`, `AI_AGENTS_DISABLE_PROMPT_CACHE=1`, `AI_AGENTS_DISABLE_PROVIDER_CACHE=1`
 - Added engine polling controls:
   - `AI_AGENTS_POLL_INTERVAL_MS` for idle loop tuning
   - `AI_AGENTS_MAX_IMMEDIATE_CYCLES` to allow bounded immediate re-polls after processing work

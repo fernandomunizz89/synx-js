@@ -232,6 +232,7 @@ Advanced tuning:
 - set `AI_AGENTS_OPENAI_MAX_TOKENS` to cap completion tokens for OpenAI-compatible providers
 - set `AI_AGENTS_DISABLE_CONFIG_CACHE=1` to disable resolved-config in-memory cache
 - set `AI_AGENTS_DISABLE_PROMPT_CACHE=1` to disable prompt-file in-memory cache
+- set `AI_AGENTS_DISABLE_PROVIDER_CACHE=1` to disable provider instance reuse cache
 - set `AI_AGENTS_POLL_INTERVAL_MS=<ms>` to adjust idle polling interval (default `1200`, min `200`)
 - set `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>` to limit immediate no-sleep cycles after processing work (default `1`)
 
