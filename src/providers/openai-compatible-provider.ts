@@ -1,10 +1,42 @@
 import type { AgentName, ProviderRequest, ProviderResult, ProviderStageConfig, TaskType } from "../lib/types.js";
 import type { LlmProvider } from "./provider.js";
 import { extractJsonFromText } from "../lib/utils.js";
-import { logProviderParseRetry } from "../lib/logging.js";
+import { logProviderParseRetry, logProviderThrottle } from "../lib/logging.js";
+import { sleep } from "../lib/utils.js";
 
 interface ChatCompletionsResponse {
   choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
+}
+
+interface ProviderCallError extends Error {
+  transient: boolean;
+  statusCode?: number;
+  errorCode?: string;
+  retryAfterMs?: number;
+  parseRetries?: number;
+  validationPassed?: boolean;
+  parseRetryAdditionalDurationMs?: number;
+  providerAttempts?: number;
+  providerBackoffRetries?: number;
+  providerBackoffWaitMs?: number;
+  providerRateLimitWaitMs?: number;
+  providerThrottleReasons?: string[];
+}
+
+interface ProviderBackoffSettings {
+  maxRetries: number;
+  baseMs: number;
+  maxMs: number;
+  jitterRatio: number;
+}
+
+interface ProviderCallOutcome {
+  rawText: string;
+  attemptsUsed: number;
+  backoffRetriesUsed: number;
+  rateLimitWaitMs: number;
+  backoffWaitMs: number;
+  backoffReasons: string[];
 }
 
 const DEFAULT_SYSTEM_TEMPERATURE = 0.1;
@@ -37,6 +69,9 @@ const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {
   "Documentation": 0.3,
   "Mixed": 0.1,
 };
+
+const transientStatusCodes = new Set([408, 425, 429, 500, 502, 503, 504]);
+const rateLimitWindows = new Map<string, number[]>();
 
 function normalizeEnvToken(value: string): string {
   return value
@@ -132,6 +167,144 @@ function resolveJsonParseRetries(): number {
   return 1;
 }
 
+function resolveMaxRequestsPerMinute(): number {
+  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE || "");
+  if (!Number.isFinite(raw)) return 0;
+  const normalized = Math.floor(raw);
+  if (normalized <= 0) return 0;
+  return Math.min(5000, normalized);
+}
+
+function resolveRateLimitWindowMs(): number {
+  const raw = Number(process.env.AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS || "60000");
+  if (!Number.isFinite(raw)) return 60_000;
+  const normalized = Math.floor(raw);
+  if (normalized < 200) return 60_000;
+  return Math.min(600_000, normalized);
+}
+
+function resolveBackoffSettings(): ProviderBackoffSettings {
+  const maxRetriesRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES || "2");
+  const baseMsRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_BASE_MS || "500");
+  const maxMsRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_MAX_MS || "8000");
+  const jitterRatioRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_JITTER_RATIO || "0.2");
+
+  const maxRetries = Number.isFinite(maxRetriesRaw) ? Math.min(6, Math.max(0, Math.floor(maxRetriesRaw))) : 2;
+  const baseMs = Number.isFinite(baseMsRaw) ? Math.min(30000, Math.max(50, Math.floor(baseMsRaw))) : 500;
+  const maxMsCandidate = Number.isFinite(maxMsRaw) ? Math.min(120000, Math.max(baseMs, Math.floor(maxMsRaw))) : 8000;
+  const jitterRatio = Number.isFinite(jitterRatioRaw) ? Math.min(1, Math.max(0, jitterRatioRaw)) : 0.2;
+
+  return {
+    maxRetries,
+    baseMs,
+    maxMs: maxMsCandidate,
+    jitterRatio,
+  };
+}
+
+function parseRetryAfterMs(raw: string | null): number | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(120000, Math.round(seconds * 1000));
+  }
+
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isFinite(dateMs)) return undefined;
+  const delta = dateMs - Date.now();
+  if (delta <= 0) return 0;
+  return Math.min(120000, Math.round(delta));
+}
+
+function isProviderCallError(value: unknown): value is ProviderCallError {
+  return Boolean(value && typeof value === "object" && "transient" in value);
+}
+
+function createProviderCallError(args: {
+  message: string;
+  transient: boolean;
+  statusCode?: number;
+  errorCode?: string;
+  retryAfterMs?: number;
+}): ProviderCallError {
+  const error = new Error(args.message) as ProviderCallError;
+  error.transient = args.transient;
+  error.statusCode = args.statusCode;
+  error.errorCode = args.errorCode;
+  error.retryAfterMs = args.retryAfterMs;
+  return error;
+}
+
+function toProviderCallError(error: unknown): ProviderCallError {
+  if (isProviderCallError(error)) return error;
+  if (error instanceof Error) {
+    return createProviderCallError({
+      message: error.message,
+      transient: false,
+      errorCode: "unknown_error",
+    });
+  }
+  return createProviderCallError({
+    message: String(error),
+    transient: false,
+    errorCode: "unknown_error",
+  });
+}
+
+function pruneRateWindow(timestamps: number[], nowMs: number, windowMs: number): void {
+  const windowStart = nowMs - windowMs;
+  while (timestamps.length && timestamps[0] <= windowStart) {
+    timestamps.shift();
+  }
+}
+
+async function waitForRateLimitSlot(args: {
+  key: string;
+  maxRequestsPerMinute: number;
+  windowMs: number;
+}): Promise<number> {
+  if (args.maxRequestsPerMinute <= 0) return 0;
+
+  const timestamps = rateLimitWindows.get(args.key) || [];
+  let nowMs = Date.now();
+  pruneRateWindow(timestamps, nowMs, args.windowMs);
+
+  if (timestamps.length >= args.maxRequestsPerMinute) {
+    const waitMs = Math.max(1, (timestamps[0] + args.windowMs) - nowMs);
+    await sleep(waitMs);
+    nowMs = Date.now();
+    pruneRateWindow(timestamps, nowMs, args.windowMs);
+    timestamps.push(nowMs);
+    rateLimitWindows.set(args.key, timestamps);
+    return waitMs;
+  }
+
+  timestamps.push(nowMs);
+  rateLimitWindows.set(args.key, timestamps);
+  return 0;
+}
+
+function computeBackoffDelayMs(args: {
+  settings: ProviderBackoffSettings;
+  retryIndex: number;
+  retryAfterMs?: number;
+}): number {
+  let baseDelayMs: number;
+  if (typeof args.retryAfterMs === "number" && args.retryAfterMs >= 0) {
+    baseDelayMs = Math.min(args.settings.maxMs, Math.max(args.settings.baseMs, Math.floor(args.retryAfterMs)));
+  } else {
+    const exponential = args.settings.baseMs * (2 ** Math.max(0, args.retryIndex - 1));
+    baseDelayMs = Math.min(args.settings.maxMs, Math.max(args.settings.baseMs, Math.floor(exponential)));
+  }
+
+  const jitterSpan = baseDelayMs * args.settings.jitterRatio;
+  const jitter = jitterSpan > 0 ? ((Math.random() * 2) - 1) * jitterSpan : 0;
+  return Math.max(0, Math.round(baseDelayMs + jitter));
+}
+
 function parseFailureReason(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   return String(error);
@@ -197,7 +370,7 @@ function buildParseRetryMessages(args: {
   ];
 }
 
-async function callChatCompletions(args: {
+async function callChatCompletionsOnce(args: {
   baseUrl: string;
   headers: Record<string, string>;
   timeoutMs: number;
@@ -214,19 +387,220 @@ async function callChatCompletions(args: {
   } catch (error) {
     const name = error && typeof error === "object" && "name" in error ? (error as { name?: string }).name : "";
     if (name === "TimeoutError" || name === "AbortError") {
-      throw new Error(`Provider request timed out after ${args.timeoutMs}ms.`);
+      throw createProviderCallError({
+        message: `Provider request timed out after ${args.timeoutMs}ms.`,
+        transient: true,
+        errorCode: "timeout",
+      });
+    }
+    if (error instanceof Error) {
+      const lower = (error.message || "").toLowerCase();
+      const likelyConfigIssue = lower.includes("invalid url") || lower.includes("only absolute urls are supported");
+      throw createProviderCallError({
+        message: error.message || "Provider request failed before receiving a response.",
+        transient: !likelyConfigIssue,
+        errorCode: likelyConfigIssue ? "invalid_request_config" : "network_error",
+      });
     }
     throw error;
   }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Provider request failed with ${response.status}: ${body}`);
+    throw createProviderCallError({
+      message: `Provider request failed with ${response.status}: ${body}`,
+      transient: transientStatusCodes.has(response.status),
+      statusCode: response.status,
+      errorCode: `http_${response.status}`,
+      retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
+    });
   }
 
   const json = await response.json() as ChatCompletionsResponse;
   const content = json.choices?.[0]?.message?.content;
   return typeof content === "string" ? content : (content || []).map((item) => item.text || "").join("\n");
+}
+
+async function callChatCompletionsWithResilience(args: {
+  request: ProviderRequest;
+  provider: string;
+  model: string;
+  baseUrl: string;
+  headers: Record<string, string>;
+  timeoutMs: number;
+  payload: Record<string, unknown>;
+  maxRequestsPerMinute: number;
+  rateLimitWindowMs: number;
+  backoff: ProviderBackoffSettings;
+}): Promise<ProviderCallOutcome> {
+  const maxAttempts = 1 + args.backoff.maxRetries;
+  const rateLimitKey = `${args.baseUrl}::${args.model}`;
+  let attemptsUsed = 0;
+  let backoffRetriesUsed = 0;
+  let rateLimitWaitMs = 0;
+  let backoffWaitMs = 0;
+  const backoffReasons: string[] = [];
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    attemptsUsed = attempt;
+
+    if (args.maxRequestsPerMinute > 0) {
+      const waitedByRateLimit = await waitForRateLimitSlot({
+        key: rateLimitKey,
+        maxRequestsPerMinute: args.maxRequestsPerMinute,
+        windowMs: args.rateLimitWindowMs,
+      });
+      if (waitedByRateLimit > 0) {
+        rateLimitWaitMs += waitedByRateLimit;
+        await logProviderThrottle({
+          agent: args.request.agent,
+          taskId: args.request.taskId,
+          stage: args.request.stage,
+          provider: args.provider,
+          model: args.model,
+          event: "rate_limit_wait",
+          attempt,
+          maxAttempts,
+          retriesUsed: backoffRetriesUsed,
+          transient: true,
+          reason: `Request delayed by local rate limiter window (${args.maxRequestsPerMinute} requests per ${args.rateLimitWindowMs}ms).`,
+          waitMs: waitedByRateLimit,
+          rateLimitWaitMs,
+          backoffWaitMs,
+          requestLimit: args.maxRequestsPerMinute,
+          rateLimitWindowMs: args.rateLimitWindowMs,
+        }).catch(() => undefined);
+      }
+    }
+
+    try {
+      const rawText = await callChatCompletionsOnce({
+        baseUrl: args.baseUrl,
+        headers: args.headers,
+        timeoutMs: args.timeoutMs,
+        payload: args.payload,
+      });
+
+      if (attempt > 1) {
+        await logProviderThrottle({
+          agent: args.request.agent,
+          taskId: args.request.taskId,
+          stage: args.request.stage,
+          provider: args.provider,
+          model: args.model,
+          event: "backoff_recovered",
+          attempt,
+          maxAttempts,
+          retriesUsed: backoffRetriesUsed,
+          transient: true,
+          reason: "Provider recovered after transient failure and backoff.",
+          rateLimitWaitMs,
+          backoffWaitMs,
+          requestLimit: args.maxRequestsPerMinute,
+          rateLimitWindowMs: args.rateLimitWindowMs,
+        }).catch(() => undefined);
+      }
+
+      return {
+        rawText,
+        attemptsUsed,
+        backoffRetriesUsed,
+        rateLimitWaitMs,
+        backoffWaitMs,
+        backoffReasons,
+      };
+    } catch (rawError) {
+      const error = toProviderCallError(rawError);
+      const reason = error.message || "Provider request failed.";
+      const canRetry = error.transient && attempt < maxAttempts;
+
+      if (!canRetry) {
+        await logProviderThrottle({
+          agent: args.request.agent,
+          taskId: args.request.taskId,
+          stage: args.request.stage,
+          provider: args.provider,
+          model: args.model,
+          event: "backoff_exhausted",
+          attempt,
+          maxAttempts,
+          retriesUsed: backoffRetriesUsed,
+          transient: Boolean(error.transient),
+          statusCode: error.statusCode,
+          errorCode: error.errorCode,
+          reason,
+          rateLimitWaitMs,
+          backoffWaitMs,
+          requestLimit: args.maxRequestsPerMinute,
+          rateLimitWindowMs: args.rateLimitWindowMs,
+        }).catch(() => undefined);
+
+        error.providerAttempts = attemptsUsed;
+        error.providerBackoffRetries = backoffRetriesUsed;
+        error.providerBackoffWaitMs = backoffWaitMs;
+        error.providerRateLimitWaitMs = rateLimitWaitMs;
+        error.providerThrottleReasons = backoffReasons.slice(-4);
+        throw error;
+      }
+
+      const waitMs = computeBackoffDelayMs({
+        settings: args.backoff,
+        retryIndex: backoffRetriesUsed + 1,
+        retryAfterMs: error.retryAfterMs,
+      });
+      backoffReasons.push(reason);
+
+      await logProviderThrottle({
+        agent: args.request.agent,
+        taskId: args.request.taskId,
+        stage: args.request.stage,
+        provider: args.provider,
+        model: args.model,
+        event: "backoff_scheduled",
+        attempt,
+        maxAttempts,
+        retriesUsed: backoffRetriesUsed,
+        transient: true,
+        statusCode: error.statusCode,
+        errorCode: error.errorCode,
+        reason,
+        waitMs,
+        rateLimitWaitMs,
+        backoffWaitMs,
+        requestLimit: args.maxRequestsPerMinute,
+        rateLimitWindowMs: args.rateLimitWindowMs,
+      }).catch(() => undefined);
+
+      await sleep(waitMs);
+      backoffWaitMs += waitMs;
+      backoffRetriesUsed += 1;
+
+      await logProviderThrottle({
+        agent: args.request.agent,
+        taskId: args.request.taskId,
+        stage: args.request.stage,
+        provider: args.provider,
+        model: args.model,
+        event: "backoff_retry",
+        attempt: attempt + 1,
+        maxAttempts,
+        retriesUsed: backoffRetriesUsed,
+        transient: true,
+        reason: "Retrying provider call after backoff delay.",
+        waitMs,
+        rateLimitWaitMs,
+        backoffWaitMs,
+        requestLimit: args.maxRequestsPerMinute,
+        rateLimitWindowMs: args.rateLimitWindowMs,
+      }).catch(() => undefined);
+    }
+  }
+
+  throw createProviderCallError({
+    message: "Provider backoff loop exited without a terminal result.",
+    transient: false,
+    errorCode: "backoff_loop_error",
+  });
 }
 
 export class OpenAiCompatibleProvider implements LlmProvider {
@@ -257,12 +631,20 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const maxTokens = resolveMaxTokens();
     const temperature = resolveTemperature(request);
     const parseRetriesMax = resolveJsonParseRetries();
+    const maxRequestsPerMinute = resolveMaxRequestsPerMinute();
+    const rateLimitWindowMs = resolveRateLimitWindowMs();
+    const backoff = resolveBackoffSettings();
     const parseAttemptsMax = 1 + parseRetriesMax;
     const parseFailures: string[] = [];
     let parseRetriesUsed = 0;
     let parseRetryAdditionalDurationMs = 0;
     let lastRawText = "";
     let lastParseError = "";
+    let providerAttempts = 0;
+    let providerBackoffRetries = 0;
+    let providerBackoffWaitMs = 0;
+    let providerRateLimitWaitMs = 0;
+    const providerThrottleReasons: string[] = [];
 
     for (let attempt = 1; attempt <= parseAttemptsMax; attempt += 1) {
       const isRetry = attempt > 1;
@@ -302,12 +684,44 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       if (maxTokens) payload.max_tokens = maxTokens;
 
       const callStartedAt = Date.now();
-      const rawText = await callChatCompletions({
-        baseUrl: this.baseUrl,
-        headers,
-        timeoutMs,
-        payload,
-      });
+      let callOutcome: ProviderCallOutcome;
+      try {
+        callOutcome = await callChatCompletionsWithResilience({
+          request,
+          provider: "openai-compatible",
+          model: this.model,
+          baseUrl: this.baseUrl,
+          headers,
+          timeoutMs,
+          payload,
+          maxRequestsPerMinute,
+          rateLimitWindowMs,
+          backoff,
+        });
+      } catch (rawError) {
+        if (isRetry) {
+          parseRetryAdditionalDurationMs += Date.now() - callStartedAt;
+        }
+        const error = toProviderCallError(rawError);
+        error.providerAttempts = providerAttempts + (error.providerAttempts || 0);
+        error.providerBackoffRetries = providerBackoffRetries + (error.providerBackoffRetries || 0);
+        error.providerBackoffWaitMs = providerBackoffWaitMs + (error.providerBackoffWaitMs || 0);
+        error.providerRateLimitWaitMs = providerRateLimitWaitMs + (error.providerRateLimitWaitMs || 0);
+        error.providerThrottleReasons = [
+          ...providerThrottleReasons.slice(-3),
+          ...((error.providerThrottleReasons || []).slice(-3)),
+        ].slice(-4);
+        error.parseRetries = attempt - 1;
+        error.validationPassed = false;
+        error.parseRetryAdditionalDurationMs = parseRetryAdditionalDurationMs;
+        throw error;
+      }
+      const rawText = callOutcome.rawText;
+      providerAttempts += callOutcome.attemptsUsed;
+      providerBackoffRetries += callOutcome.backoffRetriesUsed;
+      providerBackoffWaitMs += callOutcome.backoffWaitMs;
+      providerRateLimitWaitMs += callOutcome.rateLimitWaitMs;
+      if (callOutcome.backoffReasons.length) providerThrottleReasons.push(...callOutcome.backoffReasons);
       if (isRetry) {
         parseRetryAdditionalDurationMs += Date.now() - callStartedAt;
       }
@@ -341,6 +755,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           model: this.model,
           parseRetries: parseRetriesUsed,
           validationPassed: true,
+          providerAttempts,
+          providerBackoffRetries,
+          providerBackoffWaitMs,
+          providerRateLimitWaitMs,
         };
       } catch (error) {
         const parseError = parseFailureReason(error);
@@ -384,11 +802,21 @@ export class OpenAiCompatibleProvider implements LlmProvider {
             validationPassed?: boolean;
             parseRetryAdditionalDurationMs?: number;
             parseFailureReasons?: string[];
+            providerAttempts?: number;
+            providerBackoffRetries?: number;
+            providerBackoffWaitMs?: number;
+            providerRateLimitWaitMs?: number;
+            providerThrottleReasons?: string[];
           };
           errorWithMeta.parseRetries = attempt - 1;
           errorWithMeta.validationPassed = false;
           errorWithMeta.parseRetryAdditionalDurationMs = parseRetryAdditionalDurationMs;
           errorWithMeta.parseFailureReasons = parseFailures.slice(-3);
+          errorWithMeta.providerAttempts = providerAttempts;
+          errorWithMeta.providerBackoffRetries = providerBackoffRetries;
+          errorWithMeta.providerBackoffWaitMs = providerBackoffWaitMs;
+          errorWithMeta.providerRateLimitWaitMs = providerRateLimitWaitMs;
+          errorWithMeta.providerThrottleReasons = providerThrottleReasons.slice(-4);
           throw errorWithMeta;
         }
       }

@@ -144,6 +144,10 @@ export class MockProvider implements LlmProvider {
       model: this.model,
       parseRetries: 0,
       validationPassed: true,
+      providerAttempts: 1,
+      providerBackoffRetries: 0,
+      providerBackoffWaitMs: 0,
+      providerRateLimitWaitMs: 0,
     };
   }
 }
