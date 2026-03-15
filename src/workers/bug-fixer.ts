@@ -6,6 +6,7 @@ import { extractQaHandoffContext } from "../lib/qa-context.js";
 import { deriveQaFileHints, synthesizeQaSelectorHotfixEdits } from "../lib/qa-remediation.js";
 import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { normalizeBuilderLikeModelOutput } from "../lib/model-output-recovery.js";
+import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
 import { bugFixerOutputSchema } from "../lib/schema.js";
@@ -208,6 +209,10 @@ function hasE2eInfraEdits(edits: Array<{ path: string }>): boolean {
   });
 }
 
+function hasSourceEdits(edits: Array<{ path: string }>): boolean {
+  return edits.some((edit) => edit.path.replace(/\\/g, "/").startsWith("src/"));
+}
+
 export class BugFixerWorker extends WorkerBase {
   readonly agent = "Bug Fixer" as const;
   readonly requestFileName = STAGE_FILE_NAMES.bugFixer;
@@ -230,6 +235,10 @@ export class BugFixerWorker extends WorkerBase {
       ...latestQaFindings,
       ...cumulativeQaFindings,
     ]);
+    const rootCauseFocus = deriveQaRootCauseFocus({
+      qaFailures,
+      findings: [...latestQaFindings, ...cumulativeQaFindings],
+    });
     const repeatedIssues = (qaHandoffContext?.cumulativeFindings ?? [])
       .filter((item) => item.occurrences >= 2)
       .map((item) => `${item.issue} (x${item.occurrences})`)
@@ -252,7 +261,11 @@ export class BugFixerWorker extends WorkerBase {
         latestFindings: latestQaFindings,
         repeatedIssues,
       }),
-      relatedFiles: unique([...(baseInput.task.extraContext.relatedFiles || []), ...qaFileHints]),
+      relatedFiles: unique([
+        ...(baseInput.task.extraContext.relatedFiles || []),
+        ...qaFileHints,
+        ...rootCauseFocus.sourceHints,
+      ]),
       limits: contextLimitsForIteration(qaHandoffContext?.attempt ?? 0),
     });
 
@@ -285,6 +298,7 @@ export class BugFixerWorker extends WorkerBase {
         requiresQaFeedbackRemediation: latestQaFindings.length > 0,
         mustChangeStrategy,
         previousSkippedSnippetPaths,
+        rootCauseFocus,
       },
     };
 
@@ -304,6 +318,8 @@ MANDATORY EXECUTION CONTRACT:
 - Treat tests as diagnostic signals: prioritize fixing root cause in application/source code first (typically src/**).
 - Do not change tests only to "make green" when behavior is broken in app code.
 - Modify tests only when evidence shows the test itself is wrong, brittle, or misaligned with intended behavior.
+- If executionContract.rootCauseFocus.mustPrioritizeSourceFix is true, include at least one concrete src/** edit targeting the likely root-cause area before/alongside test updates.
+- Use executionContract.rootCauseFocus.sourceHints as priority files for source-level investigation.
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
 - If QA evidence points to Cypress/E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
 - If QA findings mention missing data-cy selectors, add those data-cy attributes directly in the relevant UI components.
@@ -405,6 +421,12 @@ Return exactly this JSON shape:
       output.risks = unique([
         ...output.risks,
         "QA provided detailed expected-vs-received findings, but changesMade is empty.",
+      ]);
+    }
+    if (rootCauseFocus.mustPrioritizeSourceFix && !hasSourceEdits(output.edits)) {
+      output.risks = unique([
+        ...output.risks,
+        `Root-cause-first guard: QA signals indicate application-code defect, but no src/** edit was proposed. Priority hints: ${rootCauseFocus.sourceHints.join(", ") || "[none]"}.`,
       ]);
     }
 

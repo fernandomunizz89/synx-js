@@ -16,6 +16,7 @@ import {
   type QaReturnHistoryEntry,
 } from "../lib/qa-context.js";
 import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
+import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runCypressSelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
@@ -523,6 +524,42 @@ function filterUnsupportedSelectorReturnContext(
   });
 }
 
+function enrichReturnContextWithRootCauseHints(items: Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}>, failures: string[]): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  const focus = deriveQaRootCauseFocus({ qaFailures: failures, findings: items });
+  if (!focus.mustPrioritizeSourceFix || !focus.sourceHints.length) return items;
+
+  const hintLine = `Likely source root-cause paths: ${focus.sourceHints.slice(0, 5).join(", ")}`;
+  return items.map((item) => {
+    const text = `${item.issue}\n${item.expectedResult}\n${item.receivedResult}`.toLowerCase();
+    if (!/\be2e\b|assert|countdown|timer|import\/export|runtime|data-cy|behavior/.test(text)) {
+      return item;
+    }
+
+    const evidence = unique([...item.evidence, hintLine]).slice(0, 6);
+    const recommendedAction = item.recommendedAction.includes("Likely source root-cause paths:")
+      ? item.recommendedAction
+      : `${item.recommendedAction} Prioritize source-code fixes in ${focus.sourceHints.slice(0, 5).join(", ")} before modifying tests.`;
+
+    return {
+      ...item,
+      evidence,
+      recommendedAction,
+    };
+  });
+}
+
 function isLikelyUnitTestFile(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, "/").toLowerCase();
   return (
@@ -761,6 +798,7 @@ MANDATORY VALIDATION CONTRACT:
         existing: modelAndCheckReturnContext,
       }),
     ]);
+    output.returnContext = enrichReturnContextWithRootCauseHints(output.returnContext, output.failures);
     output.testCases = compactQaTestCases([
       ...output.testCases,
       ...buildFallbackQaTestCases({
