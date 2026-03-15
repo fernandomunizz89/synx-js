@@ -22,6 +22,43 @@ export async function writeDaemonState(state: unknown): Promise<void> {
   await writeJson(path.join(logsDir(), "..", "runtime", "daemon-state.json"), state);
 }
 
+export interface ProviderParseRetryLogEntry {
+  at?: string;
+  agent: AgentName;
+  taskId?: string;
+  stage?: string;
+  provider: string;
+  model: string;
+  event: "initial_parse_failed" | "parse_retry_started" | "parse_retry_failed" | "parse_retry_succeeded" | "parse_retry_exhausted";
+  attempt: number;
+  maxAttempts: number;
+  parseRetriesUsed: number;
+  reason?: string;
+  parseError?: string;
+  additionalDurationMs?: number;
+  retryRecoveredStage?: boolean;
+}
+
+export async function logProviderParseRetry(entry: ProviderParseRetryLogEntry): Promise<void> {
+  const payload = {
+    at: entry.at || nowIso(),
+    agent: entry.agent,
+    taskId: entry.taskId || "",
+    stage: entry.stage || "",
+    provider: entry.provider,
+    model: entry.model,
+    event: entry.event,
+    attempt: entry.attempt,
+    maxAttempts: entry.maxAttempts,
+    parseRetriesUsed: entry.parseRetriesUsed,
+    reason: entry.reason ? trimText(entry.reason, 240) : "",
+    parseError: entry.parseError ? trimText(entry.parseError, 320) : "",
+    additionalDurationMs: typeof entry.additionalDurationMs === "number" ? entry.additionalDurationMs : 0,
+    retryRecoveredStage: Boolean(entry.retryRecoveredStage),
+  };
+  await appendText(path.join(logsDir(), "provider-parse-retries.jsonl"), `${JSON.stringify(payload)}\n`);
+}
+
 type AgentAuditEvent = "stage_started" | "stage_finished" | "stage_failed" | "handoff_queued" | "stage_note";
 
 export interface AgentAuditEntry {
@@ -90,6 +127,7 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     "suspectFiles",
     "filesReviewed",
     "recommendedChecks",
+    "parseFailureReasons",
   ];
   for (const field of listFields) {
     if (Array.isArray(row[field])) {
@@ -123,6 +161,8 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     "retryUnproductive",
     "retryRepeatedStrategy",
     "retryAdditionalTimeMs",
+    "parseRetries",
+    "parseRetryAdditionalDurationMs",
   ];
   for (const field of numericFields) {
     if (typeof row[field] === "number" && Number.isFinite(row[field])) {

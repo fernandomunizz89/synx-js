@@ -54,6 +54,15 @@ export abstract class WorkerBase {
     } catch (error) {
       const endedAt = nowIso();
       const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+      const parseRetries = (error && typeof error === "object" && "parseRetries" in error && typeof (error as { parseRetries?: unknown }).parseRetries === "number")
+        ? Number((error as { parseRetries?: number }).parseRetries)
+        : 0;
+      const parseRetryAdditionalDurationMs = (error && typeof error === "object" && "parseRetryAdditionalDurationMs" in error && typeof (error as { parseRetryAdditionalDurationMs?: unknown }).parseRetryAdditionalDurationMs === "number")
+        ? Number((error as { parseRetryAdditionalDurationMs?: number }).parseRetryAdditionalDurationMs)
+        : 0;
+      const parseFailureReasons = (error && typeof error === "object" && "parseFailureReasons" in error && Array.isArray((error as { parseFailureReasons?: unknown }).parseFailureReasons))
+        ? ((error as { parseFailureReasons?: unknown[] }).parseFailureReasons || []).filter((x): x is string => typeof x === "string").slice(0, 3)
+        : [];
       const meta = await loadTaskMeta(taskId);
       meta.status = "failed";
       meta.currentAgent = this.agent;
@@ -67,12 +76,18 @@ export abstract class WorkerBase {
         endedAt,
         durationMs,
         status: "failed",
-        parseRetries: 0,
+        parseRetries,
         validationPassed: false,
       };
       await logTiming(taskPath, timing);
 
       const humanMessage = providerErrorToHuman(error instanceof Error ? error.message : String(error));
+      if (parseRetries > 0) {
+        await logTaskEvent(
+          taskPath,
+          `${this.agent} parsing retries used before failure: ${parseRetries} (extra ${parseRetryAdditionalDurationMs}ms)${parseFailureReasons.length ? ` | reasons: ${parseFailureReasons.join(" | ")}` : ""}`,
+        );
+      }
       await logTaskEvent(taskPath, `${this.agent} failed: ${humanMessage}`);
       await logDaemon(`${this.agent} failed for ${taskId}: ${humanMessage}`);
       await logAgentAudit(taskPath, {
@@ -83,6 +98,11 @@ export abstract class WorkerBase {
         status: "failed",
         durationMs,
         error: humanMessage,
+        output: {
+          parseRetries,
+          parseRetryAdditionalDurationMs,
+          parseFailureReasons,
+        },
       });
       await fs.unlink(workingFile).catch(() => undefined);
       return false;
