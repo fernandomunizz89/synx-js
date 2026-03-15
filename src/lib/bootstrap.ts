@@ -207,6 +207,8 @@ If QA indicates low-signal Cypress output, update Cypress config/scripts so fail
 When QA findings mention missing data-cy selectors, add the requested data-cy attributes in the target components.
 When QA findings mention import/export mismatch, reconcile the symbol contract in source imports/exports.
 When QA findings mention Cypress config mismatch, fix baseUrl/specPattern/config usage so tests run with one clear config.
+Your patch must be ready for strict pre-QA gates: lint and build checks (when available) plus language-aware sanity checks must pass.
+Treat command diagnostics/log output as first-class evidence; resolve hidden blocker signatures before handoff.
 Only use paths that are valid for the workspace and avoid protected folders.
 
 Return exactly:
@@ -257,6 +259,8 @@ If QA indicates low-signal Cypress output, update Cypress config/scripts so fail
 When QA findings mention missing data-cy selectors, add the requested data-cy attributes in the target components.
 When QA findings mention import/export mismatch, reconcile the symbol contract in source imports/exports.
 When QA findings mention Cypress config mismatch, fix baseUrl/specPattern/config usage so tests run with one clear config.
+Your patch must be ready for strict pre-QA gates: lint and build checks (when available) plus language-aware sanity checks must pass.
+Treat command diagnostics/log output as first-class evidence; resolve hidden blocker signatures before handoff.
 Only use paths that are valid for the workspace and avoid protected folders.
 Keep edits minimal and implementation-oriented.
 

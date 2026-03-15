@@ -103,7 +103,9 @@ const useTimer = () => {
 
 export default useTimer
 `;
-const MAIN_FLOW_E2E_SAFE_TEMPLATE = `describe('Main flow smoke test', () => {
+const MAIN_FLOW_E2E_SAFE_TEMPLATE = `/// <reference types="cypress" />
+
+describe('Main flow smoke test', () => {
   beforeEach(() => {
     cy.visit('/')
   })

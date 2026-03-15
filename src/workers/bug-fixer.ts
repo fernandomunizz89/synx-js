@@ -426,6 +426,8 @@ MANDATORY EXECUTION CONTRACT:
 - If QA findings show identical timer values across assertions (e.g., expected "25:00" to not equal "25:00"), adjust E2E timing/assertion flow so countdown changes are observable.
 - If QA findings mention missing E2E selectors, either add matching data-cy attributes in source or update E2E spec to canonical selectors that already exist in source.
 - Resolve lint/type issues before handoff (for example TS6198 and no-unused-vars on hook destructuring or config parameters).
+- Pre-QA quality gate is strict: lint and build checks (when scripts exist) plus language-aware sanity checks must pass before handoff.
+- Inspect command diagnostics/log output for hidden blocker signatures (import/export mismatch, syntax/type crashes) and fix them before handoff.
 - If executionContract.previousSkippedSnippetPaths is non-empty, avoid replace_snippet for those paths and use full-file replace edits derived from current workspace content.
 - Use exact file structures from workspaceContext; do not invent class names or JSX wrappers that are not present in the file content.
 - Before finalizing edits, self-check for obvious syntax/import/type mismatches introduced by your changes.
@@ -613,6 +615,10 @@ Return exactly this JSON shape:
       changedFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
       scopeFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
       timeoutMsPerCheck: 120_000,
+      requireLintScript: true,
+      requireBuildScript: true,
+      enforceCleanProject: true,
+      detectHiddenLogBlockers: true,
     });
     await this.note({
       taskId,
@@ -838,6 +844,10 @@ Return exactly this JSON shape:
         changedFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
         scopeFiles: stageScopeFiles.length ? stageScopeFiles : output.filesChanged,
         timeoutMsPerCheck: 120_000,
+        requireLintScript: true,
+        requireBuildScript: true,
+        enforceCleanProject: true,
+        detectHiddenLogBlockers: true,
       });
       const retryDurationMs = Date.now() - retryStartedAt;
       const blockingAfterCount = postEditSanity.blockingFailureSummaries.length;

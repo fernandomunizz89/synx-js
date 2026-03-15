@@ -90,6 +90,37 @@ function extractDiagnostics(stdout: string, stderr: string): string[] {
   return unique(out);
 }
 
+function extractHiddenLogBlockers(stdout: string, stderr: string): string[] {
+  const combined = `${stdout}\n${stderr}`;
+  const out: string[] = [];
+  const blockerPatterns = [
+    /\buncaught\s+(syntaxerror|typeerror|referenceerror)\b/i,
+    /\bdoes not provide an export named\b/i,
+    /\berror\s+ts\d{4}\b/i,
+    /\bmodule build failed\b/i,
+    /\bfailed to compile\b/i,
+    /\bcannot find module\b/i,
+    /\bsyntaxerror\b/i,
+  ];
+  const ignorePatterns = [
+    /^\s*warning[:\s]/i,
+    /\b0\s+failing\b/i,
+    /\b0\s+errors?\b/i,
+    /\bno\s+errors?\b/i,
+  ];
+
+  for (const rawLine of combined.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+/g, " ").trim();
+    if (!line) continue;
+    if (ignorePatterns.some((pattern) => pattern.test(line))) continue;
+    if (!blockerPatterns.some((pattern) => pattern.test(line))) continue;
+    out.push(line.length > 220 ? `${line.slice(0, 219)}…` : line);
+    if (out.length >= 4) break;
+  }
+
+  return unique(out);
+}
+
 function normalizePathToken(value: string): string {
   return value
     .trim()
@@ -132,10 +163,13 @@ function inferScriptCategory(script: string, scriptBody: string): "cheap" | "hea
 function chooseSanityScripts(args: {
   scripts: Record<string, string>;
   changedFiles: string[];
+  requireLintScript?: boolean;
+  requireBuildScript?: boolean;
 }): Array<{ script: string; category: "cheap" | "heavy" }> {
   const out: Array<{ script: string; category: "cheap" | "heavy" }> = [];
   const changedCode = args.changedFiles.some(looksLikeCodeFile);
   const scripts = args.scripts;
+  const requireBuildScript = Boolean(args.requireBuildScript);
 
   if (scripts.lint) out.push({ script: "lint", category: "cheap" });
   if (scripts.typecheck) out.push({ script: "typecheck", category: "cheap" });
@@ -146,7 +180,7 @@ function chooseSanityScripts(args: {
       out.push({ script: "check", category: checkCategory });
     }
   }
-  if (changedCode && scripts.build && !out.some((item) => item.script === "build")) {
+  if ((changedCode || requireBuildScript) && scripts.build && !out.some((item) => item.script === "build")) {
     out.push({ script: "build", category: "heavy" });
   }
 
@@ -286,10 +320,14 @@ function resolveSanityCommands(args: {
   changedFiles: string[];
   scripts: Record<string, string>;
   manager: PackageManager;
+  requireLintScript?: boolean;
+  requireBuildScript?: boolean;
 }): { cheap: SanityCommand[]; heavy: SanityCommand[] } {
   const scriptChoices = chooseSanityScripts({
     scripts: args.scripts,
     changedFiles: args.changedFiles,
+    requireLintScript: args.requireLintScript,
+    requireBuildScript: args.requireBuildScript,
   });
   const scriptCommands: SanityCommand[] = scriptChoices.map((item) => {
     const command = buildScriptCommand(args.manager, item.script);
@@ -547,20 +585,32 @@ function checkFailureIsInScope(check: ValidationCheckResult, scopeSet: Set<strin
   return intersectsScope(paths, scopeSet);
 }
 
+function isProjectWideBlockingCheck(check: ValidationCheckResult): boolean {
+  return !check.command.toLowerCase().startsWith("heuristic:");
+}
+
 export async function runPostEditSanityChecks(args: {
   workspaceRoot: string;
   changedFiles: string[];
   scopeFiles?: string[];
   timeoutMsPerCheck?: number;
+  requireLintScript?: boolean;
+  requireBuildScript?: boolean;
+  enforceCleanProject?: boolean;
+  detectHiddenLogBlockers?: boolean;
 }): Promise<PostEditSanityResult> {
   const workspaceRoot = path.resolve(args.workspaceRoot);
   const scripts = await readPackageScripts(workspaceRoot);
   const manager = selectPackageManager(workspaceRoot);
+  const detectHiddenLogBlockers = args.detectHiddenLogBlockers ?? true;
+  const enforceCleanProject = Boolean(args.enforceCleanProject);
   const commandPlan = resolveSanityCommands({
     workspaceRoot,
     changedFiles: args.changedFiles,
     scripts,
     manager,
+    requireLintScript: args.requireLintScript,
+    requireBuildScript: args.requireBuildScript,
   });
   const heuristicChecks = await runCheapStaticHeuristics({
     workspaceRoot,
@@ -607,10 +657,12 @@ export async function runPostEditSanityChecks(args: {
       timeoutMs,
       maxOutputChars: 8_000,
     });
-    const diagnostics = extractDiagnostics(result.stdout, result.stderr);
+    const hiddenBlockers = detectHiddenLogBlockers ? extractHiddenLogBlockers(result.stdout, result.stderr) : [];
+    const diagnostics = unique([...extractDiagnostics(result.stdout, result.stderr), ...hiddenBlockers]).slice(0, 6);
+    const failedByHiddenLogs = hiddenBlockers.length > 0;
     checks.push({
       command: sanityCommand.label,
-      status: result.exitCode === 0 && !result.timedOut ? "passed" : "failed",
+      status: result.exitCode === 0 && !result.timedOut && !failedByHiddenLogs ? "passed" : "failed",
       category: "cheap",
       exitCode: result.exitCode,
       timedOut: result.timedOut,
@@ -618,7 +670,10 @@ export async function runPostEditSanityChecks(args: {
       stdoutPreview: result.stdout.slice(0, 1000),
       stderrPreview: result.stderr.slice(0, 1000),
       diagnostics,
-      qaConfigNotes: [sanityCommand.note],
+      qaConfigNotes: [
+        sanityCommand.note,
+        ...(failedByHiddenLogs ? ["Hidden blocker signatures detected in command output; treated as a failing check."] : []),
+      ],
       artifacts: [],
     });
     metrics.executedChecks += 1;
@@ -658,10 +713,12 @@ export async function runPostEditSanityChecks(args: {
         timeoutMs,
         maxOutputChars: 8_000,
       });
-      const diagnostics = extractDiagnostics(result.stdout, result.stderr);
+      const hiddenBlockers = detectHiddenLogBlockers ? extractHiddenLogBlockers(result.stdout, result.stderr) : [];
+      const diagnostics = unique([...extractDiagnostics(result.stdout, result.stderr), ...hiddenBlockers]).slice(0, 6);
+      const failedByHiddenLogs = hiddenBlockers.length > 0;
       checks.push({
         command: sanityCommand.label,
-        status: result.exitCode === 0 && !result.timedOut ? "passed" : "failed",
+        status: result.exitCode === 0 && !result.timedOut && !failedByHiddenLogs ? "passed" : "failed",
         category: "heavy",
         exitCode: result.exitCode,
         timedOut: result.timedOut,
@@ -669,7 +726,10 @@ export async function runPostEditSanityChecks(args: {
         stdoutPreview: result.stdout.slice(0, 1000),
         stderrPreview: result.stderr.slice(0, 1000),
         diagnostics,
-        qaConfigNotes: [sanityCommand.note],
+        qaConfigNotes: [
+          sanityCommand.note,
+          ...(failedByHiddenLogs ? ["Hidden blocker signatures detected in command output; treated as a failing check."] : []),
+        ],
         artifacts: [],
       });
       metrics.executedChecks += 1;
@@ -694,8 +754,9 @@ export async function runPostEditSanityChecks(args: {
       check.stdoutPreview,
     ].join("\n"));
     const isInScope = intersectsScope(paths, scopeSet);
+    const isProjectWide = enforceCleanProject && isProjectWideBlockingCheck(check);
     failureSummaries.push(summary);
-    if (isInScope) {
+    if (isInScope || isProjectWide) {
       blockingFailureSummaries.push(summary);
       continue;
     }
