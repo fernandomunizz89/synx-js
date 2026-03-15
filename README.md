@@ -159,6 +159,8 @@ This works well with:
 - Pre-handover quality gate: `Feature Builder` and `Bug Fixer` now run scoped sanity checks before handoff; if scoped lint/type/syntax blockers remain, handoff is blocked and remediation is attempted first.
 - Sanity checks now run in cheap-first order: lightweight static heuristics + scoped lint/type checks execute before heavy checks (for example full build).
 - When cheap in-scope failures are already conclusive, heavy checks are skipped in that pass to reduce unnecessary cost/time.
+- Quality-repair retries are adaptive (not blind repetition): attempt 1 uses local/cheap fixes, attempt 2 expands context, and repeated no-progress retries are aborted early instead of forcing a full retry count.
+- Each quality-repair retry now logs explicit reason, failure hypothesis, selected strategy, strategy delta vs previous attempt, and success/abandon criteria for auditability.
 - Scoped quality filtering now ignores out-of-scope failures (existing errors unrelated to files changed in the current stage), reducing noisy loop-backs.
 - JS/TS code-quality bootstrap now attempts to provision linting/typecheck automatically: it can install missing ESLint dependencies, generate a conservative `eslint.config.cjs`, and wire `scripts.lint`/`scripts.typecheck` before validation.
 - For `Feature`, `Bug`, `Refactor`, and `Mixed`, main-flow E2E validation is required by QA.
@@ -204,6 +206,7 @@ This works well with:
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
 - `AI_AGENTS_QA_MAX_RETRIES`: max QA fail loops before escalation to human review (default: `3`).
+- `AI_AGENTS_QUALITY_REPAIR_MAX_ATTEMPTS`: max quality-gate remediation attempts inside Feature Builder/Bug Fixer (default: `3`, cap: `5`).
 
 ## Performance controls
 - `AI_AGENTS_DISABLE_CONFIG_CACHE=1`: disables in-memory cache for resolved global+local config.
