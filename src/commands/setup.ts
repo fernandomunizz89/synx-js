@@ -21,9 +21,19 @@ type SetupProviderChoice = "mock" | "lm-studio" | "openai-compatible";
 type ConnectionMode = "saved" | "env";
 type LmStudioConnectionMode = "saved-recommended" | "saved-custom" | "env";
 type LmStudioModelMode = "auto" | "fixed";
+type OpenAiCompatiblePreset = "openai" | "openrouter" | "custom";
 
 const DEFAULT_BASE_URL_ENV = "AI_AGENTS_OPENAI_BASE_URL";
 const DEFAULT_API_KEY_ENV = "AI_AGENTS_OPENAI_API_KEY";
+
+interface OpenAiCompatiblePresetConfig {
+  label: string;
+  baseUrl: string;
+  defaultBaseUrlEnv: string;
+  defaultApiKeyEnv: string;
+  apiKeyLabel: string;
+  modelExamples: string[];
+}
 
 function isProviderHealthy(health: ProviderHealth): boolean {
   return health.reachable && (health.modelFound ?? true);
@@ -34,6 +44,39 @@ function defaultOpenAiCompatibleFields(): Pick<ProviderStageConfig, "baseUrlEnv"
     baseUrlEnv: DEFAULT_BASE_URL_ENV,
     apiKeyEnv: DEFAULT_API_KEY_ENV,
   };
+}
+
+function resolveOpenAiCompatiblePreset(preset: OpenAiCompatiblePreset): OpenAiCompatiblePresetConfig {
+  switch (preset) {
+    case "openai":
+      return {
+        label: "OpenAI API (cloud)",
+        baseUrl: "https://api.openai.com/v1",
+        defaultBaseUrlEnv: "OPENAI_BASE_URL",
+        defaultApiKeyEnv: "OPENAI_API_KEY",
+        apiKeyLabel: "OpenAI API key",
+        modelExamples: ["gpt-5.3-codex", "gpt-5", "gpt-4.1"],
+      };
+    case "openrouter":
+      return {
+        label: "OpenRouter (cloud multi-model gateway)",
+        baseUrl: "https://openrouter.ai/api/v1",
+        defaultBaseUrlEnv: "OPENROUTER_BASE_URL",
+        defaultApiKeyEnv: "OPENROUTER_API_KEY",
+        apiKeyLabel: "OpenRouter API key",
+        modelExamples: ["anthropic/claude-sonnet-4.6", "anthropic/claude-opus-4.6", "qwen/qwen3.5-plus"],
+      };
+    case "custom":
+    default:
+      return {
+        label: "Custom OpenAI-compatible endpoint",
+        baseUrl: "http://127.0.0.1:1234/v1",
+        defaultBaseUrlEnv: DEFAULT_BASE_URL_ENV,
+        defaultApiKeyEnv: DEFAULT_API_KEY_ENV,
+        apiKeyLabel: "API key",
+        modelExamples: [],
+      };
+  }
 }
 
 function printSetupFixHints(label: string, health: ProviderHealth, config: ProviderStageConfig): void {
@@ -77,7 +120,7 @@ function printSetupFixHints(label: string, health: ProviderHealth, config: Provi
   console.log("2. Retry setup and validate again.");
 }
 
-async function chooseOpenAiCompatibleModel(config: ProviderStageConfig): Promise<string> {
+async function chooseOpenAiCompatibleModel(config: ProviderStageConfig, manualExamples: string[] = []): Promise<string> {
   const discovery = await discoverProviderModels(config);
   const suggestedManualModel = isAutoModelToken(config.model) ? "" : (config.model || "").trim();
 
@@ -111,6 +154,9 @@ async function chooseOpenAiCompatibleModel(config: ProviderStageConfig): Promise
       console.log(`Tip: choose saved connection details in setup to avoid exporting ${config.baseUrlEnv || DEFAULT_BASE_URL_ENV}.`);
     }
     console.log("You can still continue by typing the model manually.");
+    if (manualExamples.length) {
+      console.log(`Model examples for this provider: ${manualExamples.join(", ")}`);
+    }
   }
 
   if (suggestedManualModel) {
@@ -301,6 +347,29 @@ export const setupCommand = new Command("setup")
         nextGlobal.providers.dispatcher = { ...lmStudioConfig };
         nextGlobal.providers.planner = { ...lmStudioConfig };
       } else {
+        const openAiPreset = await selectOption<OpenAiCompatiblePreset>(
+          "OpenAI-compatible provider preset",
+          [
+            {
+              value: "openai",
+              label: "OpenAI API (cloud)",
+              description: "Use api.openai.com with OpenAI model ids",
+            },
+            {
+              value: "openrouter",
+              label: "OpenRouter (cloud multi-model)",
+              description: "Use OpenRouter for models like Claude/Qwen and others",
+            },
+            {
+              value: "custom",
+              label: "Custom OpenAI-compatible endpoint",
+              description: "Use any OpenAI-compatible gateway or self-hosted endpoint",
+            },
+          ],
+          "openai"
+        );
+        const presetConfig = resolveOpenAiCompatiblePreset(openAiPreset);
+
         const connectionMode = await selectOption<ConnectionMode>(
           "OpenAI-compatible connection mode",
           [
@@ -328,9 +397,12 @@ export const setupCommand = new Command("setup")
           const existingApiKey = currentGlobal.providers.dispatcher.apiKey || "";
           const baseUrl = await promptTextWithDefault(
             "Base URL:",
-            existingBaseUrl || "http://127.0.0.1:1234/v1"
+            existingBaseUrl || presetConfig.baseUrl
           );
-          const apiKey = await promptTextWithDefault("API key (optional, press Enter to keep empty):", existingApiKey);
+          const apiKey = await promptTextWithDefault(
+            `${presetConfig.apiKeyLabel} (optional, press Enter to keep empty):`,
+            existingApiKey
+          );
           baseConfig = {
             ...baseConfig,
             baseUrl,
@@ -340,33 +412,45 @@ export const setupCommand = new Command("setup")
           const envMode = await selectOption<"default" | "custom">(
             "Choose environment variable names",
             [
-              { value: "default", label: "Use common names (AI_AGENTS_OPENAI_BASE_URL / AI_AGENTS_OPENAI_API_KEY)" },
+              {
+                value: "default",
+                label: `Use preset defaults (${presetConfig.defaultBaseUrlEnv} / ${presetConfig.defaultApiKeyEnv})`,
+              },
               { value: "custom", label: "Type custom environment variable names" },
             ],
             "default"
           );
 
           const baseUrlEnv = envMode === "default"
-            ? DEFAULT_BASE_URL_ENV
+            ? presetConfig.defaultBaseUrlEnv
             : await promptRequiredText("Base URL env variable name (required):");
           const apiKeyEnv = envMode === "default"
-            ? DEFAULT_API_KEY_ENV
+            ? presetConfig.defaultApiKeyEnv
             : await promptRequiredText("API key env variable name (required):");
           baseConfig = {
             ...baseConfig,
             baseUrlEnv,
             apiKeyEnv,
-            baseUrl: undefined,
+            baseUrl: envMode === "default" ? presetConfig.baseUrl : undefined,
             apiKey: undefined,
           };
-          console.log(`\nYou chose env mode. Remember to define ${baseUrlEnv} and ${apiKeyEnv} in each terminal.`);
+          console.log(
+            envMode === "default"
+              ? `\nYou chose env mode with preset base URL (${presetConfig.baseUrl}). Define ${apiKeyEnv} in each terminal.`
+              : `\nYou chose env mode. Remember to define ${baseUrlEnv} and ${apiKeyEnv} in each terminal.`
+          );
+        }
+
+        if (presetConfig.modelExamples.length) {
+          console.log(`\nSelected preset: ${presetConfig.label}`);
+          console.log(`Common model ids: ${presetConfig.modelExamples.join(", ")}`);
         }
 
         const openAiCompatibleConfig: ProviderStageConfig = {
           ...baseConfig,
         };
 
-        const model = await chooseOpenAiCompatibleModel(openAiCompatibleConfig);
+        const model = await chooseOpenAiCompatibleModel(openAiCompatibleConfig, presetConfig.modelExamples);
         nextGlobal.providers.dispatcher = { ...openAiCompatibleConfig, model };
         nextGlobal.providers.planner = { ...openAiCompatibleConfig, model };
       }
