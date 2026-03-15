@@ -59,12 +59,54 @@ export const plannerOutputSchema = z.object({
   nextAgent: z.literal("Feature Builder"),
 });
 
+const riskLevelSchema = z.enum(["low", "medium", "high", "unknown"]);
+
+const investigationRiskAssessmentSchema = z.object({
+  buildRisk: riskLevelSchema.default("unknown"),
+  syntaxRisk: riskLevelSchema.default("unknown"),
+  logicRisk: riskLevelSchema.default("unknown"),
+  integrationRisk: riskLevelSchema.default("unknown"),
+  regressionRisk: riskLevelSchema.default("unknown"),
+});
+
+const implementationRiskAssessmentSchema = z.object({
+  buildRisk: riskLevelSchema.default("unknown"),
+  syntaxRisk: riskLevelSchema.default("unknown"),
+  importExportRisk: riskLevelSchema.default("unknown"),
+  typingRisk: riskLevelSchema.default("unknown"),
+  logicRisk: riskLevelSchema.default("unknown"),
+  integrationRisk: riskLevelSchema.default("unknown"),
+  regressionRisk: riskLevelSchema.default("unknown"),
+});
+
+const qaTechnicalRiskSummarySchema = z.object({
+  buildRisk: riskLevelSchema.default("unknown"),
+  syntaxRisk: riskLevelSchema.default("unknown"),
+  importExportRisk: riskLevelSchema.default("unknown"),
+  referenceRisk: riskLevelSchema.default("unknown"),
+  logicRisk: riskLevelSchema.default("unknown"),
+  regressionRisk: riskLevelSchema.default("unknown"),
+});
+
 export const bugInvestigatorOutputSchema = z.object({
   symptomSummary: z.string(),
   knownFacts: z.array(z.string()),
   likelyCauses: z.array(z.string()),
   investigationSteps: z.array(z.string()),
   unknowns: z.array(z.string()),
+  suspectFiles: z.array(z.string()).optional().default([]),
+  suspectAreas: z.array(z.string()).optional().default([]),
+  primaryHypothesis: z.string().optional().default(""),
+  secondaryHypotheses: z.array(z.string()).optional().default([]),
+  riskAssessment: investigationRiskAssessmentSchema.optional().default({
+    buildRisk: "unknown",
+    syntaxRisk: "unknown",
+    logicRisk: "unknown",
+    integrationRisk: "unknown",
+    regressionRisk: "unknown",
+  }),
+  builderChecks: z.array(z.string()).optional().default([]),
+  handoffNotes: z.array(z.string()).optional().default([]),
   nextAgent: z.literal("Bug Fixer"),
 });
 
@@ -104,9 +146,24 @@ export const builderEditSchema = z.object({
 export const builderOutputSchema = z.object({
   implementationSummary: z.string(),
   filesChanged: z.array(z.string()),
+  impactedFiles: z.array(z.string()).optional().default([]),
   changesMade: z.array(z.string()),
   unitTestsAdded: z.array(z.string()).optional().default([]),
   testsToRun: z.array(z.string()),
+  technicalRisks: z.array(z.string()).optional().default([]),
+  riskAssessment: implementationRiskAssessmentSchema.optional().default({
+    buildRisk: "unknown",
+    syntaxRisk: "unknown",
+    importExportRisk: "unknown",
+    typingRisk: "unknown",
+    logicRisk: "unknown",
+    integrationRisk: "unknown",
+    regressionRisk: "unknown",
+  }),
+  reviewFocus: z.array(z.string()).optional().default([]),
+  manualValidationNeeded: z.array(z.string()).optional().default([]),
+  residualRisks: z.array(z.string()).optional().default([]),
+  verificationMode: z.enum(["static_review", "executed_checks", "mixed"]).optional().default("static_review"),
   risks: z.array(z.string()),
   edits: z.array(builderEditSchema).min(1),
   nextAgent: z.literal("Reviewer"),
@@ -196,6 +253,19 @@ export const qaOutputSchema = z.object({
   verdict: z.enum(["pass", "fail"]),
   e2ePlan: z.array(z.string()).optional().default([]),
   changedFiles: z.array(z.string()).optional().default([]),
+  filesReviewed: z.array(z.string()).optional().default([]),
+  validationMode: z.enum(["static_review", "executed_checks", "mixed"]).optional().default("executed_checks"),
+  technicalRiskSummary: qaTechnicalRiskSummarySchema.optional().default({
+    buildRisk: "unknown",
+    syntaxRisk: "unknown",
+    importExportRisk: "unknown",
+    referenceRisk: "unknown",
+    logicRisk: "unknown",
+    regressionRisk: "unknown",
+  }),
+  recommendedChecks: z.array(z.string()).optional().default([]),
+  manualValidationNeeded: z.array(z.string()).optional().default([]),
+  residualRisks: z.array(z.string()).optional().default([]),
   executedChecks: z.array(validationCheckResultSchema).optional().default([]),
   returnContext: z.array(qaReturnContextItemSchema).optional().default([]),
   qaHandoffContext: qaHandoffContextSchema.optional(),

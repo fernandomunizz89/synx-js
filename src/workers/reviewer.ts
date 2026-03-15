@@ -1,5 +1,6 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { reviewerOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
@@ -17,9 +18,14 @@ export class ReviewerWorker extends WorkerBase {
     const prompt = await loadPromptFile("reviewer.md");
     const provider = createProvider(config.providers.planner);
     const modelInput = await this.buildAgentInput(taskId, request);
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2));
+    const roleContract = buildAgentRoleContract("Reviewer", {
+      stage: "reviewer",
+      taskTypeHint: modelInput.task.typeHint,
+    });
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
     const result = await provider.generateStructured({
       agent: "Reviewer",
+      taskType: modelInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:

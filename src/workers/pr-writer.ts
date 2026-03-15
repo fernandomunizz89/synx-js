@@ -1,5 +1,6 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { prWriterOutputSchema } from "../lib/schema.js";
 import { finalizeForHumanReview } from "../lib/task.js";
 import type { StageEnvelope } from "../lib/types.js";
@@ -18,9 +19,14 @@ export class PrWriterWorker extends WorkerBase {
     const prompt = await loadPromptFile("pr-writer.md");
     const provider = createProvider(config.providers.planner);
     const modelInput = await this.buildAgentInput(taskId, request);
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2));
+    const roleContract = buildAgentRoleContract("PR Writer", {
+      stage: "pr",
+      taskTypeHint: modelInput.task.typeHint,
+    });
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
     const result = await provider.generateStructured({
       agent: "PR Writer",
+      taskType: modelInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:

@@ -3,11 +3,18 @@ import { readJson } from "../lib/fs.js";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadResolvedProjectConfig, loadPromptFile } from "../lib/config.js";
 import { taskDir } from "../lib/paths.js";
+import { collectProjectProfile, projectProfileFactLines } from "../lib/project-handoff.js";
+import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
+import { ARTIFACT_FILES, saveTaskArtifact } from "../lib/task-artifacts.js";
 import { createProvider } from "../providers/factory.js";
 import type { NewTaskInput, StageEnvelope } from "../lib/types.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 import { dispatcherOutputSchema } from "../lib/schema.js";
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
+}
 
 export class DispatcherWorker extends WorkerBase {
   readonly agent = "Dispatcher" as const;
@@ -20,17 +27,34 @@ export class DispatcherWorker extends WorkerBase {
     const prompt = await loadPromptFile("dispatcher.md");
     const provider = createProvider(config.providers.dispatcher);
     const input = await readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
+    const projectProfile = await collectProjectProfile({
+      workspaceRoot: process.cwd(),
+      taskTitle: input.title,
+      taskType: input.typeHint,
+      config,
+    });
+    await saveTaskArtifact(taskId, ARTIFACT_FILES.projectProfile, projectProfile);
 
-    const systemPrompt = prompt.replace("{{INPUT_JSON}}", JSON.stringify(input, null, 2));
+    const modelInput = {
+      ...input,
+      projectProfile,
+    };
+    const roleContract = buildAgentRoleContract("Dispatcher", {
+      stage: "dispatcher",
+      taskTypeHint: input.typeHint,
+    });
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
     const result = await provider.generateStructured({
       agent: "Dispatcher",
+      taskType: input.typeHint,
       systemPrompt,
-      input,
+      input: modelInput,
       expectedJsonSchemaDescription:
         '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);
+    output.knownFacts = unique([...output.knownFacts, ...projectProfileFactLines(projectProfile)]);
     const nextAgent = output.nextAgent;
     const nextStage = nextAgent === "Bug Investigator" ? "bug-investigator" : "planner";
     const nextFileName = nextAgent === "Bug Investigator" ? STAGE_FILE_NAMES.bugInvestigator : STAGE_FILE_NAMES.planner;
@@ -60,6 +84,9 @@ ${output.assumptions.length ? output.assumptions.map((x) => `- ${x}`).join("\n")
 
 ## Constraints
 ${output.constraints.length ? output.constraints.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Project Profile Snapshot
+${projectProfileFactLines(projectProfile).map((x) => `- ${x}`).join("\n")}
 
 ## Requires Human Input
 ${output.requiresHumanInput ? "Yes" : "No"}
