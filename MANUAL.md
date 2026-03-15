@@ -230,6 +230,12 @@ Advanced tuning:
 - set `AI_AGENTS_QA_MAX_RETRIES` to control how many QA fail loops are allowed before forced human escalation
 - set `AI_AGENTS_PROVIDER_TIMEOUT_MS` to control provider timeout per call
 - set `AI_AGENTS_OPENAI_MAX_TOKENS` to cap completion tokens for OpenAI-compatible providers
+- set `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE=<n>` to enforce local provider-call throughput cap (`0` disables, default `0`)
+- set `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS=<ms>` to tune the local limiter window (default `60000`, min `200`)
+- set `AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES=<n>` for transient-provider retries (default `2`, max `6`)
+- set `AI_AGENTS_PROVIDER_BACKOFF_BASE_MS=<ms>` for backoff base delay (default `500`)
+- set `AI_AGENTS_PROVIDER_BACKOFF_MAX_MS=<ms>` for max backoff delay cap (default `8000`)
+- set `AI_AGENTS_PROVIDER_BACKOFF_JITTER_RATIO=<0..1>` for retry jitter (default `0.2`)
 - set `AI_AGENTS_DISABLE_CONFIG_CACHE=1` to disable resolved-config in-memory cache
 - set `AI_AGENTS_DISABLE_PROMPT_CACHE=1` to disable prompt-file in-memory cache
 - set `AI_AGENTS_DISABLE_PROVIDER_CACHE=1` to disable provider instance reuse cache
@@ -239,6 +245,10 @@ Advanced tuning:
 Polling/queue audit logs:
 - `.ai-agents/logs/polling-metrics.jsonl`: loop action (`immediate`/`sleep`), reason, processed stages/tasks, and sleep-avoidance counters.
 - `.ai-agents/logs/queue-latency.jsonl`: latency from request creation to stage start.
+
+Provider throttle audit logs:
+- `.ai-agents/logs/provider-throttle.jsonl`: local limiter waits, backoff scheduling, retry attempts, recovery, and exhaustion events.
+- `.ai-agents/logs/stage-metrics.jsonl`: per-stage provider metrics now include `providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, and `providerRateLimitWaitMs`.
 
 ## Stateless LLM calls
 OpenAI-compatible calls are stateless by design.

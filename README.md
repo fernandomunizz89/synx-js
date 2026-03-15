@@ -207,6 +207,12 @@ This works well with:
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
 - `AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES`: extra retries for JSON-format parsing failures in the provider (default: `1`, max: `2`).
+- `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE`: local per-process provider call cap (`0` disables; default `0`).
+- `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS`: local limiter window size in ms (default `60000`, min `200`).
+- `AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES`: transient-call retries for OpenAI-compatible provider (default: `2`, max: `6`).
+- `AI_AGENTS_PROVIDER_BACKOFF_BASE_MS`: exponential backoff base delay in ms (default: `500`).
+- `AI_AGENTS_PROVIDER_BACKOFF_MAX_MS`: cap for backoff delay in ms (default: `8000`).
+- `AI_AGENTS_PROVIDER_BACKOFF_JITTER_RATIO`: jitter ratio for backoff delay (`0..1`, default: `0.2`).
 - `AI_AGENTS_QA_MAX_RETRIES`: max QA fail loops before escalation to human review (default: `3`).
 - `AI_AGENTS_QUALITY_REPAIR_MAX_ATTEMPTS`: max quality-gate remediation attempts inside Feature Builder/Bug Fixer (default: `3`, cap: `5`).
 
@@ -214,6 +220,13 @@ JSON parse retry notes:
 - Triggered only when provider text cannot be extracted/parsing as JSON.
 - Retry instruction is strict: JSON only, no markdown fences, no prose before/after, preserve expected schema.
 - Provider writes structured retry logs at `.ai-agents/logs/provider-parse-retries.jsonl`.
+
+Rate limiting/backoff notes:
+- Local rate limiting applies before provider calls and waits only when the configured request window is saturated.
+- Backoff applies only to transient provider errors (for example `429`, `408`, `5xx`, network timeout/fetch failures).
+- Permanent errors do not loop through backoff retries.
+- Structured throttle logs are written to `.ai-agents/logs/provider-throttle.jsonl`.
+- Stage timing now includes provider-call metrics (`providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, `providerRateLimitWaitMs`).
 
 ## Performance controls
 - `AI_AGENTS_DISABLE_CONFIG_CACHE=1`: disables in-memory cache for resolved global+local config.
