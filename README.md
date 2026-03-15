@@ -220,7 +220,11 @@ JSON parse retry notes:
 - `AI_AGENTS_DISABLE_PROMPT_CACHE=1`: disables in-memory cache for prompt file contents.
 - `AI_AGENTS_DISABLE_PROVIDER_CACHE=1`: disables in-memory provider instance reuse.
 - `AI_AGENTS_POLL_INTERVAL_MS=<ms>`: engine loop sleep interval when idle (default: `1200`, minimum accepted: `200`).
-- `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>`: max immediate no-sleep cycles after processing work (default: `1`, max: `20`).
+- `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>`: max immediate no-sleep cycles after processing work (default: `3`, max: `20`).
+
+Polling observability:
+- Loop decisions are logged to `.ai-agents/logs/polling-metrics.jsonl` with action (`immediate` vs `sleep`), reason, processed stages/tasks, and sleep-avoidance counters.
+- Stage queue latency (`request.createdAt` -> stage start) is logged to `.ai-agents/logs/queue-latency.jsonl`.
 
 ## Temperature resolution (OpenAI-compatible provider)
 Each provider call resolves temperature with this precedence:

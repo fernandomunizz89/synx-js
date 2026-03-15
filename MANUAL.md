@@ -234,7 +234,11 @@ Advanced tuning:
 - set `AI_AGENTS_DISABLE_PROMPT_CACHE=1` to disable prompt-file in-memory cache
 - set `AI_AGENTS_DISABLE_PROVIDER_CACHE=1` to disable provider instance reuse cache
 - set `AI_AGENTS_POLL_INTERVAL_MS=<ms>` to adjust idle polling interval (default `1200`, min `200`)
-- set `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>` to limit immediate no-sleep cycles after processing work (default `1`)
+- set `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>` to limit immediate no-sleep cycles after processing work (default `3`)
+
+Polling/queue audit logs:
+- `.ai-agents/logs/polling-metrics.jsonl`: loop action (`immediate`/`sleep`), reason, processed stages/tasks, and sleep-avoidance counters.
+- `.ai-agents/logs/queue-latency.jsonl`: latency from request creation to stage start.
 
 ## Stateless LLM calls
 OpenAI-compatible calls are stateless by design.
