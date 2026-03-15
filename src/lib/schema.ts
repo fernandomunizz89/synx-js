@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]);
-export const providerTypeSchema = z.enum(["mock", "openai-compatible"]);
+export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio"]);
 
 export const providerStageConfigSchema = z.object({
   type: providerTypeSchema,
@@ -10,6 +10,8 @@ export const providerStageConfigSchema = z.object({
   apiKeyEnv: z.string().optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
+  fallbackModel: z.string().optional(),
+  autoDiscoverModel: z.boolean().optional(),
 });
 
 export const globalConfigSchema = z.object({

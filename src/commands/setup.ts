@@ -7,16 +7,23 @@ import { checkProviderHealth, discoverProviderModels } from "../lib/provider-hea
 import { confirmAction, promptRequiredText, promptTextWithDefault, selectOption } from "../lib/interactive.js";
 import { providerHealthToHuman } from "../lib/human-messages.js";
 import { commandExample } from "../lib/cli-command.js";
+import { choosePreferredDiscoveredModel, findDiscoveredModelMatch } from "../lib/model-support.js";
+import {
+  DEFAULT_LM_STUDIO_API_KEY,
+  DEFAULT_LM_STUDIO_API_KEY_ENV,
+  DEFAULT_LM_STUDIO_BASE_URL,
+  DEFAULT_LM_STUDIO_BASE_URL_ENV,
+  isAutoModelToken,
+} from "../lib/lmstudio.js";
 import type { GlobalConfig, LocalProjectConfig, ProviderHealth, ProviderStageConfig } from "../lib/types.js";
 
 type SetupProviderChoice = "mock" | "lm-studio" | "openai-compatible";
 type ConnectionMode = "saved" | "env";
 type LmStudioConnectionMode = "saved-recommended" | "saved-custom" | "env";
+type LmStudioModelMode = "auto" | "fixed";
 
 const DEFAULT_BASE_URL_ENV = "AI_AGENTS_OPENAI_BASE_URL";
 const DEFAULT_API_KEY_ENV = "AI_AGENTS_OPENAI_API_KEY";
-const DEFAULT_LM_STUDIO_BASE_URL = "http://127.0.0.1:1234/v1";
-const DEFAULT_LM_STUDIO_API_KEY = "lm-studio-local";
 
 function isProviderHealthy(health: ProviderHealth): boolean {
   return health.reachable && (health.modelFound ?? true);
@@ -47,7 +54,7 @@ function printSetupFixHints(label: string, health: ProviderHealth, config: Provi
     return;
   }
 
-  if (lower.includes("returned no models")) {
+  if (lower.includes("returned no models") || lower.includes("no model is currently loaded") || lower.includes("no model is loaded")) {
     console.log("1. Load at least one model in the provider.");
     console.log("2. Retry setup and select the detected model.");
     return;
@@ -72,19 +79,32 @@ function printSetupFixHints(label: string, health: ProviderHealth, config: Provi
 
 async function chooseOpenAiCompatibleModel(config: ProviderStageConfig): Promise<string> {
   const discovery = await discoverProviderModels(config);
+  const suggestedManualModel = isAutoModelToken(config.model) ? "" : (config.model || "").trim();
 
   if (discovery.reachable && discovery.models.length) {
     const manualEntryToken = "__manual-model-entry__";
+    const preferredChoice = choosePreferredDiscoveredModel(discovery.models, suggestedManualModel);
+    const defaultModelChoice = preferredChoice || discovery.models[0];
     const model = await selectOption<string>(
       "Choose model",
       [
         ...discovery.models.map((item) => ({ value: item, label: item })),
         { value: manualEntryToken, label: "Type model name manually" },
       ],
-      discovery.models[0]
+      defaultModelChoice
     );
 
     if (model !== manualEntryToken) return model;
+
+    const typedModel = suggestedManualModel
+      ? await promptTextWithDefault("Model name (required):", suggestedManualModel)
+      : await promptRequiredText("Model name (required):");
+    const matched = findDiscoveredModelMatch(typedModel, discovery.models);
+    if (matched && !matched.exact && matched.matchedModel !== typedModel.trim()) {
+      console.log(`Model alias resolved to discovered id: ${matched.matchedModel}`);
+      return matched.matchedModel;
+    }
+    return typedModel.trim();
   } else {
     console.log(`\nModel discovery note: ${providerHealthToHuman(discovery.message)}`);
     if (config.type === "openai-compatible" && !config.baseUrl) {
@@ -93,6 +113,9 @@ async function chooseOpenAiCompatibleModel(config: ProviderStageConfig): Promise
     console.log("You can still continue by typing the model manually.");
   }
 
+  if (suggestedManualModel) {
+    return promptTextWithDefault("Model name (required):", suggestedManualModel);
+  }
   return promptRequiredText("Model name (required):");
 }
 
@@ -182,45 +205,53 @@ export const setupCommand = new Command("setup")
           "saved-recommended"
         );
 
-        let openAiCompatibleConfig: ProviderStageConfig = {
-          type: "openai-compatible",
-          model: currentGlobal.providers.dispatcher.model || "qwen/qwen3-coder-30b",
+        let lmStudioConfig: ProviderStageConfig = {
+          type: "lmstudio",
+          model: isAutoModelToken(currentGlobal.providers.dispatcher.model)
+            ? "auto"
+            : (currentGlobal.providers.dispatcher.model || "auto"),
+          autoDiscoverModel: true,
+          fallbackModel: currentGlobal.providers.dispatcher.fallbackModel || "",
           ...defaultOpenAiCompatibleFields(),
         };
 
         if (connectionMode === "saved-recommended") {
-          openAiCompatibleConfig = {
-            ...openAiCompatibleConfig,
+          lmStudioConfig = {
+            ...lmStudioConfig,
             baseUrl: DEFAULT_LM_STUDIO_BASE_URL,
             apiKey: DEFAULT_LM_STUDIO_API_KEY,
+            baseUrlEnv: DEFAULT_LM_STUDIO_BASE_URL_ENV,
+            apiKeyEnv: DEFAULT_LM_STUDIO_API_KEY_ENV,
           };
         } else if (connectionMode === "saved-custom") {
           const existingBaseUrl = currentGlobal.providers.dispatcher.baseUrl || DEFAULT_LM_STUDIO_BASE_URL;
           const existingApiKey = currentGlobal.providers.dispatcher.apiKey || DEFAULT_LM_STUDIO_API_KEY;
           const baseUrl = await promptTextWithDefault("LM Studio base URL:", existingBaseUrl);
           const apiKey = await promptTextWithDefault("LM Studio API key (dummy value is fine):", existingApiKey);
-          openAiCompatibleConfig = {
-            ...openAiCompatibleConfig,
+          lmStudioConfig = {
+            ...lmStudioConfig,
             baseUrl,
             apiKey,
+            baseUrlEnv: DEFAULT_LM_STUDIO_BASE_URL_ENV,
+            apiKeyEnv: DEFAULT_LM_STUDIO_API_KEY_ENV,
           };
         } else {
           const envMode = await selectOption<"default" | "custom">(
             "Choose environment variable names",
             [
-              { value: "default", label: "Use common names (AI_AGENTS_OPENAI_BASE_URL / AI_AGENTS_OPENAI_API_KEY)" },
+              { value: "default", label: "Use LM Studio names (AI_AGENTS_LMSTUDIO_BASE_URL / AI_AGENTS_LMSTUDIO_API_KEY)" },
               { value: "custom", label: "Type custom environment variable names" },
             ],
             "default"
           );
           const baseUrlEnv = envMode === "default"
-            ? DEFAULT_BASE_URL_ENV
+            ? DEFAULT_LM_STUDIO_BASE_URL_ENV
             : await promptRequiredText("Base URL env variable name (required):");
           const apiKeyEnv = envMode === "default"
-            ? DEFAULT_API_KEY_ENV
+            ? DEFAULT_LM_STUDIO_API_KEY_ENV
             : await promptRequiredText("API key env variable name (required):");
-          openAiCompatibleConfig = {
-            ...openAiCompatibleConfig,
+          lmStudioConfig = {
+            ...lmStudioConfig,
             baseUrlEnv,
             apiKeyEnv,
             baseUrl: undefined,
@@ -229,9 +260,46 @@ export const setupCommand = new Command("setup")
           console.log(`\nYou chose env mode. Remember to define ${baseUrlEnv} and ${apiKeyEnv} in each terminal.`);
         }
 
-        const model = await chooseOpenAiCompatibleModel(openAiCompatibleConfig);
-        nextGlobal.providers.dispatcher = { ...openAiCompatibleConfig, model };
-        nextGlobal.providers.planner = { ...openAiCompatibleConfig, model };
+        const modelMode = await selectOption<LmStudioModelMode>(
+          "LM Studio model selection mode",
+          [
+            {
+              value: "auto",
+              label: "Auto-detect loaded model (recommended)",
+              description: "Uses the model currently loaded in LM Studio at runtime",
+            },
+            {
+              value: "fixed",
+              label: "Pin a fixed model id",
+              description: "Use one fixed model id instead of runtime autodiscovery",
+            },
+          ],
+          isAutoModelToken(currentGlobal.providers.dispatcher.model) ? "auto" : "fixed"
+        );
+
+        if (modelMode === "fixed") {
+          const model = await chooseOpenAiCompatibleModel(lmStudioConfig);
+          lmStudioConfig = {
+            ...lmStudioConfig,
+            model,
+            autoDiscoverModel: false,
+          };
+        } else {
+          const fallbackDefault = currentGlobal.providers.dispatcher.fallbackModel || "";
+          const fallbackModel = await promptTextWithDefault(
+            "Fallback model if autodiscovery fails (optional):",
+            fallbackDefault
+          );
+          lmStudioConfig = {
+            ...lmStudioConfig,
+            model: "auto",
+            autoDiscoverModel: true,
+            fallbackModel: fallbackModel.trim() || undefined,
+          };
+        }
+
+        nextGlobal.providers.dispatcher = { ...lmStudioConfig };
+        nextGlobal.providers.planner = { ...lmStudioConfig };
       } else {
         const connectionMode = await selectOption<ConnectionMode>(
           "OpenAI-compatible connection mode",

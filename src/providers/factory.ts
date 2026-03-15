@@ -2,6 +2,8 @@ import type { ProviderStageConfig } from "../lib/types.js";
 import type { LlmProvider } from "./provider.js";
 import { MockProvider } from "./mock-provider.js";
 import { OpenAiCompatibleProvider } from "./openai-compatible-provider.js";
+import { LmStudioProvider } from "./lmstudio-provider.js";
+import { resolveLmStudioRuntimeSettings } from "../lib/lmstudio.js";
 
 const providerCache = new Map<string, LlmProvider>();
 
@@ -34,6 +36,20 @@ function buildProviderCacheKey(config: ProviderStageConfig): string {
     ].join("::");
   }
 
+  if (config.type === "lmstudio") {
+    const resolved = resolveLmStudioRuntimeSettings(config);
+    return [
+      "lmstudio",
+      normalizeCacheValue(resolved.configuredModel || "auto"),
+      normalizeCacheValue(resolved.fallbackModel || ""),
+      String(resolved.autoDiscoverModel),
+      normalizeCacheValue(resolved.baseUrlRoot),
+      normalizeCacheValue(resolved.apiKey),
+      normalizeCacheValue(resolved.baseUrlEnv),
+      normalizeCacheValue(resolved.apiKeyEnv),
+    ].join("::");
+  }
+
   return `unsupported::${String((config as { type?: unknown }).type)}`;
 }
 
@@ -41,6 +57,7 @@ export function createProvider(config: ProviderStageConfig): LlmProvider {
   if (isProviderCacheDisabled()) {
     if (config.type === "mock") return new MockProvider(config.model);
     if (config.type === "openai-compatible") return new OpenAiCompatibleProvider(config);
+    if (config.type === "lmstudio") return new LmStudioProvider(config);
     throw new Error(`Unsupported provider type: ${String((config as { type?: unknown }).type)}`);
   }
 
@@ -56,6 +73,12 @@ export function createProvider(config: ProviderStageConfig): LlmProvider {
 
   if (config.type === "openai-compatible") {
     const provider = new OpenAiCompatibleProvider(config);
+    providerCache.set(cacheKey, provider);
+    return provider;
+  }
+
+  if (config.type === "lmstudio") {
+    const provider = new LmStudioProvider(config);
     providerCache.set(cacheKey, provider);
     return provider;
   }

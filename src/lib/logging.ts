@@ -170,6 +170,43 @@ export async function logProviderParseRetry(entry: ProviderParseRetryLogEntry): 
   await appendText(path.join(logsDir(), "provider-parse-retries.jsonl"), `${JSON.stringify(payload)}\n`);
 }
 
+export interface ProviderModelResolutionLogEntry {
+  at?: string;
+  agent: AgentName;
+  taskId?: string;
+  stage?: string;
+  provider: string;
+  event: "model_resolution_started" | "model_resolution_succeeded" | "model_resolution_failed";
+  configuredModel?: string;
+  selectedModel?: string;
+  fallbackModel?: string;
+  autoDiscoveryEnabled?: boolean;
+  reason?: string;
+  listedModels?: string[];
+  baseUrl?: string;
+}
+
+export async function logProviderModelResolution(entry: ProviderModelResolutionLogEntry): Promise<void> {
+  const payload = {
+    at: entry.at || nowIso(),
+    agent: entry.agent,
+    taskId: entry.taskId || "",
+    stage: entry.stage || "",
+    provider: entry.provider,
+    event: entry.event,
+    configuredModel: entry.configuredModel ? trimText(entry.configuredModel, 140) : "",
+    selectedModel: entry.selectedModel ? trimText(entry.selectedModel, 140) : "",
+    fallbackModel: entry.fallbackModel ? trimText(entry.fallbackModel, 140) : "",
+    autoDiscoveryEnabled: typeof entry.autoDiscoveryEnabled === "boolean" ? entry.autoDiscoveryEnabled : false,
+    reason: entry.reason ? trimText(entry.reason, 320) : "",
+    listedModels: Array.isArray(entry.listedModels)
+      ? entry.listedModels.filter((x): x is string => typeof x === "string").slice(0, 12)
+      : [],
+    baseUrl: entry.baseUrl ? trimText(entry.baseUrl, 180) : "",
+  };
+  await appendText(path.join(logsDir(), "provider-model-resolution.jsonl"), `${JSON.stringify(payload)}\n`);
+}
+
 type AgentAuditEvent = "stage_started" | "stage_finished" | "stage_failed" | "handoff_queued" | "stage_note";
 
 export interface AgentAuditEntry {

@@ -6,6 +6,7 @@ import { exists } from "./fs.js";
 import { promptsDir } from "./paths.js";
 import { REQUIRED_PROMPT_FILES } from "./constants.js";
 import path from "node:path";
+import { isAutoModelToken } from "./lmstudio.js";
 
 export type ReadinessSeverity = "error" | "warning";
 
@@ -51,7 +52,10 @@ export async function collectReadinessReport(options: ReadinessOptions): Promise
   }
 
   if (options.includeProviderChecks) {
-    if (!config.providers.dispatcher.model.trim()) {
+    if (
+      !config.providers.dispatcher.model.trim()
+      && !(config.providers.dispatcher.type === "lmstudio" && isAutoModelToken(config.providers.dispatcher.model))
+    ) {
       pushIssue(
         issues,
         "error",
@@ -59,7 +63,10 @@ export async function collectReadinessReport(options: ReadinessOptions): Promise
       );
     }
 
-    if (!config.providers.planner.model.trim()) {
+    if (
+      !config.providers.planner.model.trim()
+      && !(config.providers.planner.type === "lmstudio" && isAutoModelToken(config.providers.planner.model))
+    ) {
       pushIssue(
         issues,
         "error",

@@ -20,7 +20,7 @@ export type AgentName =
   | "PR Writer"
   | "Human Review";
 
-export type ProviderType = "mock" | "openai-compatible";
+export type ProviderType = "mock" | "openai-compatible" | "lmstudio";
 export type E2EPolicy = "auto" | "required" | "skip";
 export type E2EFramework = "auto" | "cypress" | "playwright" | "other";
 
@@ -31,6 +31,8 @@ export interface ProviderStageConfig {
   apiKeyEnv?: string;
   baseUrl?: string;
   apiKey?: string;
+  fallbackModel?: string;
+  autoDiscoverModel?: boolean;
 }
 
 export interface GlobalConfig {

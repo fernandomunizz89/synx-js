@@ -21,6 +21,10 @@ export function providerErrorToHuman(message: string): string {
     return "The provider could not be reached. If you use LM Studio, make sure its local server is running.";
   }
 
+  if (lower.includes("autodiscovery failed") || lower.includes("auto-discovery failed")) {
+    return "LM Studio model autodiscovery failed. Load a model in LM Studio or configure a fallback model.";
+  }
+
   if (lower.includes("timed out")) {
     return "The model took too long to answer. Try reducing context/model load or increasing AI_AGENTS_PROVIDER_TIMEOUT_MS.";
   }
@@ -49,6 +53,14 @@ export function providerHealthToHuman(message: string): string {
 
   if (lower.includes("returned no models")) {
     return "Provider is reachable but returned no models. Fix now: load at least one model in the provider and retry setup.";
+  }
+
+  if (lower.includes("no model is loaded")) {
+    return "LM Studio is reachable but has no loaded model. Fix now: load a model in LM Studio and retry.";
+  }
+
+  if (lower.includes("auto-discovery selected model")) {
+    return message;
   }
 
   if (lower.includes("configured model was not found")) {
