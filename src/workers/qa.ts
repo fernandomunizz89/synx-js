@@ -18,7 +18,7 @@ import {
 import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
-import { detectTestCapabilities, getGitChangedFiles, runProjectChecks } from "../lib/workspace-tools.js";
+import { detectTestCapabilities, getGitChangedFiles, runCypressSelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
 
 function unique(values: string[]): string[] {
@@ -303,6 +303,12 @@ function buildCheckDrivenReturnContext(args: {
         : `Apply targeted code/test fixes near ${sourceLocations.join(", ")} and re-run this command.`;
     }
 
+    const timerDidNotAdvancePattern = /expected ['"]25:00['"] to not equal ['"]25:00['"]|to not equal ['"]\d{1,2}:\d{2}['"]/i;
+    if (e2eCheck && timerDidNotAdvancePattern.test(receivedResult)) {
+      recommendedAction =
+        "Timer value did not advance between reads; update E2E timing/assertion flow (e.g., wait >=1000ms after start or observe a changed tick), then re-run this E2E command.";
+    }
+
     if (cypressCheck && diagnostics.length < 2) {
       recommendedAction = `${recommendedAction} If failure output is still low-signal, update Cypress config/scripts to keep terminal-readable assertion output (reporter + stack traces) and avoid screenshot-only diagnostics.`;
     }
@@ -332,6 +338,189 @@ function buildCheckDrivenReturnContext(args: {
   }
 
   return items;
+}
+
+function buildSelectorPreflightDiagnostics(
+  missingSelectors: Array<{ selector: string; specPaths: string[] }>,
+): string[] {
+  return missingSelectors.slice(0, 8).map((item) => {
+    const specs = item.specPaths.length ? item.specPaths.join(", ") : "[unknown spec]";
+    return `Missing selector [data-cy="${item.selector}"] referenced in ${specs}.`;
+  });
+}
+
+function defaultSelectorTargetHint(selector: string): string {
+  switch (selector) {
+    case "timer":
+    case "timer-title":
+      return "src/components/Timer/Timer.tsx";
+    case "timer-display":
+      return "src/components/CircularTimer/CircularTimer.tsx";
+    case "timer-controls":
+      return "src/components/Controls/Controls.tsx";
+    case "app-container":
+      return "src/components/Layout/Layout.tsx";
+    default:
+      return "the component that renders this element";
+  }
+}
+
+function buildSelectorPreflightReturnContext(
+  missingSelectors: Array<{ selector: string; specPaths: string[] }>,
+): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  return missingSelectors.slice(0, 6).map((item) => {
+    const specs = item.specPaths.length ? item.specPaths : ["[unknown spec]"];
+    return {
+      issue: `Missing data-cy="${item.selector}" selector hook`,
+      expectedResult: `At least one DOM element should expose data-cy="${item.selector}" for Cypress selection.`,
+      receivedResult: `No source file currently exposes data-cy="${item.selector}", so Cypress selectors fail.`,
+      evidence: [
+        `Referenced in specs: ${specs.join(", ")}`,
+      ],
+      recommendedAction: `Add data-cy="${item.selector}" in ${defaultSelectorTargetHint(item.selector)} and re-run Cypress.`,
+    };
+  });
+}
+
+function hasConfigFailureSignal(checks: Array<{
+  command: string;
+  stdoutPreview: string;
+  stderrPreview: string;
+  diagnostics?: string[];
+}>): boolean {
+  const corpus = checks
+    .flatMap((check) => [check.command, check.stdoutPreview, check.stderrPreview, ...(check.diagnostics || [])])
+    .join("\n")
+    .toLowerCase();
+
+  return /configfile is invalid|your configfile is invalid|invalid cypress config|cypress configuration.+invalid|missing.+baseurl|missing.+specpattern|cannot find.+cypress\.config/.test(corpus);
+}
+
+function isConfigRelatedText(value: string): boolean {
+  const lower = value.toLowerCase();
+  return /cypress config|cypress configuration|cypress\.config|baseurl|specpattern|config mismatch|config file/.test(lower);
+}
+
+function filterUnsupportedConfigFailures(
+  failures: string[],
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>,
+): string[] {
+  if (hasConfigFailureSignal(checks)) return failures;
+  return failures.filter((item) => !isConfigRelatedText(item));
+}
+
+function filterUnsupportedConfigReturnContext(
+  items: Array<{
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+    evidence: string[];
+    recommendedAction: string;
+  }>,
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>,
+): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  if (hasConfigFailureSignal(checks)) return items;
+  return items.filter((item) => {
+    return !(
+      isConfigRelatedText(item.issue)
+      || isConfigRelatedText(item.expectedResult)
+      || isConfigRelatedText(item.receivedResult)
+      || isConfigRelatedText(item.recommendedAction)
+    );
+  });
+}
+
+function hasSelectorFailureSignal(args: {
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>;
+  missingSelectors: Array<{ selector: string; specPaths: string[] }>;
+}): boolean {
+  if (args.missingSelectors.length > 0) return true;
+
+  const corpus = args.checks
+    .flatMap((check) => [check.command, check.stdoutPreview, check.stderrPreview, ...(check.diagnostics || [])])
+    .join("\n")
+    .toLowerCase();
+
+  return /\bdata-cy\b|missing selector hook|timed out retrying.+data-cy|to exist.+data-cy|could not find.+data-cy/.test(corpus);
+}
+
+function isSelectorRelatedText(value: string): boolean {
+  const lower = value.toLowerCase();
+  return /\bdata-cy\b|selector hook|missing selector|timer-display|timer-controls|timer-title|app-container/.test(lower);
+}
+
+function filterUnsupportedSelectorFailures(
+  failures: string[],
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>,
+  missingSelectors: Array<{ selector: string; specPaths: string[] }>,
+): string[] {
+  if (hasSelectorFailureSignal({ checks, missingSelectors })) return failures;
+  return failures.filter((item) => !isSelectorRelatedText(item));
+}
+
+function filterUnsupportedSelectorReturnContext(
+  items: Array<{
+    issue: string;
+    expectedResult: string;
+    receivedResult: string;
+    evidence: string[];
+    recommendedAction: string;
+  }>,
+  checks: Array<{
+    command: string;
+    stdoutPreview: string;
+    stderrPreview: string;
+    diagnostics?: string[];
+  }>,
+  missingSelectors: Array<{ selector: string; specPaths: string[] }>,
+): Array<{
+  issue: string;
+  expectedResult: string;
+  receivedResult: string;
+  evidence: string[];
+  recommendedAction: string;
+}> {
+  if (hasSelectorFailureSignal({ checks, missingSelectors })) return items;
+  return items.filter((item) => {
+    return !(
+      isSelectorRelatedText(item.issue)
+      || isSelectorRelatedText(item.expectedResult)
+      || isSelectorRelatedText(item.receivedResult)
+      || isSelectorRelatedText(item.recommendedAction)
+    );
+  });
 }
 
 function isLikelyUnitTestFile(filePath: string): boolean {
@@ -384,21 +573,48 @@ export class QaWorker extends WorkerBase {
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const reportedUnitTests = await loadReportedUnitTests(taskId);
     const changedFiles = await getGitChangedFiles(workspaceRoot);
+    const shouldRunCypressPreflight = qaPreferences.e2ePolicy !== "skip"
+      && (qaPreferences.e2eFramework === "cypress" || qaPreferences.e2eFramework === "auto");
+    const selectorPreflight = shouldRunCypressPreflight
+      ? await runCypressSelectorPreflight(workspaceRoot)
+      : null;
+    const missingSelectorFindings = selectorPreflight?.missingSelectors || [];
+    const skipHeavyE2ERun = missingSelectorFindings.length > 0;
     const executedChecks = await runProjectChecks({
       workspaceRoot,
       timeoutMsPerCheck: 150_000,
-      includeE2E: qaPreferences.e2ePolicy !== "skip",
+      includeE2E: qaPreferences.e2ePolicy !== "skip" && !skipHeavyE2ERun,
     });
+    if (missingSelectorFindings.length) {
+      executedChecks.push({
+        command: "cypress selector preflight",
+        status: "failed",
+        exitCode: 1,
+        timedOut: false,
+        durationMs: 0,
+        stdoutPreview: "",
+        stderrPreview: "",
+        diagnostics: buildSelectorPreflightDiagnostics(missingSelectorFindings),
+        qaConfigNotes: [
+          "QA preflight: skipped heavy Cypress run because required data-cy selectors are missing in source.",
+        ],
+        artifacts: [],
+      });
+    }
     const previousQaAttempts = meta.history.filter((x) => x.stage === "qa").length;
     const currentQaAttempt = previousQaAttempts + 1;
     const maxQaRetries = resolveQaMaxRetries();
     const previousReturnHistory = await loadQaReturnHistory(taskId);
     const compactChecks = compactChecksForModel(executedChecks);
     const checkDrivenReturnContext = buildCheckDrivenReturnContext({ executedChecks: compactChecks });
+    const selectorPreflightReturnContext = buildSelectorPreflightReturnContext(missingSelectorFindings);
 
     const hardFailures: string[] = [];
     if (!changedFiles.length) {
       hardFailures.push("No code changes detected in git diff.");
+    }
+    for (const item of missingSelectorFindings.slice(0, 8)) {
+      hardFailures.push(`Missing selector hook: data-cy="${item.selector}" (referenced in ${item.specPaths.join(", ")}).`);
     }
 
     const failedChecks = executedChecks.filter((x) => x.status === "failed");
@@ -446,6 +662,10 @@ export class QaWorker extends WorkerBase {
         changedFiles,
         executedChecks: compactChecks,
         reportedUnitTests,
+        selectorPreflight: {
+          skippedHeavyE2ERun: skipHeavyE2ERun,
+          missingSelectors: missingSelectorFindings,
+        },
       },
       qaPreferences,
     };
@@ -454,6 +674,7 @@ export class QaWorker extends WorkerBase {
 MANDATORY VALIDATION CONTRACT:
 - Use "validationEvidence.changedFiles" and "validationEvidence.executedChecks" as primary evidence.
 - Use "validationEvidence.reportedUnitTests" as additional evidence from implementation stages.
+- Use "validationEvidence.selectorPreflight.missingSelectors" to report missing data-cy hooks with exact selector names and referenced spec files.
 - If any check failed, verdict must be "fail".
 - If changedFiles is empty, verdict must be "fail".
 - If task type is Feature/Bug/Refactor/Mixed and no E2E check was executed, verdict must be "fail".
@@ -487,7 +708,15 @@ MANDATORY VALIDATION CONTRACT:
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
     output.executedChecks = compactChecks;
-    output.failures = unique([...output.failures, ...hardFailures]);
+    output.failures = filterUnsupportedConfigFailures(
+      unique([...output.failures, ...hardFailures]),
+      output.executedChecks,
+    );
+    output.failures = filterUnsupportedSelectorFailures(
+      output.failures,
+      output.executedChecks,
+      missingSelectorFindings,
+    );
     if (output.failures.length) {
       output.verdict = "fail";
     }
@@ -504,7 +733,15 @@ MANDATORY VALIDATION CONTRACT:
       ]);
     }
 
-    const modelAndCheckReturnContext = [...output.returnContext, ...checkDrivenReturnContext];
+    const returnContextAfterConfigFilter = filterUnsupportedConfigReturnContext(
+      [...output.returnContext, ...checkDrivenReturnContext, ...selectorPreflightReturnContext],
+      output.executedChecks,
+    );
+    const modelAndCheckReturnContext = filterUnsupportedSelectorReturnContext(
+      returnContextAfterConfigFilter,
+      output.executedChecks,
+      missingSelectorFindings,
+    );
     output.returnContext = compactQaReturnContextItems([
       ...modelAndCheckReturnContext,
       ...buildFallbackQaReturnContextItems({

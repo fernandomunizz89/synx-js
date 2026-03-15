@@ -118,6 +118,7 @@ export interface WorkspaceContextLimits {
 
 export interface AppliedWorkspaceEdits {
   appliedFiles: string[];
+  changedFiles: string[];
   skippedEdits: string[];
   warnings: string[];
 }
@@ -143,6 +144,16 @@ export interface ValidationCheckResult {
   diagnostics?: string[];
   qaConfigNotes?: string[];
   artifacts?: string[];
+}
+
+export interface CypressSelectorUsage {
+  selector: string;
+  specPaths: string[];
+}
+
+export interface CypressSelectorPreflightResult {
+  requiredSelectors: CypressSelectorUsage[];
+  missingSelectors: CypressSelectorUsage[];
 }
 
 export interface TestCapabilities {
@@ -362,6 +373,7 @@ export async function applyWorkspaceEdits(args: {
   edits: WorkspaceEdit[];
 }): Promise<AppliedWorkspaceEdits> {
   const appliedFiles: string[] = [];
+  const changedFiles: string[] = [];
   const skippedEdits: string[] = [];
   const warnings: string[] = [];
 
@@ -373,6 +385,7 @@ export async function applyWorkspaceEdits(args: {
         if (await exists(absolutePath)) {
           await fs.unlink(absolutePath);
           appliedFiles.push(relativePath);
+          changedFiles.push(relativePath);
         } else {
           skippedEdits.push(`${relativePath} (delete skipped: file does not exist)`);
         }
@@ -396,8 +409,13 @@ export async function applyWorkspaceEdits(args: {
         }
 
         const next = current.replace(edit.find, edit.replace);
+        if (next === current) {
+          skippedEdits.push(`${relativePath} (replace_snippet skipped: replacement produced no changes)`);
+          continue;
+        }
         await fs.writeFile(absolutePath, next, "utf8");
         appliedFiles.push(relativePath);
+        changedFiles.push(relativePath);
         continue;
       }
 
@@ -406,9 +424,19 @@ export async function applyWorkspaceEdits(args: {
         continue;
       }
 
+      const existed = await exists(absolutePath);
+      if (existed) {
+        const current = await fs.readFile(absolutePath, "utf8").catch(() => null);
+        if (typeof current === "string" && current === edit.content) {
+          skippedEdits.push(`${relativePath} (${edit.action} skipped: content unchanged)`);
+          continue;
+        }
+      }
+
       await ensureDir(path.dirname(absolutePath));
       await fs.writeFile(absolutePath, edit.content, "utf8");
       appliedFiles.push(relativePath);
+      changedFiles.push(relativePath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       warnings.push(`Edit skipped for "${edit.path}": ${message}`);
@@ -417,6 +445,7 @@ export async function applyWorkspaceEdits(args: {
 
   return {
     appliedFiles: unique(appliedFiles),
+    changedFiles: unique(changedFiles),
     skippedEdits: unique(skippedEdits),
     warnings: unique(warnings),
   };
@@ -688,12 +717,12 @@ async function buildCypressQaOverrides(workspaceRoot: string, script: string): P
       "--reporter-options",
       `mochaFile=${reportPath},toConsole=true`,
       "--config",
-      "video=false,screenshotOnRunFailure=false,trashAssetsBeforeRuns=false",
+      "video=false,screenshotOnRunFailure=false,trashAssetsBeforeRuns=false,defaultCommandTimeout=6000",
     ],
     reportPath,
     qaConfigNotes: [
       "QA Cypress override: reporter=junit (console + XML output).",
-      "QA Cypress override: screenshotOnRunFailure=false and video=false for lower-noise diagnostics.",
+      "QA Cypress override: screenshotOnRunFailure=false, video=false, and defaultCommandTimeout=6000 for lower-noise diagnostics.",
     ],
   };
 }
@@ -718,6 +747,11 @@ async function buildCheckDiagnostics(args: {
     /\bassertionerror\b/i,
     /\btimed out retrying\b/i,
     /\bfailing\b/i,
+    /\bconfigfile is invalid\b/i,
+    /\byour configfile is invalid\b/i,
+    /\bexports is not defined in es module scope\b/i,
+    /\breferenceerror:\s*exports is not defined\b/i,
+    /\bcypress\.config\.[cm]?[jt]s\b/i,
     /[A-Za-z0-9_./-]+\.(?:cy|spec)\.[cm]?[jt]sx?:\d+:\d+/,
   ];
 
@@ -739,6 +773,12 @@ async function buildCheckDiagnostics(args: {
 
   const combinedDiagnostics = unique([...reportDiagnostics, ...lineDiagnostics]).slice(0, 10);
   if (args.isCypress && combinedDiagnostics.length === 0) {
+    if (/configfile is invalid|your configfile is invalid|cypress\.config\.[cm]?[jt]s|exports is not defined in es module scope|referenceerror:\s*exports is not defined/i.test(combined)) {
+      return {
+        diagnostics: ["Cypress config is invalid at runtime (config file could not be loaded)."],
+        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
+      };
+    }
     const fallback = "No actionable Cypress assertion text was captured; adjust Cypress output/reporter config for terminal-readable failure details.";
     return {
       diagnostics: [fallback],
@@ -837,4 +877,76 @@ export async function runProjectChecks(args: {
   }
 
   return results;
+}
+
+function normalizeSpecPath(workspaceRoot: string, absolutePath: string): string {
+  return normalizeInputPath(path.relative(workspaceRoot, absolutePath));
+}
+
+function collectSelectorsFromSpec(content: string): string[] {
+  const selectors: string[] = [];
+  const selectorPattern = /\[data-cy=["']([^"']+)["']\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = selectorPattern.exec(content))) {
+    const selector = (match[1] || "").trim();
+    if (selector) selectors.push(selector);
+  }
+  return unique(selectors);
+}
+
+export async function runCypressSelectorPreflight(workspaceRoot: string): Promise<CypressSelectorPreflightResult> {
+  const root = path.resolve(workspaceRoot);
+  const allFiles = await walkFiles(root, {
+    maxScanFiles: 2_000,
+    maxFileSizeBytes: 400_000,
+  });
+  const specFiles = allFiles.filter((filePath) => /(^|\/)e2e\/.*\.cy\.[cm]?[jt]sx?$/.test(filePath));
+  const scaffoldSpecPattern = /(^|\/)(example|sample)\.cy\.[cm]?[jt]sx?$/i;
+  const nonScaffoldSpecFiles = specFiles.filter((filePath) => !scaffoldSpecPattern.test(filePath));
+  const effectiveSpecFiles = nonScaffoldSpecFiles.length ? nonScaffoldSpecFiles : specFiles;
+  const sourceFiles = allFiles.filter((filePath) => /^src\/.*\.[cm]?[jt]sx?$/.test(filePath));
+
+  const selectorToSpecs = new Map<string, Set<string>>();
+  for (const relativePath of effectiveSpecFiles) {
+    const absolutePath = path.join(root, relativePath);
+    const raw = await fs.readFile(absolutePath, "utf8").catch(() => "");
+    if (!raw) continue;
+    const selectors = collectSelectorsFromSpec(raw);
+    for (const selector of selectors) {
+      if (!selectorToSpecs.has(selector)) selectorToSpecs.set(selector, new Set<string>());
+      selectorToSpecs.get(selector)?.add(normalizeSpecPath(root, absolutePath));
+    }
+  }
+
+  const sourceContent = await Promise.all(
+    sourceFiles.map(async (relativePath) => {
+      const absolutePath = path.join(root, relativePath);
+      const raw = await fs.readFile(absolutePath, "utf8").catch(() => "");
+      return { relativePath, raw };
+    }),
+  );
+
+  const requiredSelectors: CypressSelectorUsage[] = [];
+  const missingSelectors: CypressSelectorUsage[] = [];
+  for (const [selector, specSet] of selectorToSpecs.entries()) {
+    const usage: CypressSelectorUsage = {
+      selector,
+      specPaths: Array.from(specSet).sort(),
+    };
+    requiredSelectors.push(usage);
+
+    const markerA = `data-cy="${selector}"`;
+    const markerB = `data-cy='${selector}'`;
+    const existsInSource = sourceContent.some((entry) => entry.raw.includes(markerA) || entry.raw.includes(markerB));
+    if (!existsInSource) {
+      missingSelectors.push(usage);
+    }
+  }
+
+  requiredSelectors.sort((a, b) => a.selector.localeCompare(b.selector));
+  missingSelectors.sort((a, b) => a.selector.localeCompare(b.selector));
+  return {
+    requiredSelectors,
+    missingSelectors,
+  };
 }
