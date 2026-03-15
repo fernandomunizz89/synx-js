@@ -59,8 +59,8 @@ The CLI is ready for future iterations:
 | `gd4z` | 2026-03-15 | waiting_human | 11 | 3 | 308.620s |
 | `t24e` | 2026-03-15 | waiting_human | 11 | 3 | 288.774s |
 | `yxfo` | 2026-03-15 | waiting_human (`pr`) | 9 | 1 | 241.735s |
-| `jjxa` | 2026-03-15 | waiting_human | 11 | 3 | 455.262s |
-| `4mld` | 2026-03-15 | waiting_human (`pr`) | 6 | 0 | 156.921s |
+| `jjxa` | 2026-03-15 | waiting_human | 11 | 3 | 455.527s |
+| `4mld` | 2026-03-15 | waiting_human (`pr`) | 6 | 0 | 123.078s |
 
 ### Outcome
 - Final guardrail update (`evidence-backed QA verdict`) removed hallucinated fail loops when checks are green.
