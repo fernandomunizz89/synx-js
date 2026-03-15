@@ -717,6 +717,11 @@ MANDATORY VALIDATION CONTRACT:
       output.executedChecks,
       missingSelectorFindings,
     );
+    const hasEvidenceBackedFailure = output.executedChecks.some((check) => check.status === "failed") || hardFailures.length > 0;
+    if (!hasEvidenceBackedFailure) {
+      output.failures = [];
+      output.verdict = "pass";
+    }
     if (output.failures.length) {
       output.verdict = "fail";
     }
