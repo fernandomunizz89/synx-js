@@ -14,9 +14,27 @@ export async function exists(filePath: string): Promise<boolean> {
   }
 }
 
+async function writeTextAtomicInternal(filePath: string, value: string): Promise<void> {
+  const dirPath = path.dirname(filePath);
+  const baseName = path.basename(filePath);
+  const tempPath = path.join(dirPath, `.${baseName}.${process.pid}.${Date.now()}.tmp`);
+  await fs.writeFile(tempPath, value, "utf8");
+  try {
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.copyFile(tempPath, filePath);
+    await fs.unlink(tempPath).catch(() => undefined);
+    if (error && typeof error === "object" && "code" in error) {
+      const code = String((error as { code?: unknown }).code || "");
+      if (code) return;
+    }
+    return;
+  }
+}
+
 export async function writeText(filePath: string, value: string): Promise<void> {
   await ensureDir(path.dirname(filePath));
-  await fs.writeFile(filePath, value, "utf8");
+  await writeTextAtomicInternal(filePath, value);
 }
 
 export async function appendText(filePath: string, value: string): Promise<void> {
@@ -34,7 +52,7 @@ export async function readJson<T>(filePath: string): Promise<T> {
 }
 
 export async function writeJson(filePath: string, value: unknown): Promise<void> {
-  await writeText(filePath, JSON.stringify(value, null, 2) + "\n");
+  await writeTextAtomicInternal(filePath, JSON.stringify(value, null, 2) + "\n");
 }
 
 export async function listDirectories(rootPath: string): Promise<string[]> {
