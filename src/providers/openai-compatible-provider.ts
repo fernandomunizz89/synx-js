@@ -72,6 +72,7 @@ const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {
 
 const transientStatusCodes = new Set([408, 425, 429, 500, 502, 503, 504]);
 const rateLimitWindows = new Map<string, number[]>();
+const providerConcurrencyState = new Map<string, { active: number; waiters: Array<() => void> }>();
 
 function normalizeEnvToken(value: string): string {
   return value
@@ -183,6 +184,14 @@ function resolveRateLimitWindowMs(): number {
   return Math.min(600_000, normalized);
 }
 
+function resolveMaxConcurrentRequestsPerModel(): number {
+  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_CONCURRENT_REQUESTS || "3");
+  if (!Number.isFinite(raw)) return 3;
+  const normalized = Math.floor(raw);
+  if (normalized <= 0) return 1;
+  return Math.min(30, normalized);
+}
+
 function resolveBackoffSettings(): ProviderBackoffSettings {
   const maxRetriesRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES || "2");
   const baseMsRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_BASE_MS || "500");
@@ -285,6 +294,40 @@ async function waitForRateLimitSlot(args: {
   timestamps.push(nowMs);
   rateLimitWindows.set(args.key, timestamps);
   return 0;
+}
+
+async function waitForProviderConcurrencySlot(args: {
+  key: string;
+  maxConcurrentRequests: number;
+}): Promise<number> {
+  const maxConcurrentRequests = Math.max(1, Math.floor(args.maxConcurrentRequests));
+  const state = providerConcurrencyState.get(args.key) || { active: 0, waiters: [] };
+  providerConcurrencyState.set(args.key, state);
+
+  if (state.active < maxConcurrentRequests) {
+    state.active += 1;
+    return 0;
+  }
+
+  const startedAtMs = Date.now();
+  await new Promise<void>((resolve) => {
+    state.waiters.push(resolve);
+  });
+  state.active += 1;
+  return Date.now() - startedAtMs;
+}
+
+function releaseProviderConcurrencySlot(key: string): void {
+  const state = providerConcurrencyState.get(key);
+  if (!state) return;
+
+  state.active = Math.max(0, state.active - 1);
+  const waiter = state.waiters.shift();
+  if (waiter) {
+    waiter();
+  } else if (state.active === 0) {
+    providerConcurrencyState.delete(key);
+  }
 }
 
 function computeBackoffDelayMs(args: {
@@ -431,6 +474,7 @@ async function callChatCompletionsWithResilience(args: {
   payload: Record<string, unknown>;
   maxRequestsPerMinute: number;
   rateLimitWindowMs: number;
+  maxConcurrentRequestsPerModel: number;
   backoff: ProviderBackoffSettings;
 }): Promise<ProviderCallOutcome> {
   const maxAttempts = 1 + args.backoff.maxRetries;
@@ -473,126 +517,156 @@ async function callChatCompletionsWithResilience(args: {
       }
     }
 
-    try {
-      const rawText = await callChatCompletionsOnce({
-        baseUrl: args.baseUrl,
-        headers: args.headers,
-        timeoutMs: args.timeoutMs,
-        payload: args.payload,
-      });
-
-      if (attempt > 1) {
-        await logProviderThrottle({
-          agent: args.request.agent,
-          taskId: args.request.taskId,
-          stage: args.request.stage,
-          provider: args.provider,
-          model: args.model,
-          event: "backoff_recovered",
-          attempt,
-          maxAttempts,
-          retriesUsed: backoffRetriesUsed,
-          transient: true,
-          reason: "Provider recovered after transient failure and backoff.",
-          rateLimitWaitMs,
-          backoffWaitMs,
-          requestLimit: args.maxRequestsPerMinute,
-          rateLimitWindowMs: args.rateLimitWindowMs,
-        }).catch(() => undefined);
-      }
-
-      return {
-        rawText,
-        attemptsUsed,
-        backoffRetriesUsed,
-        rateLimitWaitMs,
-        backoffWaitMs,
-        backoffReasons,
-      };
-    } catch (rawError) {
-      const error = toProviderCallError(rawError);
-      const reason = error.message || "Provider request failed.";
-      const canRetry = error.transient && attempt < maxAttempts;
-
-      if (!canRetry) {
-        await logProviderThrottle({
-          agent: args.request.agent,
-          taskId: args.request.taskId,
-          stage: args.request.stage,
-          provider: args.provider,
-          model: args.model,
-          event: "backoff_exhausted",
-          attempt,
-          maxAttempts,
-          retriesUsed: backoffRetriesUsed,
-          transient: Boolean(error.transient),
-          statusCode: error.statusCode,
-          errorCode: error.errorCode,
-          reason,
-          rateLimitWaitMs,
-          backoffWaitMs,
-          requestLimit: args.maxRequestsPerMinute,
-          rateLimitWindowMs: args.rateLimitWindowMs,
-        }).catch(() => undefined);
-
-        error.providerAttempts = attemptsUsed;
-        error.providerBackoffRetries = backoffRetriesUsed;
-        error.providerBackoffWaitMs = backoffWaitMs;
-        error.providerRateLimitWaitMs = rateLimitWaitMs;
-        error.providerThrottleReasons = backoffReasons.slice(-4);
-        throw error;
-      }
-
-      const waitMs = computeBackoffDelayMs({
-        settings: args.backoff,
-        retryIndex: backoffRetriesUsed + 1,
-        retryAfterMs: error.retryAfterMs,
-      });
-      backoffReasons.push(reason);
-
+    const waitedByConcurrency = await waitForProviderConcurrencySlot({
+      key: rateLimitKey,
+      maxConcurrentRequests: args.maxConcurrentRequestsPerModel,
+    });
+    if (waitedByConcurrency > 0) {
+      rateLimitWaitMs += waitedByConcurrency;
       await logProviderThrottle({
         agent: args.request.agent,
         taskId: args.request.taskId,
         stage: args.request.stage,
         provider: args.provider,
         model: args.model,
-        event: "backoff_scheduled",
+        event: "rate_limit_wait",
         attempt,
         maxAttempts,
         retriesUsed: backoffRetriesUsed,
         transient: true,
-        statusCode: error.statusCode,
-        errorCode: error.errorCode,
-        reason,
-        waitMs,
+        reason: `Request delayed by local provider concurrency limiter (${args.maxConcurrentRequestsPerModel} in-flight requests per provider/model).`,
+        waitMs: waitedByConcurrency,
         rateLimitWaitMs,
         backoffWaitMs,
         requestLimit: args.maxRequestsPerMinute,
         rateLimitWindowMs: args.rateLimitWindowMs,
       }).catch(() => undefined);
+    }
 
-      await sleep(waitMs);
-      backoffWaitMs += waitMs;
-      backoffRetriesUsed += 1;
+    try {
+      try {
+        const rawText = await callChatCompletionsOnce({
+          baseUrl: args.baseUrl,
+          headers: args.headers,
+          timeoutMs: args.timeoutMs,
+          payload: args.payload,
+        });
 
-      await logProviderThrottle({
-        agent: args.request.agent,
-        taskId: args.request.taskId,
-        stage: args.request.stage,
-        provider: args.provider,
-        model: args.model,
-        event: "backoff_retry",
-        attempt: attempt + 1,
-        maxAttempts,
-        retriesUsed: backoffRetriesUsed,
-        transient: true,
-        reason: "Retrying provider call after backoff delay.",
-        waitMs,
-        rateLimitWaitMs,
-        backoffWaitMs,
-        requestLimit: args.maxRequestsPerMinute,
-        rateLimitWindowMs: args.rateLimitWindowMs,
-      }).catch(() => undefined);
+        if (attempt > 1) {
+          await logProviderThrottle({
+            agent: args.request.agent,
+            taskId: args.request.taskId,
+            stage: args.request.stage,
+            provider: args.provider,
+            model: args.model,
+            event: "backoff_recovered",
+            attempt,
+            maxAttempts,
+            retriesUsed: backoffRetriesUsed,
+            transient: true,
+            reason: "Provider recovered after transient failure and backoff.",
+            rateLimitWaitMs,
+            backoffWaitMs,
+            requestLimit: args.maxRequestsPerMinute,
+            rateLimitWindowMs: args.rateLimitWindowMs,
+          }).catch(() => undefined);
+        }
+
+        return {
+          rawText,
+          attemptsUsed,
+          backoffRetriesUsed,
+          rateLimitWaitMs,
+          backoffWaitMs,
+          backoffReasons,
+        };
+      } catch (rawError) {
+        const error = toProviderCallError(rawError);
+        const reason = error.message || "Provider request failed.";
+        const canRetry = error.transient && attempt < maxAttempts;
+
+        if (!canRetry) {
+          await logProviderThrottle({
+            agent: args.request.agent,
+            taskId: args.request.taskId,
+            stage: args.request.stage,
+            provider: args.provider,
+            model: args.model,
+            event: "backoff_exhausted",
+            attempt,
+            maxAttempts,
+            retriesUsed: backoffRetriesUsed,
+            transient: Boolean(error.transient),
+            statusCode: error.statusCode,
+            errorCode: error.errorCode,
+            reason,
+            rateLimitWaitMs,
+            backoffWaitMs,
+            requestLimit: args.maxRequestsPerMinute,
+            rateLimitWindowMs: args.rateLimitWindowMs,
+          }).catch(() => undefined);
+
+          error.providerAttempts = attemptsUsed;
+          error.providerBackoffRetries = backoffRetriesUsed;
+          error.providerBackoffWaitMs = backoffWaitMs;
+          error.providerRateLimitWaitMs = rateLimitWaitMs;
+          error.providerThrottleReasons = backoffReasons.slice(-4);
+          throw error;
+        }
+
+        const waitMs = computeBackoffDelayMs({
+          settings: args.backoff,
+          retryIndex: backoffRetriesUsed + 1,
+          retryAfterMs: error.retryAfterMs,
+        });
+        backoffReasons.push(reason);
+
+        await logProviderThrottle({
+          agent: args.request.agent,
+          taskId: args.request.taskId,
+          stage: args.request.stage,
+          provider: args.provider,
+          model: args.model,
+          event: "backoff_scheduled",
+          attempt,
+          maxAttempts,
+          retriesUsed: backoffRetriesUsed,
+          transient: true,
+          statusCode: error.statusCode,
+          errorCode: error.errorCode,
+          reason,
+          waitMs,
+          rateLimitWaitMs,
+          backoffWaitMs,
+          requestLimit: args.maxRequestsPerMinute,
+          rateLimitWindowMs: args.rateLimitWindowMs,
+        }).catch(() => undefined);
+
+        await sleep(waitMs);
+        backoffWaitMs += waitMs;
+        backoffRetriesUsed += 1;
+
+        await logProviderThrottle({
+          agent: args.request.agent,
+          taskId: args.request.taskId,
+          stage: args.request.stage,
+          provider: args.provider,
+          model: args.model,
+          event: "backoff_retry",
+          attempt: attempt + 1,
+          maxAttempts,
+          retriesUsed: backoffRetriesUsed,
+          transient: true,
+          reason: "Retrying provider call after backoff delay.",
+          waitMs,
+          rateLimitWaitMs,
+          backoffWaitMs,
+          requestLimit: args.maxRequestsPerMinute,
+          rateLimitWindowMs: args.rateLimitWindowMs,
+        }).catch(() => undefined);
+      }
+    } finally {
+      releaseProviderConcurrencySlot(rateLimitKey);
     }
   }
 
@@ -633,6 +707,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const parseRetriesMax = resolveJsonParseRetries();
     const maxRequestsPerMinute = resolveMaxRequestsPerMinute();
     const rateLimitWindowMs = resolveRateLimitWindowMs();
+    const maxConcurrentRequestsPerModel = resolveMaxConcurrentRequestsPerModel();
     const backoff = resolveBackoffSettings();
     const parseAttemptsMax = 1 + parseRetriesMax;
     const parseFailures: string[] = [];
@@ -696,6 +771,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           payload,
           maxRequestsPerMinute,
           rateLimitWindowMs,
+          maxConcurrentRequestsPerModel,
           backoff,
         });
       } catch (rawError) {
