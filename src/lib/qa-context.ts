@@ -81,6 +81,12 @@ function isGenericFallbackItem(item: QaReturnContextItem): boolean {
   return /acceptance criteria and validation checks should pass\.?/i.test(item.expectedResult);
 }
 
+function isLowSignalFallbackText(value: string): boolean {
+  const lower = value.toLowerCase().trim();
+  if (!lower) return true;
+  return /acceptance criteria and validation checks should pass|address this blocker directly and verify with relevant checks|no concrete evidence provided|missing actual content|no verification provided/.test(lower);
+}
+
 function issueOverlaps(a: string, b: string): boolean {
   const aa = normalizeIssueKey(a);
   const bb = normalizeIssueKey(b);
@@ -170,6 +176,14 @@ export function compactQaReturnContextItems(
 
   const nonGeneric = merged.filter((item) => !isGenericFallbackItem(item));
   const filtered = merged.filter((item) => {
+    const hasEvidence = item.evidence.length > 0;
+    if (!hasEvidence && (
+      isLowSignalFallbackText(item.issue)
+      || isLowSignalFallbackText(item.receivedResult)
+      || isLowSignalFallbackText(item.recommendedAction)
+    )) {
+      return false;
+    }
     if (!isGenericFallbackItem(item)) return true;
     return !nonGeneric.some((x) => issueOverlaps(x.issue, item.issue) || issueOverlaps(x.receivedResult, item.receivedResult));
   });
@@ -354,6 +368,7 @@ export function buildFallbackQaReturnContextItems(args: {
     }
 
     if (hasExistingOverlap(normalizedFailure)) continue;
+    if (isLowSignalFallbackText(normalizedFailure)) continue;
     items.push({
       issue: normalizedFailure,
       expectedResult: "Acceptance criteria and validation checks should pass.",

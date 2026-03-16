@@ -963,6 +963,8 @@ async function buildCheckDiagnostics(args: {
     /\bassertionerror\b/i,
     /\btimed out retrying\b/i,
     /\bfailing\b/i,
+    /\bcypress could not verify that this server is running\b/i,
+    /\bcypress failed to verify that your server is running\b/i,
     /\bconfigfile is invalid\b/i,
     /\byour configfile is invalid\b/i,
     /\bsupportfile\b/i,
@@ -978,7 +980,16 @@ async function buildCheckDiagnostics(args: {
     /[A-Za-z0-9_./-]+\.(?:cy|spec)\.[cm]?[jt]sx?:\d+:\d+/,
   ];
 
-  const lineDiagnostics = extractSignalLines(combined, args.isCypress ? cypressPatterns : genericPatterns, args.isCypress ? 10 : 5);
+  const rawLineDiagnostics = extractSignalLines(combined, args.isCypress ? cypressPatterns : genericPatterns, args.isCypress ? 10 : 5);
+  const lineDiagnostics = args.isCypress
+    ? rawLineDiagnostics.filter((line) => {
+      const lower = line.toLowerCase();
+      if (/^>\s*cypress run\b/.test(lower)) return false;
+      if (/^>\s*npm run\b/.test(lower)) return false;
+      if (/^warning:\s*the allowcypressenv configuration option is enabled/.test(lower)) return false;
+      return true;
+    })
+    : rawLineDiagnostics;
   const artifacts: string[] = [];
   let reportDiagnostics: string[] = [];
   let reportArtifact = "";
@@ -996,13 +1007,21 @@ async function buildCheckDiagnostics(args: {
 
   const combinedDiagnostics = unique([...reportDiagnostics, ...lineDiagnostics]).slice(0, 10);
   if (args.isCypress && combinedDiagnostics.length === 0) {
+    if (/cypress could not verify that this server is running|cypress failed to verify that your server is running/i.test(combined)) {
+      return {
+        diagnostics: [
+          "Cypress could not reach the configured baseUrl; start the app server (for example Vite on http://localhost:5173) before running E2E checks.",
+        ],
+        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
+      };
+    }
     if (/project does not contain a default supportfile|supportfile to exist|support-file-missing-or-invalid|supportfile is not necessary/i.test(combined)) {
       return {
         diagnostics: ["Cypress supportFile is missing or invalid; create cypress/support/e2e.ts or set supportFile=false in cypress config."],
         artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
       };
     }
-    if (/configfile is invalid|your configfile is invalid|cypress\.config\.[cm]?[jt]s|exports is not defined in es module scope|referenceerror:\s*exports is not defined/i.test(combined)) {
+    if (/configfile is invalid|your configfile is invalid|failed loading cypress config|exports is not defined in es module scope|referenceerror:\s*exports is not defined/i.test(combined)) {
       return {
         diagnostics: ["Cypress config is invalid at runtime (config file could not be loaded)."],
         artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],

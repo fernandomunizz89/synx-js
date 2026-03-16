@@ -731,12 +731,12 @@ function hasImportExportFailureSignal(checks: Array<{
     .join("\n")
     .toLowerCase();
 
-  return /does not provide an export named|import\/export mismatch|cannot find module|requested module .* does not provide an export named|missing export\b/.test(corpus);
+  return /does not provide an export named|import\/export mismatch|export\/import mismatch|cannot find module|requested module .* does not provide an export named|missing export\b/.test(corpus);
 }
 
 function isImportExportRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
-  return /does not provide an export named|import\/export mismatch|requested module .* does not provide an export named|cannot find module|incorrect import|import statement|default import|named import|missing export\b|export not confirmed|export .* not confirmed/.test(lower);
+  return /does not provide an export named|import\/export mismatch|export\/import mismatch|requested module .* does not provide an export named|cannot find module|incorrect import|import statement|default import|named import|missing export\b|export not confirmed|export .* not confirmed|still attempts to import|does not export that symbol|export.*mismatch/.test(lower);
 }
 
 function filterUnsupportedImportExportFailures(
@@ -784,10 +784,22 @@ function filterUnsupportedImportExportReturnContext(
   });
 }
 
+function filterUnsupportedEvidenceGapFailures(
+  failures: string[],
+): string[] {
+  return failures.filter((item) => {
+    const lower = item.toLowerCase();
+    if (/no concrete evidence provided|missing actual content|no verification provided|actual content changes are not confirmed|content changes are not confirmed/.test(lower)) {
+      return false;
+    }
+    return true;
+  });
+}
+
 function isLowSignalQaText(value: string): boolean {
   const lower = value.toLowerCase().trim();
   if (!lower) return true;
-  return /acceptance criteria and validation checks should pass|address this blocker directly and verify with relevant checks|qa validation failed|no detailed assertion context/.test(lower);
+  return /acceptance criteria and validation checks should pass|address this blocker directly and verify with relevant checks|qa validation failed|no detailed assertion context|no concrete evidence provided|missing actual content|no verification provided/.test(lower);
 }
 
 function hasOnlyRootCauseHintEvidence(evidence: string[]): boolean {
@@ -1332,6 +1344,7 @@ MANDATORY VALIDATION CONTRACT:
       output.failures,
       output.executedChecks,
     );
+    output.failures = filterUnsupportedEvidenceGapFailures(output.failures);
     const hasEvidenceBackedFailure = output.executedChecks.some((check) => check.status === "failed") || hardFailures.length > 0;
     if (!hasEvidenceBackedFailure) {
       output.failures = [];
