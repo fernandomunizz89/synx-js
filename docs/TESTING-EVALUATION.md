@@ -10,11 +10,39 @@
 
 SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates autonomous software development tasks (bug fixes, features, refactors) through a sequential agent workflow. The system makes real file edits, runs quality checks, and handles remediation loops.
 
-**Current Testing Status:** ❌ **Critical Gap**
-- No unit test framework configured
-- No existing test files detected
-- Cypress (E2E) is a dev dependency but no test specs found
-- **Risk Level:** HIGH - System makes autonomous file modifications without test safety net
+**Current Testing Status (updated):** ✅ **Foundation Established**
+- Vitest + V8 coverage configured and active
+- 26 test files / 88 passing tests
+- CI workflow added with build + coverage gate
+- Coverage now reflects whole repository (`coverage.all = true`, `include = src/**/*.ts`)
+- **Risk Level:** MEDIUM - Core surfaces are covered, deep worker behavior still needs expansion
+
+### Status Real (2026-03-16)
+
+| Item solicitado | Status |
+|---|---|
+| Testes de `config.ts`, `task.ts`, `runtime.ts` | **Feito** |
+| Testes de `cypress-tools.ts` e `validation-checks.ts` | **Feito** |
+| Testes de comandos (`start/new/setup/status/doctor`) | **Feito** |
+| Testes de workers concretos | **Parcial** (cobertura de registro e comportamento base sem inbox) |
+| Testes de providers (`mock` + `openai-compatible` + `lmstudio`) | **Feito** |
+| Integração dos cenários críticos (task lifecycle, lock recovery, working recovery) | **Feito** |
+| CI com execução de testes e gate de cobertura | **Feito** |
+| Cobertura refletindo todo `src/**/*.ts` | **Feito** |
+
+### Métricas Atuais
+
+- `npm run test -- --run`: **26 files / 88 tests / 100% pass**
+- `npm run test:coverage` (repo-wide):  
+  - Statements: **23.92%**
+  - Branches: **16.36%**
+  - Functions: **23.86%**
+  - Lines: **25.38%**
+- Gate atual configurado no Vitest:
+  - Branches: `>= 15`
+  - Functions: `>= 20`
+  - Lines: `>= 20`
+  - Statements: `>= 20`
 
 ---
 
@@ -1379,29 +1407,29 @@ describe('SYNX UI', () => {
 ## 6. Implementation Roadmap
 
 ### Week 1: Foundation (HIGH Priority)
-- [ ] Setup Vitest configuration
-- [ ] Implement schema tests (`schema.test.ts`)
-- [ ] Implement config tests (`config.test.ts`)
-- [ ] Implement task tests (`task.test.ts`)
-- [ ] Implement runtime tests (`runtime.test.ts`)
+- [x] Setup Vitest configuration
+- [x] Implement schema tests (`schema.test.ts`)
+- [x] Implement config tests (`config.test.ts`)
+- [x] Implement task tests (`task.test.ts`)
+- [x] Implement runtime tests (`runtime.test.ts`)
 
 ### Week 2: Core Logic (HIGH Priority)
-- [ ] Implement workspace editor tests
-- [ ] Implement quality retry policy tests
-- [ ] Implement text/token utility tests
-- [ ] Implement Cypress tools tests
-- [ ] Implement validation-checks tests
+- [x] Implement workspace editor tests
+- [x] Implement quality retry policy tests
+- [x] Implement text/token utility tests
+- [x] Implement Cypress tools tests
+- [x] Implement validation-checks tests
 
 ### Week 3: Integration (MEDIUM Priority)
-- [ ] Implement worker tests (through concrete implementations)
-- [ ] Implement command tests (focus on start.ts, new.ts)
-- [ ] Implement provider tests (mock provider first)
+- [~] Implement worker tests (through concrete implementations) *(parcial)*
+- [x] Implement command tests (focus on start.ts, new.ts)
+- [x] Implement provider tests (mock provider first)
 
 ### Week 4: Polish (LOW Priority)
-- [ ] Implement utility tests
+- [x] Implement utility tests
 - [ ] Add spot checks for UI rendering
-- [ ] Review coverage report
-- [ ] Add integration tests for critical paths
+- [x] Review coverage report
+- [x] Add integration tests for critical paths
 
 ---
 
@@ -1412,8 +1440,7 @@ describe('SYNX UI', () => {
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui"
+    "test:coverage": "vitest run --coverage"
   }
 }
 ```
@@ -1454,7 +1481,7 @@ describe('SYNX UI', () => {
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| No test safety net | HIGH | Implement Phase 1 immediately |
+| Cobertura global ainda baixa para módulos grandes | HIGH | Expandir testes profundos de workers/fluxos completos |
 | Autonomous file edits | HIGH | Test workspace-editor thoroughly |
 | Race conditions | MEDIUM | Test lock management extensively |
 | Provider failures | MEDIUM | Test error extraction and retry |
@@ -1464,19 +1491,19 @@ describe('SYNX UI', () => {
 
 ## 10. Conclusion
 
-SYNX is a sophisticated multi-agent orchestrator with **zero test coverage**. The system's autonomous nature (making real file edits) combined with the lack of tests represents a **critical risk**.
+SYNX now has a **solid test baseline** with CI + coverage gate and broad unit coverage across critical modules, commands, providers and integration recovery flows.
 
-**Immediate Actions Required:**
-1. Add Vitest as dev dependency
-2. Implement Phase 1 tests (core business logic)
-3. Add CI pipeline with coverage thresholds
-4. Require tests for all new features
+**Immediate Next Actions:**
+1. Expand deep behavior coverage for concrete workers (`builder`, `bug-fixer`, `qa`, `reviewer`)
+2. Add robust command tests for remaining commands (`approve`, `cancel`, `resume`, `fix`, `metrics`)
+3. Increase coverage gate gradually (e.g. +2 p.p. per cycle) to avoid regressions
+4. Add richer integration flows with real stage chaining beyond synthetic worker lifecycle
 
 **Success Metrics:**
-- 50%+ overall coverage
-- 80%+ coverage on core modules (schema, config, task, runtime)
-- All critical paths tested
-- No regressions in file edit safety
+- 50%+ overall coverage (target in progress)
+- 80%+ coverage on core modules (already near/at target for schema/config/task/runtime)
+- All critical recovery paths tested
+- No regressions in file edit safety checks
 
 ---
 
