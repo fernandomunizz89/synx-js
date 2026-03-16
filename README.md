@@ -17,6 +17,7 @@ It manages a multi-agent system executing directly within local repositories. Th
 Key architectural points for agents operating in this repository:
 - **Core Orchestrator:** This repo contains the orchestrator written in TypeScript (`src/index.ts` entrypoint).
 - **Agent Pipelines:** Implementations (`Bug Fixer`, `Feature Builder`, `QA`) apply real file edits in target workspaces.
+- **On-demand Research:** A gated `Researcher` service can be invoked by orchestrator logic when confidence drops or QA repeats the same failure.
 - **Config Precedence:** Global `~/.ai-agents/config.json` -> Project `<repo>/.ai-agents/config/project.json`.
 - **Primary Commands:** `setup`, `start`, `new`, `status`, `approve`, `reprove`, `doctor`, `resume`, `fix`, `metrics`.
 - **References:** Full operational manuals and implementation details reside in the `docs/` folder.
@@ -36,6 +37,7 @@ Whether you're dispatching a new minor feature or debugging a complex regression
 - **Provider Agnostic:** Supports local models (e.g., LM Studio) and cloud models (OpenAI-compatible endpoints).
 - **Task Variety:** Easily trigger tasks typed as `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, or `Mixed`.
 - **Robust Quality Assurance:** Dynamic E2E test execution, strict sanity checks (lint, typescript compile), automatic remediation loops, and root-cause failure analysis.
+- **External Context Retrieval:** Researcher synthesizes web evidence (official docs/forums/issues) into structured guidance without editing code directly.
 - **Resilient Workflows:** Recovery of unfinished executions, stale lock eviction, and step-by-step pipeline re-entries.
 - **Real Workspace Edits:** Agents actually construct, refactor, and delete real code in target directories (minus protected zones).
 - **Actionable Diagnostics:** Tools like `doctor`, `status`, and `metrics` provide comprehensive views of the local orchestration.
@@ -133,6 +135,10 @@ SYNX operates via a sequential multi-agent model orchestrated completely within 
 Depending on the task type (e.g., `Feature` vs `Bug`), the CLI routes the request differently:
 - **Bugs:** `Dispatcher ➔ Bug Investigator ➔ Bug Fixer ➔ Reviewer ➔ QA ➔ PR Writer ➔ Human Appr.`
 - **Standard (Features/Refactors):** `Dispatcher ➔ Spec Planner ➔ Feature Builder ➔ Reviewer ➔ QA ➔ PR Writer ➔ Human Appr.`
+- **On-demand assist path:** `Researcher` can be called by `Spec Planner`, `Feature Builder`, or `Bug Fixer` when:
+  - upstream confidence is `< 0.6`, or
+  - QA reports the same issue for the second consecutive attempt.
+- **Research guardrails:** max `2` web searches per stage (default), anti-loop escalates to `waiting_human` if same recommendation persists for the same recurring issue.
 
 ### Configuration Layers
 Configuration cascades locally to globally:

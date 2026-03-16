@@ -13,6 +13,7 @@ The system:
 - can recover unfinished work after interruptions
 - runs all pipeline agents with provider-backed structured outputs
 - sends failed QA back to the right implementation agent automatically
+- can invoke an on-demand `Researcher` service for external technical context
 
 ## The 4 commands you will use most
 
@@ -118,6 +119,11 @@ Routing summary:
 - `Bug`: Dispatcher -> Bug Investigator -> Bug Fixer -> Reviewer -> QA -> PR Writer -> Human approval
 - Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
 - QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
+- On-demand `Researcher` (non-linear): can be called from `Spec Planner`, `Feature Builder`, or `Bug Fixer`
+  - trigger 1: upstream confidence signal `< 0.6`
+  - trigger 2: QA detects same issue on the 2nd consecutive cycle
+  - output only: structured knowledge JSON (no code edits)
+  - anti-loop: if recommendation repeats and issue persists, task escalates to `waiting_human`
 - QA captures compact diagnostics from failed checks (including E2E) and sends expected-vs-received evidence in the handoff
 - QA/implementation now follow human per-task E2E preferences (`--e2e`, `--e2e-framework`, `--qa-objective`)
 - QA fail handoff includes structured context per blocker: expected result, received result, evidence, and recommended action
@@ -296,6 +302,9 @@ synx start
 and
 `.ai-agents/tasks/<task-id>/logs/`
 
+Research-specific artifact:
+- `.ai-agents/tasks/<task-id>/artifacts/research-log.json` (queries, sources, recommendation, provider/model, anti-loop signal)
+
 ## Important expectation
 This tool is designed to reduce human error, but it does not remove the need for final human review.
 You remain the manager and final validator.
@@ -318,6 +327,15 @@ Advanced tuning:
 - set `AI_AGENTS_PROVIDER_STREAMING=true` to enable SSE streaming mode for OpenAI-compatible provider calls (`false` by default)
 - set `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE=<n>` to enforce local provider-call throughput cap (`0` disables, default `0`)
 - set `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS=<ms>` to tune the local limiter window (default `60000`, min `200`)
+- set `AI_AGENTS_RESEARCH_ENABLED=true|false` to enable/disable on-demand Researcher (default `true`)
+- set `AI_AGENTS_RESEARCH_MAX_SEARCHES_PER_STAGE=<n>` to cap web searches per stage (default `2`)
+- set `AI_AGENTS_RESEARCH_WEB_PROVIDER=duckduckgo|tavily` (default `duckduckgo`)
+- set `AI_AGENTS_RESEARCH_TAVILY_API_KEY=<key>` when using Tavily for web search
+- optional research-provider overrides:
+  - `AI_AGENTS_RESEARCH_PROVIDER_TYPE`
+  - `AI_AGENTS_RESEARCH_MODEL`
+  - `AI_AGENTS_RESEARCH_BASE_URL`
+  - `AI_AGENTS_RESEARCH_API_KEY`
 - set `AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES=<n>` for transient-provider retries (default `2`, max `6`)
 - set `AI_AGENTS_PROVIDER_BACKOFF_BASE_MS=<ms>` for backoff base delay (default `500`)
 - set `AI_AGENTS_PROVIDER_BACKOFF_MAX_MS=<ms>` for max backoff delay cap (default `8000`)
@@ -394,6 +412,7 @@ Agent defaults:
 - `Bug Investigator`: `0.1`
 - `Bug Fixer`: `0.05`
 - `Feature Builder`: `0.05`
+- `Researcher`: `0.2`
 - `Reviewer`: `0.05`
 - `QA Validator`: `0.05`
 - `PR Writer`: `0.3`
