@@ -23,6 +23,12 @@ export const agentNameSchema = z.enum([
   "PR Writer",
   "Human Review",
 ]);
+const legacyHistoryAgentSchema = z
+  .union([agentNameSchema, z.literal("System")])
+  .transform<z.infer<typeof agentNameSchema>>((value) => (value === "System" ? "Human Review" : value));
+const taskMetaCurrentAgentSchema = z
+  .union([agentNameSchema, z.literal(""), z.literal("System")])
+  .transform<z.infer<typeof agentNameSchema> | "">((value) => (value === "System" ? "" : value));
 export const e2ePolicySchema = z.enum(["auto", "required", "skip"]);
 export const e2eFrameworkSchema = z.enum(["auto", "cypress", "playwright", "other"]);
 
@@ -89,7 +95,7 @@ export const stageEnvelopeSchema = z.object({
 
 export const taskMetaHistoryItemSchema = z.object({
   stage: z.string(),
-  agent: agentNameSchema,
+  agent: legacyHistoryAgentSchema,
   startedAt: z.string(),
   endedAt: z.string(),
   durationMs: z.number(),
@@ -115,8 +121,8 @@ export const taskMetaSchema = z.object({
   project: z.string(),
   status: taskStatusSchema,
   currentStage: z.string(),
-  currentAgent: z.union([agentNameSchema, z.literal("")]),
-  nextAgent: z.union([agentNameSchema, z.literal("")]),
+  currentAgent: taskMetaCurrentAgentSchema,
+  nextAgent: taskMetaCurrentAgentSchema,
   humanApprovalRequired: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
