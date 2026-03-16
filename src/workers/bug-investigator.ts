@@ -117,7 +117,7 @@ export class BugInvestigatorWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "suspectFiles": ["string"], "suspectAreas": ["string"], "primaryHypothesis": "string", "secondaryHypotheses": ["string"], "riskAssessment": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "integrationRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "builderChecks": ["string"], "handoffNotes": ["string"], "nextAgent": "Bug Fixer" }',
+        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "confidenceScore": 0.0, "suspectFiles": ["string"], "suspectAreas": ["string"], "primaryHypothesis": "string", "secondaryHypotheses": ["string"], "riskAssessment": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "integrationRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "builderChecks": ["string"], "handoffNotes": ["string"], "nextAgent": "Bug Fixer" }',
     });
     const output = bugInvestigatorOutputSchema.parse(result.parsed);
     const triageDiagnostics = triageChecks.flatMap((check) => check.diagnostics);
@@ -278,6 +278,9 @@ ${output.builderChecks.length ? output.builderChecks.map((x, index) => `${index 
 
 ## Handoff Notes
 ${output.handoffNotes.length ? output.handoffNotes.map((x) => `- ${trimText(x, 300)}`).join("\n") : "- [none]"}
+
+## Confidence Score
+${typeof output.confidenceScore === "number" ? output.confidenceScore.toFixed(2) : "[not provided]"}
 
 ## Unknowns
 ${output.unknowns.length ? output.unknowns.map((x) => `- ${x}`).join("\n") : "- [none]"}

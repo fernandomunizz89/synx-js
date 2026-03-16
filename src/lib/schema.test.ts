@@ -6,6 +6,7 @@ import {
   builderOutputSchema,
   plannerOutputSchema,
   qaOutputSchema,
+  researcherOutputSchema,
   taskMetaSchema,
   taskTypeSchema,
 } from "./schema.js";
@@ -15,6 +16,7 @@ describe("schema", () => {
     expect(taskTypeSchema.parse("Feature")).toBe("Feature");
     expect(taskTypeSchema.parse("Bug")).toBe("Bug");
     expect(agentNameSchema.parse("QA Validator")).toBe("QA Validator");
+    expect(agentNameSchema.parse("Researcher")).toBe("Researcher");
   });
 
   it("rejects invalid task enum value", () => {
@@ -179,6 +181,23 @@ describe("schema", () => {
       validationCriteria: ["Looks good"],
       nextAgent: "Feature Builder",
     })).toThrow();
+  });
+
+  it("validates researcher output schema", () => {
+    const parsed = researcherOutputSchema.parse({
+      summary: "Use official docs and align the hook signature.",
+      sources: [
+        {
+          title: "Official docs",
+          url: "https://example.com/docs",
+        },
+      ],
+      confidence_score: 0.82,
+      recommended_action: "Adjust import/export and re-run typecheck.",
+      is_breaking_change: false,
+    });
+    expect(parsed.confidence_score).toBe(0.82);
+    expect(parsed.sources[0]?.url).toBe("https://example.com/docs");
   });
 
   it("validates bug investigator output schema correctly", () => {

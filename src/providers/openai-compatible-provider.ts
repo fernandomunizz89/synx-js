@@ -62,6 +62,7 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   "Bug Investigator": 0.1,
   "Bug Fixer": 0.05,
   "Feature Builder": 0.05,
+  "Researcher": 0.2,
   "Reviewer": 0.05,
   "QA Validator": 0.05,
   "PR Writer": 0.3,

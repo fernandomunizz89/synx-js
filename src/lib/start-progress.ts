@@ -38,12 +38,20 @@ function stageLabel(stage: string): string {
       return "Dispatcher";
     case "planner":
       return "Planner";
+    case "planner:research":
+      return "Researcher";
     case "bug-investigator":
       return "Bug Investigator";
     case "builder":
       return "Feature Builder";
+    case "builder:research":
+      return "Researcher";
     case "bug-fixer":
       return "Bug Fixer";
+    case "bug-fixer:research":
+      return "Researcher";
+    case "researcher":
+      return "Researcher";
     case "reviewer":
       return "Reviewer";
     case "qa":
@@ -334,6 +342,14 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
     const eventLines = isConsoleView
       ? (snapshot.consoleLogLines.length ? snapshot.consoleLogLines.slice(-5) : [synxMuted("No console messages yet.")])
       : (snapshot.eventLogLines.length ? snapshot.eventLogLines.slice(-5) : [synxMuted("No events yet. Waiting for activity...")]);
+    const researcherActive = snapshot.metas.some((meta) =>
+      (meta.currentAgent === "Researcher" || meta.currentStage.endsWith(":research"))
+      && ["new", "in_progress", "waiting_agent"].includes(meta.status),
+    );
+    if (!isConsoleView && researcherActive) {
+      eventLines.unshift(`${synxCyan(spinner)} 🌐 Searching Web...`);
+      while (eventLines.length > 5) eventLines.pop();
+    }
     const eventPanel = renderSynxPanel({
       title: isConsoleView ? "CONSOLE" : "EVENT STREAM",
       borderColor: isConsoleView ? "cyan" : "magenta",

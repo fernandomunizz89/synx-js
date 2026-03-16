@@ -1,6 +1,7 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadResolvedProjectConfig, loadPromptFile } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
+import { formatResearchContextTag, requestResearchContext } from "../lib/orchestrator.js";
 import { collectProjectProfile, projectProfileFactLines, type ProjectProfile } from "../lib/project-handoff.js";
 import { ARTIFACT_FILES, loadTaskArtifact, saveTaskArtifact } from "../lib/task-artifacts.js";
 import { createProvider } from "../providers/factory.js";
@@ -31,16 +32,88 @@ export class PlannerWorker extends WorkerBase {
       });
     }
     await saveTaskArtifact(taskId, ARTIFACT_FILES.projectProfile, projectProfile);
+    const dispatcherOutput = (
+      baseInput.previousStage
+      && typeof baseInput.previousStage === "object"
+      && "output" in baseInput.previousStage
+      && baseInput.previousStage.output
+      && typeof baseInput.previousStage.output === "object"
+    )
+      ? baseInput.previousStage.output as { unknowns?: unknown }
+      : null;
+    const dispatcherUnknowns = Array.isArray(dispatcherOutput?.unknowns)
+      ? dispatcherOutput.unknowns.filter((item): item is string => typeof item === "string")
+      : [];
+    const researchDecision = await requestResearchContext({
+      taskId,
+      stage: "planner",
+      requesterAgent: this.agent,
+      taskType: baseInput.task.typeHint,
+      previousStage: baseInput.previousStage,
+      errorContext: [
+        baseInput.task.rawRequest,
+        ...dispatcherUnknowns.slice(0, 4),
+      ].join(" | "),
+      targetTechnology: `${config.language || "unknown"} ${config.framework || ""}`.trim(),
+      specificQuestion: `What is the safest technical plan to implement: ${baseInput.task.title}?`,
+      repeatedIssues: [],
+    });
+
+    if (researchDecision.status === "abort_to_human") {
+      const escalationOutput = {
+        decision: "research_loop_detected",
+        reason: researchDecision.abortReason || "Research anti-loop guard triggered.",
+        triggerReasons: researchDecision.triggerReasons,
+        researchContext: researchDecision.context,
+      };
+      const escalationView = `# HANDOFF
+
+## Agent
+Spec Planner
+
+## Decision
+Escalated to human review before planning because Researcher loop guard was triggered.
+
+## Reason
+${researchDecision.abortReason || "Research recommendation repeated while uncertainty persisted."}
+
+## Trigger Reasons
+${researchDecision.triggerReasons.length ? researchDecision.triggerReasons.map((item) => `- ${item}`).join("\n") : "- [none]"}
+
+## Research Context
+${researchDecision.context ? formatResearchContextTag(researchDecision.context).split("\n").map((line) => `- ${line}`).join("\n") : "- [none]"}
+
+## Next
+Human Review
+`;
+
+      await this.finishStage({
+        taskId,
+        stage: "planner",
+        doneFileName: DONE_FILE_NAMES.planner,
+        viewFileName: "02-planner.md",
+        viewContent: escalationView,
+        output: escalationOutput,
+        humanApprovalRequired: true,
+        startedAt,
+      });
+      return;
+    }
+
+    const researchContextTag = researchDecision.context
+      ? `[RESEARCH_CONTEXT]:\n${formatResearchContextTag(researchDecision.context)}`
+      : "";
     const modelInput = {
       ...baseInput,
       projectProfile,
+      researchContext: researchDecision.context,
     };
 
     const roleContract = buildAgentRoleContract("Spec Planner", {
       stage: "planner",
       taskTypeHint: baseInput.task.typeHint,
     });
-    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}`;
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}`;
     const result = await provider.generateStructured({
       agent: "Spec Planner",
       taskId,
@@ -49,7 +122,7 @@ export class PlannerWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "technicalContext": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "requiresHumanInput": false, "conditionalPlan": ["string"], "edgeCases": ["string"], "risks": ["string"], "validationCriteria": ["string"], "nextAgent": "Feature Builder" }',
+        '{ "technicalContext": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "conditionalPlan": ["string"], "edgeCases": ["string"], "risks": ["string"], "validationCriteria": ["string"], "nextAgent": "Feature Builder" }',
     });
 
     const output = plannerOutputSchema.parse(result.parsed);
@@ -80,6 +153,9 @@ ${output.unknowns.length ? output.unknowns.map((x) => `- ${x}`).join("\n") : "- 
 ## Assumptions
 ${output.assumptions.length ? output.assumptions.map((x) => `- ${x}`).join("\n") : "- [none]"}
 
+## Confidence Score
+${typeof output.confidenceScore === "number" ? output.confidenceScore.toFixed(2) : "[not provided]"}
+
 ## Requires Human Input
 ${output.requiresHumanInput ? "Yes" : "No"}
 
@@ -97,6 +173,15 @@ ${output.validationCriteria.length ? output.validationCriteria.map((x) => `- ${x
 
 ## Project Profile Snapshot
 ${projectProfileFactLines(projectProfile).map((x) => `- ${x}`).join("\n")}
+
+## Research Context
+${researchDecision.context
+    ? `- Trigger reasons: ${researchDecision.triggerReasons.join(", ") || "[none]"}
+- Reused context: ${researchDecision.reusedContext ? "yes" : "no"}
+- Summary: ${researchDecision.context.summary}
+- Recommended action: ${researchDecision.context.recommendedAction}
+- Confidence: ${researchDecision.context.confidenceScore.toFixed(2)}
+${researchDecision.context.sources.length ? researchDecision.context.sources.slice(0, 4).map((item) => `- Source: ${item.title} (${item.url})`).join("\n") : "- Source: [none]"}` : "- [none]"}
 
 ## Next
 Feature Builder

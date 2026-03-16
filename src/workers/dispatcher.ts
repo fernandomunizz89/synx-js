@@ -49,7 +49,7 @@ export class DispatcherWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner" }',
+        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);
@@ -83,6 +83,9 @@ ${output.assumptions.length ? output.assumptions.map((x) => `- ${x}`).join("\n")
 
 ## Constraints
 ${output.constraints.length ? output.constraints.map((x) => `- ${x}`).join("\n") : "- [none]"}
+
+## Confidence Score
+${typeof output.confidenceScore === "number" ? output.confidenceScore.toFixed(2) : "[not provided]"}
 
 ## Project Profile Snapshot
 ${projectProfileFactLines(projectProfile).map((x) => `- ${x}`).join("\n")}

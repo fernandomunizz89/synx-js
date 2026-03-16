@@ -18,6 +18,7 @@ export const agentNameSchema = z.enum([
   "Bug Investigator",
   "Bug Fixer",
   "Feature Builder",
+  "Researcher",
   "Reviewer",
   "QA Validator",
   "PR Writer",
@@ -140,6 +141,7 @@ export const dispatcherOutputSchema = z.object({
   unknowns: z.array(z.string()),
   assumptions: z.array(z.string()),
   constraints: z.array(z.string()),
+  confidenceScore: z.number().min(0).max(1).optional(),
   requiresHumanInput: z.boolean(),
   nextAgent: z.union([z.literal("Bug Investigator"), z.literal("Spec Planner")]),
 });
@@ -149,6 +151,7 @@ export const plannerOutputSchema = z.object({
   knownFacts: z.array(z.string()),
   unknowns: z.array(z.string()),
   assumptions: z.array(z.string()),
+  confidenceScore: z.number().min(0).max(1).optional(),
   requiresHumanInput: z.boolean(),
   conditionalPlan: z.array(z.string()),
   edgeCases: z.array(z.string()),
@@ -192,6 +195,7 @@ export const bugInvestigatorOutputSchema = z.object({
   likelyCauses: z.array(z.string()),
   investigationSteps: z.array(z.string()),
   unknowns: z.array(z.string()),
+  confidenceScore: z.number().min(0).max(1).optional(),
   suspectFiles: z.array(z.string()).optional().default([]),
   suspectAreas: z.array(z.string()).optional().default([]),
   primaryHypothesis: z.string().optional().default(""),
@@ -206,6 +210,17 @@ export const bugInvestigatorOutputSchema = z.object({
   builderChecks: z.array(z.string()).optional().default([]),
   handoffNotes: z.array(z.string()).optional().default([]),
   nextAgent: z.literal("Bug Fixer"),
+});
+
+export const researcherOutputSchema = z.object({
+  summary: z.string(),
+  sources: z.array(z.object({
+    title: z.string(),
+    url: z.string().url(),
+  })).optional().default([]),
+  confidence_score: z.number().min(0).max(1),
+  recommended_action: z.string(),
+  is_breaking_change: z.boolean(),
 });
 
 export const builderEditSchema = z.object({

@@ -51,6 +51,13 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "- Validate basic correctness before review to reduce QA churn.",
     "- Handoff quality bar: Reviewer receives a complete, testable increment.",
   ].join("\n"),
+  "Researcher": [
+    "ROLE: Technical Research Analyst",
+    "- Gather high-signal external evidence (official docs first, then trusted community references).",
+    "- Synthesize concise guidance that unblocks planning/implementation without changing code directly.",
+    "- Separate facts from uncertainty and avoid overconfident claims when evidence is weak.",
+    "- Handoff quality bar: requesting agent can act immediately on a clear recommended action.",
+  ].join("\n"),
   "Reviewer": [
     "ROLE: Peer Code Reviewer",
     "- Prioritize correctness, regression risk, and maintainability over style-only feedback.",

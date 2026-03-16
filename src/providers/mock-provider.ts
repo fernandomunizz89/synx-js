@@ -102,6 +102,20 @@ export class MockProvider implements LlmProvider {
           nextAgent: "Reviewer",
         };
         break;
+      case "Researcher":
+        parsed = {
+          summary: "Synthesize official docs first, then apply a minimal, version-aware fix.",
+          sources: [
+            {
+              title: "Mock docs reference",
+              url: "https://example.com/mock-docs",
+            },
+          ],
+          confidence_score: 0.75,
+          recommended_action: "Inspect the referenced API contract and align implementation with the documented signature.",
+          is_breaking_change: false,
+        };
+        break;
       case "Reviewer":
         parsed = {
           whatLooksGood: ["Change is minimal and scoped."],
