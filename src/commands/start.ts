@@ -204,8 +204,21 @@ export const startCommand = new Command("start")
     let totalProcessedStages = 0;
     let totalProcessedTasks = 0;
     let wasPreviousLoopProductive = false;
+    let stopRequested = false;
+    let stopSignal: NodeJS.Signals | "" = "";
+    let lastActiveTaskCount = 0;
+
+    const requestStop = (signal: NodeJS.Signals): void => {
+      if (stopRequested) return;
+      stopRequested = true;
+      stopSignal = signal;
+      console.log(`\n${signal} received. Waiting current cycle to finish for graceful shutdown...`);
+    };
+
+    process.on("SIGINT", requestStop);
+    process.on("SIGTERM", requestStop);
     try {
-      while (true) {
+      while (!stopRequested) {
         const loopStartedAtMs = Date.now();
         loop += 1;
         const taskIds = await allTaskIds();
@@ -227,6 +240,7 @@ export const startCommand = new Command("start")
           .filter((item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof loadTaskMeta>>> => item.status === "fulfilled")
           .map((item) => item.value);
         const activeTaskCount = metas.filter((meta) => ["new", "in_progress", "waiting_agent"].includes(meta.status)).length;
+        lastActiveTaskCount = activeTaskCount;
         progress.render({
           loop,
           engineStartedAtMs,
@@ -293,10 +307,37 @@ export const startCommand = new Command("start")
         });
 
         wasPreviousLoopProductive = processedStages > 0;
+        if (stopRequested) break;
         if (decision.action === "immediate") continue;
         await sleep(pollIntervalMs);
       }
     } finally {
+      process.off("SIGINT", requestStop);
+      process.off("SIGTERM", requestStop);
+      await logDaemon(`Engine stopped${stopSignal ? ` via ${stopSignal}` : ""}.`);
+      await writeDaemonState({
+        pid: process.pid,
+        lastHeartbeatAt: nowIso(),
+        loop,
+        taskCount: 0,
+        workerCount: workers.length,
+        activeTaskCount: lastActiveTaskCount,
+        processedStagesLastLoop: 0,
+        processedTasksLastLoop: 0,
+        totalProcessedStages,
+        totalProcessedTasks,
+        immediateCycleStreak,
+        immediateCyclesTotal,
+        sleepsAvoidedTotal,
+        sleepsTotal,
+        loopAction: "stopped",
+        loopActionReason: stopSignal ? `graceful shutdown after ${stopSignal}` : "engine loop terminated",
+        loopDurationMs: 0,
+        pollIntervalMs,
+        maxImmediateCycles,
+        taskConcurrency,
+      });
       progress.stop();
+      console.log("Engine stopped.");
     }
   });
