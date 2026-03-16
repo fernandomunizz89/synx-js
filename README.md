@@ -1,4 +1,4 @@
-# AI Agents V5
+# SYNX
 
 A human-friendly CLI for running a file-driven AI agents pipeline inside each repository.
 
@@ -26,7 +26,7 @@ This version is designed to reduce operator friction:
 - `show-config`
 
 ## Task types
-Supported values for `ai-agents new --type <type>`:
+Supported values for `synx new --type <type>`:
 - `Feature`
 - `Bug`
 - `Refactor`
@@ -35,14 +35,14 @@ Supported values for `ai-agents new --type <type>`:
 - `Mixed`
 
 ## Human QA Input Per Task
-`ai-agents new` now captures human QA preferences for E2E:
+`synx new` now captures human QA preferences for E2E:
 - `--e2e auto|required|skip`
 - `--e2e-framework auto|cypress|playwright|other`
 - `--qa-objective "<goal>"`
 
 Example:
 ```bash
-ai-agents new "Fix import/export mismatch and failing E2E selectors" --type Bug --e2e required --e2e-framework cypress --qa-objective "Get Cypress main flow tests passing."
+synx new "Fix import/export mismatch and failing E2E selectors" --type Bug --e2e required --e2e-framework cypress --qa-objective "Get Cypress main flow tests passing."
 ```
 
 These preferences are passed to QA, Feature Builder, and Bug Fixer as explicit quality gates.
@@ -54,7 +54,7 @@ These preferences are passed to QA, Feature Builder, and Bug Fixer as explicit q
 
 ### First time on a machine
 ```bash
-cd ~/Workspace/ai-agents-v5-node-ts
+cd ~/Workspace/SYNX
 npm install
 npm run build
 npm link
@@ -62,7 +62,7 @@ npm link
 
 Then inside a repo:
 ```bash
-ai-agents setup
+synx setup
 ```
 
 `setup` now:
@@ -76,26 +76,36 @@ ai-agents setup
 
 ### Daily use
 ```bash
-ai-agents start
-ai-agents new
-ai-agents status
-ai-agents cancel <task-id>
-ai-agents approve
+synx start
+synx new
+synx status
+synx cancel <task-id>
+synx approve
 ```
 
 While `start` is running in a terminal, it now shows:
-- live spinner heartbeat
-- elapsed timer
-- per-task progress bar by pipeline stage/agent
+- SYNX logo banner with cyber theme
+- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Planner]`
+- double-line bordered cards for control/config/task status
+- per-task state colors:
+  - cyan: `Processing`
+  - green: `Success`
+  - red: `Critical Error`
+  - yellow: `Waiting Human`
 
 If you prefer quiet mode:
 ```bash
-ai-agents start --no-progress
+synx start --no-progress
+```
+
+Quiet mode emits stream-style runtime logs like:
+```text
+[2026-03-16 01:14:22] :: SYNX :: Handoff to Feature Builder (builder) for task-...
 ```
 
 If you want a safe preview run without writing code changes:
 ```bash
-ai-agents start --dry-run
+synx start --dry-run
 ```
 
 `status` now defaults to a focused view:
@@ -104,14 +114,14 @@ ai-agents start --dry-run
 
 To list all historical tasks:
 ```bash
-ai-agents status --all
+synx status --all
 ```
 
 `metrics` now supports collaboration-focused measurement with time windows:
 ```bash
-ai-agents metrics --since 20260315-212519
-ai-agents metrics --since 1773609919792 --until 1773613519792
-ai-agents metrics --since 2026-03-15T21:25:19Z --json
+synx metrics --since 20260315-212519
+synx metrics --since 1773609919792 --until 1773613519792
+synx metrics --since 2026-03-15T21:25:19Z --json
 ```
 
 ## Preflight behavior
@@ -197,7 +207,7 @@ Example global config (LM Studio auto mode):
 ```
 
 Troubleshooting quick checks:
-- run `ai-agents doctor` and verify provider health lines for Dispatcher/Planner.
+- run `synx doctor` and verify provider health lines for Dispatcher/Planner.
 - if detection fails, ensure LM Studio local server is running and at least one model is loaded.
 - inspect `.ai-agents/logs/provider-model-resolution.jsonl` for discovery/fallback reasons.
 
@@ -380,7 +390,7 @@ export AI_AGENTS_PROVIDER_TIMEOUT_MS=180000
 ## Prompt integrity checks
 - `doctor` now verifies that all required prompt files exist, not only the prompt folder.
 - Readiness checks used by `start/new/status/approve` also block when required prompt files are missing.
-- To recreate missing prompts/config safely: `ai-agents fix --bootstrap`.
+- To recreate missing prompts/config safely: `synx fix --bootstrap`.
 
 ## Cross-platform
 The CLI uses Node path and home directory resolution, so it is built to run on:

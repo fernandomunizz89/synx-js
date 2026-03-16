@@ -1,4 +1,4 @@
-# AI Agents V5 - Human-friendly manual
+# SYNX - Human-friendly manual
 
 ## What this tool does
 It runs a local agents pipeline inside your repository.
@@ -45,23 +45,32 @@ It:
 
 If setup is broken, it stops with guidance and asks you to run:
 ```bash
-ai-agents setup
+synx setup
 ```
 
 When running in an interactive terminal, `start` also shows a live progress panel:
-- spinner heartbeat
-- engine uptime
-- active/waiting/failed/done counters
-- progress bar per active task based on stage
+- SYNX cyber logo + tagline
+- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Planner]`
+- double-line cards for control/config/task states
+- per-task status palette:
+  - cyan: `Processing`
+  - green: `Success`
+  - red: `Critical Error`
+  - yellow: `Waiting Human`
 
 To disable it:
 ```bash
-ai-agents start --no-progress
+synx start --no-progress
+```
+
+In quiet mode (`--no-progress`), runtime logs are emitted as a data stream:
+```text
+[2026-03-16 01:14:22] :: SYNX :: Handoff to Feature Builder (builder) for task-...
 ```
 
 For a preview run that does not write code changes:
 ```bash
-ai-agents start --dry-run
+synx start --dry-run
 ```
 
 ### 3. `new`
@@ -69,17 +78,17 @@ Creates a task.
 
 You can use:
 ```bash
-ai-agents new
+synx new
 ```
 
 Or:
 ```bash
-ai-agents new "Add dark mode toggle" --type Feature
+synx new "Add dark mode toggle" --type Feature
 ```
 
 You can also set human QA direction for E2E in the task itself:
 ```bash
-ai-agents new "Fix import/export mismatch and failing E2E selectors" --type Bug --e2e required --e2e-framework cypress --qa-objective "Get Cypress main flow tests passing."
+synx new "Fix import/export mismatch and failing E2E selectors" --type Bug --e2e required --e2e-framework cypress --qa-objective "Get Cypress main flow tests passing."
 ```
 
 Supported task types:
@@ -116,14 +125,14 @@ It tells you:
 
 To list all tasks/history:
 ```bash
-ai-agents status --all
+synx status --all
 ```
 
 ## Final human step
 When a task reaches `waiting_human`, approve it with:
 
 ```bash
-ai-agents approve
+synx approve
 ```
 
 `approve` now lets you select from pending tasks when more than one is waiting.
@@ -132,7 +141,7 @@ ai-agents approve
 To stop an active task without killing the engine process:
 
 ```bash
-ai-agents cancel <task-id>
+synx cancel <task-id>
 ```
 
 Notes:
@@ -183,34 +192,34 @@ It can:
 
 ### Start
 ```bash
-ai-agents start
+synx start
 ```
 
 ### Create a task
 ```bash
-ai-agents new
+synx new
 ```
 
 ### Watch progress
 ```bash
-ai-agents status
+synx status
 ```
 
 ### Check bottlenecks
 ```bash
-ai-agents metrics
+synx metrics
 ```
 
 ### Compare iterations with a time window
 ```bash
-ai-agents metrics --since 20260315-212519
-ai-agents metrics --since 1773609919792 --until 1773613519792
-ai-agents metrics --since 2026-03-15T21:25:19Z --json
+synx metrics --since 20260315-212519
+synx metrics --since 1773609919792 --until 1773613519792
+synx metrics --since 2026-03-15T21:25:19Z --json
 ```
 
 ### Approve final result
 ```bash
-ai-agents approve
+synx approve
 ```
 
 ## New machine or new user
@@ -221,8 +230,8 @@ Recommended first commands:
 npm install
 npm run build
 npm link
-ai-agents setup
-ai-agents start
+synx setup
+synx start
 ```
 
 ## Multi-stack behavior
@@ -318,7 +327,7 @@ Minimal LM Studio provider config example:
 ```
 
 Diagnostics:
-- Use `ai-agents doctor` to confirm LM Studio connectivity and loaded models.
+- Use `synx doctor` to confirm LM Studio connectivity and loaded models.
 - If autodiscovery fails, inspect `.ai-agents/logs/provider-model-resolution.jsonl`.
 - If no model is loaded, load one in LM Studio and retry.
 
