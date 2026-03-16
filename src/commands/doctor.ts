@@ -11,6 +11,73 @@ import { clearStaleLocks, detectInterruptedTasks, detectStaleLocks, detectWorkin
 import { commandExample } from "../lib/cli-command.js";
 import { REQUIRED_PROMPT_FILES } from "../lib/constants.js";
 import path from "node:path";
+import type { ProviderStageConfig } from "../lib/types.js";
+
+const DEFAULT_OPENAI_BASE_URL_ENV = "AI_AGENTS_OPENAI_BASE_URL";
+const DEFAULT_OPENAI_API_KEY_ENV = "AI_AGENTS_OPENAI_API_KEY";
+
+function isValidHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function buildProviderEnvCheck(label: string, config: ProviderStageConfig): { label: string; ok: boolean; message: string } {
+  if (config.type === "mock") {
+    return {
+      label: `${label} env vars`,
+      ok: true,
+      message: "Mock provider selected; no environment variables are required.",
+    };
+  }
+
+  if (config.type === "lmstudio") {
+    return {
+      label: `${label} env vars`,
+      ok: true,
+      message: "LM Studio provider resolves connection from saved config, LM Studio defaults, or optional env overrides.",
+    };
+  }
+
+  const baseUrlEnv = (config.baseUrlEnv || DEFAULT_OPENAI_BASE_URL_ENV).trim() || DEFAULT_OPENAI_BASE_URL_ENV;
+  const apiKeyEnv = (config.apiKeyEnv || DEFAULT_OPENAI_API_KEY_ENV).trim() || DEFAULT_OPENAI_API_KEY_ENV;
+  const resolvedBaseUrl = (config.baseUrl || process.env[baseUrlEnv] || "").trim();
+  const resolvedApiKey = (config.apiKey || process.env[apiKeyEnv] || "").trim();
+  const missing: string[] = [];
+  const invalid: string[] = [];
+
+  if (!resolvedBaseUrl) {
+    missing.push(config.baseUrl ? "provider.baseUrl" : baseUrlEnv);
+  } else if (!isValidHttpUrl(resolvedBaseUrl)) {
+    invalid.push(`base URL is not a valid http(s) URL (${resolvedBaseUrl})`);
+  }
+
+  if (!resolvedApiKey) {
+    missing.push(config.apiKey ? "provider.apiKey" : apiKeyEnv);
+  }
+
+  if (!missing.length && !invalid.length) {
+    const baseUrlSource = config.baseUrl ? "config" : `env:${baseUrlEnv}`;
+    const apiKeySource = config.apiKey ? "config" : `env:${apiKeyEnv}`;
+    return {
+      label: `${label} env vars`,
+      ok: true,
+      message: `Resolved base URL from ${baseUrlSource} and API key from ${apiKeySource}.`,
+    };
+  }
+
+  const detailParts: string[] = [];
+  if (missing.length) detailParts.push(`Missing: ${missing.join(", ")}`);
+  if (invalid.length) detailParts.push(`Invalid: ${invalid.join(", ")}`);
+  return {
+    label: `${label} env vars`,
+    ok: false,
+    message: detailParts.join(" | "),
+  };
+}
 
 export const doctorCommand = new Command("doctor")
   .description("Run human-friendly diagnostics")
@@ -61,6 +128,9 @@ export const doctorCommand = new Command("doctor")
         ? `Configured as "${config.humanReviewer}".`
         : `Missing reviewer name. Run \`${commandExample("setup")}\` to set it explicitly.`,
     });
+
+    checks.push(buildProviderEnvCheck("Dispatcher provider", config.providers.dispatcher));
+    checks.push(buildProviderEnvCheck("Planner provider", config.providers.planner));
 
     const dispatcherHealth = await checkProviderHealth(config.providers.dispatcher);
     const plannerHealth = await checkProviderHealth(config.providers.planner);

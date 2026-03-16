@@ -4,6 +4,17 @@ export interface EnvNumberOptions {
   integer?: boolean;
 }
 
+export function envRequired(name: string): string {
+  const value = (process.env[name] || "").trim();
+  if (!value) {
+    throw new Error(
+      `Required environment variable ${name} is not set. ` +
+      "Run setup to persist provider connection details or define it in this terminal.",
+    );
+  }
+  return value;
+}
+
 export function envBoolean(name: string, defaultValue = false): boolean {
   const raw = (process.env[name] || "").trim().toLowerCase();
   if (!raw) return defaultValue;
