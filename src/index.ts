@@ -15,7 +15,7 @@ import { cancelCommand } from "./commands/cancel.js";
 
 const program = new Command();
 
-program.name("ai-agents").description("AI Agents V5").version("0.5.0");
+program.name("synx").description("SYNX - Synthetic Agent Orchestrator v5").version("5.0.0");
 program.addCommand(setupCommand);
 program.addCommand(startCommand);
 program.addCommand(newCommand);

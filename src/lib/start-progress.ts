@@ -1,4 +1,5 @@
 import type { TaskMeta } from "./types.js";
+import { formatSynxStatus, renderSynxCard, synxControlFlowDiagram, synxMuted } from "./synx-ui.js";
 
 const SPINNER_FRAMES = ["|", "/", "-", "\\"];
 const BAR_WIDTH = 22;
@@ -88,6 +89,21 @@ function shortTaskId(taskId: string): string {
   return `${taskId.slice(0, 16)}...${taskId.slice(-11)}`;
 }
 
+function statusTone(meta: TaskMeta): "processing" | "success" | "critical_error" | "waiting_human" {
+  if (meta.status === "done") return "success";
+  if (meta.status === "failed" || meta.status === "blocked") return "critical_error";
+  if (meta.status === "waiting_human") return "waiting_human";
+  return "processing";
+}
+
+function statusBorderColor(meta: TaskMeta): "cyan" | "green" | "red" | "yellow" {
+  const tone = statusTone(meta);
+  if (tone === "success") return "green";
+  if (tone === "critical_error") return "red";
+  if (tone === "waiting_human") return "yellow";
+  return "cyan";
+}
+
 export interface StartProgressSnapshot {
   loop: number;
   engineStartedAtMs: number;
@@ -106,21 +122,10 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
   private tick = 0;
   private cursorHidden = false;
 
-  private terminalWidth(): number {
-    return Math.max(60, process.stdout.columns || 120);
-  }
-
-  private clipLine(line: string, width: number): string {
-    if (line.length <= width) return line;
-    if (width <= 4) return line.slice(0, width);
-    return `${line.slice(0, width - 3)}...`;
-  }
-
   render(snapshot: StartProgressSnapshot): void {
     this.tick += 1;
     const spinner = SPINNER_FRAMES[this.tick % SPINNER_FRAMES.length];
     const now = Date.now();
-    const width = this.terminalWidth() - 1;
 
     const counts = {
       active: snapshot.metas.filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status)).length,
@@ -129,35 +134,58 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       done: snapshot.metas.filter((x) => x.status === "done").length,
     };
 
-    const lines: string[] = [];
-    lines.push(
-      `${spinner} Engine running | uptime ${formatDuration(now - snapshot.engineStartedAtMs)} | loop ${snapshot.loop} | active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`
-    );
+    const headerCard = renderSynxCard({
+      title: "SYNX CONTROL PANEL",
+      lines: [
+        `${spinner} uptime ${formatDuration(now - snapshot.engineStartedAtMs)} | loop ${snapshot.loop}`,
+        `Flow: ${synxControlFlowDiagram()}`,
+        `Queues: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`,
+      ],
+      borderColor: "cyan",
+    });
 
     const active = snapshot.metas
       .filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status))
       .sort((a, b) => a.taskId.localeCompare(b.taskId));
 
-    if (!active.length) {
-      lines.push("No active tasks. Waiting for new work...");
+    const fallbackFocus = snapshot.metas
+      .filter((x) => x.status === "waiting_human" || x.status === "done" || x.status === "failed")
+      .sort((a, b) => (new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()))
+      .slice(0, 1);
+
+    const focus = active.length ? active.slice(0, 4) : fallbackFocus;
+    const taskCards: string[] = [];
+    if (!focus.length) {
+      taskCards.push(renderSynxCard({
+        title: "TASK BUS",
+        lines: [synxMuted("No active tasks. Waiting for new work...")],
+        borderColor: "cyan",
+      }));
     } else {
-      for (const meta of active.slice(0, 6)) {
+      for (const meta of focus) {
         const progress = progressForMeta(meta);
         const bar = progressBar(progress.ratio);
         const elapsed = formatDuration(now - new Date(meta.createdAt).getTime());
         const current = stageLabel(meta.currentStage);
         const agent = meta.currentAgent || meta.nextAgent || "[none]";
-        lines.push(
-          `- ${shortTaskId(meta.taskId)} ${bar} ${progress.done}/${progress.total} | ${current} | ${agent} | elapsed ${elapsed}`
-        );
+        taskCards.push(renderSynxCard({
+          title: `TASK ${shortTaskId(meta.taskId)}`,
+          lines: [
+            `State: ${formatSynxStatus(statusTone(meta))} | Type: ${meta.type}`,
+            `Stage: ${current} | Agent: ${agent}`,
+            `Progress: ${bar} ${progress.done}/${progress.total} | elapsed ${elapsed}`,
+            `Route: ${stageRoute(meta).map((stage) => `[${stageLabel(stage)}]`).join(" -> ")}`,
+          ],
+          borderColor: statusBorderColor(meta),
+        }));
       }
-
-      if (active.length > 6) {
-        lines.push(`... and ${active.length - 6} more active task(s)`);
+      if (active.length > 4) {
+        taskCards.push(synxMuted(`... and ${active.length - 4} more active task(s)`));
       }
     }
 
-    const clippedLines = lines.map((line) => this.clipLine(line, width));
+    const renderedText = [headerCard, ...taskCards].join("\n");
+    const renderedLines = renderedText.split("\n").length;
 
     if (!this.cursorHidden) {
       process.stdout.write("\x1b[?25l");
@@ -168,8 +196,8 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       process.stdout.write(`\x1b[${this.linesRendered}A`);
     }
     process.stdout.write("\x1b[0J");
-    process.stdout.write(`${clippedLines.join("\n")}\n`);
-    this.linesRendered = clippedLines.length;
+    process.stdout.write(`${renderedText}\n`);
+    this.linesRendered = renderedLines;
   }
 
   stop(): void {

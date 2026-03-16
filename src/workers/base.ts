@@ -11,10 +11,21 @@ import type { AgentName, NewTaskInput, StageEnvelope, TimingEntry } from "../lib
 import { nowIso, sleep } from "../lib/utils.js";
 import { newTaskInputSchema, stageEnvelopeSchema } from "../lib/schema.js";
 import { clearTaskCancelRequest, isTaskCancelRequested, loadTaskCancelRequest } from "../lib/task-cancel.js";
+import { formatSynxStreamLog } from "../lib/synx-ui.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
   return String((error as { errorCode?: unknown }).errorCode || "") === "task_cancelled";
+}
+
+function shouldEmitRuntimeStreamLog(): boolean {
+  const value = String(process.env.SYNX_STREAM_STDOUT || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function emitRuntimeStreamLog(message: string): void {
+  if (!shouldEmitRuntimeStreamLog()) return;
+  console.log(formatSynxStreamLog(message));
 }
 
 export abstract class WorkerBase {
@@ -62,6 +73,11 @@ export abstract class WorkerBase {
         queueLatencyMs >= 0
           ? `${this.agent} started ${request.stage} | queue wait ${queueLatencyMs}ms`
           : `${this.agent} started ${request.stage}`,
+      );
+      emitRuntimeStreamLog(
+        queueLatencyMs >= 0
+          ? `${this.agent} started ${request.stage} for ${taskId} (queue ${queueLatencyMs}ms).`
+          : `${this.agent} started ${request.stage} for ${taskId}.`,
       );
       if (queueLatencyMs >= 0 && requestCreatedAt) {
         await logQueueLatency({
@@ -148,6 +164,7 @@ export abstract class WorkerBase {
       }
       await logTaskEvent(taskPath, `${this.agent} failed: ${humanMessage}`);
       await logDaemon(`${this.agent} failed for ${taskId}: ${humanMessage}`);
+      emitRuntimeStreamLog(`${this.agent} failed on ${taskId}: ${humanMessage}`);
       await logAgentAudit(taskPath, {
         taskId,
         stage: this.workingFileName.replace(".working.json", ""),
@@ -271,6 +288,7 @@ export abstract class WorkerBase {
     });
     await logTaskEvent(taskPath, `${this.agent} finished ${args.stage} in ${durationMs}ms`);
     await logDaemon(`${this.agent} finished ${args.stage} for ${args.taskId} in ${durationMs}ms`);
+    emitRuntimeStreamLog(`${this.agent} finished ${args.stage} for ${args.taskId} in ${durationMs}ms.`);
     await logAgentAudit(taskPath, {
       taskId: args.taskId,
       stage: args.stage,
@@ -294,6 +312,7 @@ export abstract class WorkerBase {
       } satisfies StageEnvelope);
 
       await logTaskEvent(taskPath, `Queued next stage ${args.nextStage} for ${args.nextAgent}`);
+      emitRuntimeStreamLog(`Handoff to ${args.nextAgent} (${args.nextStage}) for ${args.taskId}.`);
       await logAgentAudit(taskPath, {
         taskId: args.taskId,
         stage: args.stage,

@@ -1,4 +1,5 @@
 import { checkbox, confirm, input, select } from "@inquirer/prompts";
+import { synxCyan, synxPurple, synxSuccess, themedPromptMessage } from "./synx-ui.js";
 
 export interface SelectOption<T> {
   value: T;
@@ -9,6 +10,14 @@ export interface SelectOption<T> {
 function inInteractiveTerminal(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
+
+const SYNX_PROMPT_THEME: Record<string, unknown> = {
+  icon: {
+    cursor: synxCyan("▸"),
+    checked: synxSuccess("●"),
+    unchecked: synxPurple("○"),
+  },
+};
 
 export async function selectOption<T>(
   message: string,
@@ -21,7 +30,8 @@ export async function selectOption<T>(
   }
 
   return select<T>({
-    message,
+    message: themedPromptMessage(message),
+    theme: SYNX_PROMPT_THEME as never,
     choices: options.map((option) => ({
       value: option.value,
       name: option.label,
@@ -38,7 +48,8 @@ export async function selectMany<T>(
   if (!inInteractiveTerminal()) return fallbackValues;
 
   const selected = await checkbox<T>({
-    message,
+    message: themedPromptMessage(message),
+    theme: SYNX_PROMPT_THEME as never,
     choices: options.map((option) => ({
       value: option.value,
       name: option.label,
@@ -58,9 +69,9 @@ export async function promptRequiredText(message: string, fallbackValue?: string
   }
 
   while (true) {
-    const value = (await input({ message })).trim();
+    const value = (await input({ message: themedPromptMessage(message), theme: SYNX_PROMPT_THEME as never })).trim();
     if (value) return value;
-    console.log("Please enter a value to continue.");
+    console.log(synxCyan("Please enter a value to continue."));
   }
 }
 
@@ -71,13 +82,17 @@ export async function promptTextWithDefault(message: string, defaultValue: strin
     throw new Error(`${message} requires an interactive terminal. Please pass explicit command options instead.`);
   }
 
-  const value = (await input({ message, default: defaultValue })).trim();
+  const value = (await input({
+    message: themedPromptMessage(message),
+    default: defaultValue,
+    theme: SYNX_PROMPT_THEME as never,
+  })).trim();
   return value || defaultValue.trim();
 }
 
 export async function confirmAction(message: string, defaultValue = false): Promise<boolean> {
   if (!inInteractiveTerminal()) return defaultValue;
-  return confirm({ message, default: defaultValue });
+  return confirm({ message: themedPromptMessage(message), default: defaultValue, theme: SYNX_PROMPT_THEME as never });
 }
 
 export function canPromptInteractively(): boolean {

@@ -3,13 +3,15 @@ import { appendText, writeJson } from "./fs.js";
 import { logsDir } from "./paths.js";
 import type { AgentName, TimingEntry } from "./types.js";
 import { nowIso } from "./utils.js";
+import { formatSynxStreamLog } from "./synx-ui.js";
 
 export async function logDaemon(message: string): Promise<void> {
-  await appendText(path.join(logsDir(), "daemon.log"), `[${nowIso()}] ${message}\n`);
+  await appendText(path.join(logsDir(), "daemon.log"), `${formatSynxStreamLog(normalizeLogLine(message), "SYNX", nowIso())}\n`);
 }
 
 export async function logTaskEvent(taskPath: string, message: string): Promise<void> {
-  await appendText(path.join(taskPath, "logs", "events.log"), `[${nowIso()}] ${message}\n`);
+  const source = `TASK:${path.basename(taskPath)}`;
+  await appendText(path.join(taskPath, "logs", "events.log"), `${formatSynxStreamLog(normalizeLogLine(message), source, nowIso())}\n`);
 }
 
 export async function logTiming(taskPath: string, entry: TimingEntry): Promise<void> {
@@ -229,6 +231,10 @@ export interface AgentAuditEntry {
 
 function normalizeAgentSlug(agent: AgentName): string {
   return agent.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function normalizeLogLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function trimText(value: string, maxChars = 200): string {

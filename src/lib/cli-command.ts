@@ -6,17 +6,17 @@ function quoteIfNeeded(value: string): string {
   return `"${value.replace(/"/g, '\\"')}"`;
 }
 
-function isAiAgentsBinary(scriptPath: string): boolean {
+function isSynxBinary(scriptPath: string): boolean {
   const base = path.basename(scriptPath).toLowerCase();
-  return base === "ai-agents" || base === "ai-agents.cmd" || base === "ai-agents.exe";
+  return base === "synx" || base === "synx.cmd" || base === "synx.exe" || base === "ai-agents" || base === "ai-agents.cmd" || base === "ai-agents.exe";
 }
 
 export function commandBase(): string {
   const scriptPath = process.argv[1] || "";
 
-  if (scriptPath && isAiAgentsBinary(scriptPath)) return "ai-agents";
+  if (scriptPath && isSynxBinary(scriptPath)) return "synx";
   if (scriptPath) return `node ${quoteIfNeeded(scriptPath)}`;
-  return "ai-agents";
+  return "synx";
 }
 
 export function commandExample(args = ""): string {
