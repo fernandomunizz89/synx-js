@@ -10,9 +10,9 @@
 
 SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates autonomous software development tasks (bug fixes, features, refactors) through a sequential agent workflow. The system makes real file edits, runs quality checks, and handles remediation loops.
 
-**Current Testing Status (updated):** ✅ **Foundation Established**
+**Current Testing Status (updated):** ✅ **50%+ Coverage Milestone Reached**
 - Vitest + V8 coverage configured and active
-- 29 test files / 101 passing tests
+- 37 test files / 138 passing tests
 - CI workflow added with build + coverage gate
 - Coverage now reflects whole repository (`coverage.all = true`, `include = src/**/*.ts`)
 - **Risk Level:** MEDIUM - Core surfaces are covered; deeper end-to-end worker chains still need expansion
@@ -24,20 +24,21 @@ SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates aut
 | Testes de `config.ts`, `task.ts`, `runtime.ts` | **Feito** |
 | Testes de `cypress-tools.ts` e `validation-checks.ts` | **Feito** |
 | Testes de comandos (`start/new/setup/status/doctor`) | **Feito** |
-| Testes de workers concretos | **Parcial avançado** (registro + `bug-investigator`, `builder`, `qa`) |
+| Testes de workers concretos | **Feito** (`dispatcher`, `planner`, `bug-fixer`, `builder`, `qa`, `pr-writer`) |
 | Testes de providers (`mock` + `openai-compatible` + `lmstudio`) | **Feito** |
+| Testes de `post-edit-sanity.ts`, `readiness.ts`, `interactive.ts` | **Feito** |
 | Integração dos cenários críticos (task lifecycle, lock recovery, working recovery) | **Feito** |
 | CI com execução de testes e gate de cobertura | **Feito** |
 | Cobertura refletindo todo `src/**/*.ts` | **Feito** |
 
 ### Métricas Atuais
 
-- `npm run test -- --run`: **29 files / 101 tests / 100% pass**
+- `npm run test -- --run`: **37 files / 138 tests / 100% pass**
 - `npm run test:coverage` (repo-wide):  
-  - Statements: **41.34%**
-  - Branches: **31.32%**
-  - Functions: **47.82%**
-  - Lines: **43.77%**
+  - Statements: **50.5%**
+  - Branches: **39.8%**
+  - Functions: **57.16%**
+  - Lines: **53.38%**
 - Gate atual configurado no Vitest:
   - Branches: `>= 15`
   - Functions: `>= 20`
