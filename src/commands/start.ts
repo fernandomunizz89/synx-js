@@ -4,7 +4,7 @@ import readline from "node:readline";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { allTaskIds, createTask, loadTaskMeta, saveTaskMeta } from "../lib/task.js";
 import { writeDaemonState, logDaemon, logPollingCycle, logTaskEvent } from "../lib/logging.js";
-import { workers } from "../workers/index.js";
+import { workerList as workers } from "../workers/index.js";
 import { DONE_FILE_NAMES, POLL_INTERVAL_MS, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { sleep, nowIso } from "../lib/utils.js";
 import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles, processIsRunning } from "../lib/runtime.js";

@@ -67,6 +67,12 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   "QA Validator": 0.05,
   "PR Writer": 0.3,
   "Human Review": 0.1,
+  // Dream Stack 2026 – Expert Squad
+  "Sinx Front Expert": 0.05,
+  "Sinx Mobile Expert": 0.05,
+  "Sinx Back Expert": 0.05,
+  "Sinx QA Engineer": 0.05,
+  "Sinx SEO Specialist": 0.1,
 };
 
 const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {

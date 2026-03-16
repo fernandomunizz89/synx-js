@@ -39,11 +39,16 @@ export class PlannerWorker extends WorkerBase {
       && baseInput.previousStage.output
       && typeof baseInput.previousStage.output === "object"
     )
-      ? baseInput.previousStage.output as { unknowns?: unknown }
+      ? baseInput.previousStage.output as { unknowns?: unknown; targetExpert?: unknown }
       : null;
     const dispatcherUnknowns = Array.isArray(dispatcherOutput?.unknowns)
       ? dispatcherOutput.unknowns.filter((item): item is string => typeof item === "string")
       : [];
+    // Conditional Planning – read the targetExpert hint from the Dispatcher
+    const targetExpert =
+      typeof dispatcherOutput?.targetExpert === "string" && dispatcherOutput.targetExpert
+        ? dispatcherOutput.targetExpert
+        : "Feature Builder";
     const researchDecision = await requestResearchContext({
       taskId,
       stage: "planner",
@@ -113,7 +118,10 @@ Human Review
       stage: "planner",
       taskTypeHint: baseInput.task.typeHint,
     });
-    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}`;
+    const targetExpertHint = targetExpert !== "Feature Builder"
+      ? `\n\n[PLANNING DIRECTIVE]: After decomposing this task, route to "${targetExpert}" (identified by the Dispatcher as the domain expert for this task). Set nextAgent to "${targetExpert}"."`
+      : "";
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}${targetExpertHint}`;
     const result = await provider.generateStructured({
       agent: "Spec Planner",
       taskId,
@@ -122,7 +130,7 @@ Human Review
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "technicalContext": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "conditionalPlan": ["string"], "edgeCases": ["string"], "risks": ["string"], "validationCriteria": ["string"], "nextAgent": "Feature Builder" }',
+        `{ "technicalContext": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "conditionalPlan": ["string"], "edgeCases": ["string"], "risks": ["string"], "validationCriteria": ["string"], "nextAgent": "${targetExpert}" }`,
     });
 
     const output = plannerOutputSchema.parse(result.parsed);
@@ -135,6 +143,17 @@ Human Review
       risks: output.risks,
       projectProfile,
     });
+
+    // Dream Stack 2026 – resolve target expert routing
+    const expertStageMap: Record<string, { stage: string; fileName: string }> = {
+      "Sinx Front Expert":   { stage: "sinx-front-expert",   fileName: STAGE_FILE_NAMES.sinxFrontExpert },
+      "Sinx Mobile Expert":  { stage: "sinx-mobile-expert",  fileName: STAGE_FILE_NAMES.sinxMobileExpert },
+      "Sinx Back Expert":    { stage: "sinx-back-expert",    fileName: STAGE_FILE_NAMES.sinxBackExpert },
+      "Sinx SEO Specialist": { stage: "sinx-seo-specialist", fileName: STAGE_FILE_NAMES.sinxSeoSpecialist },
+      "Feature Builder":     { stage: "builder",             fileName: STAGE_FILE_NAMES.builder },
+    };
+    const resolvedNext = expertStageMap[output.nextAgent] ?? expertStageMap["Feature Builder"];
+    const resolvedNextAgent = output.nextAgent;
 
     const view = `# HANDOFF
 
@@ -184,7 +203,7 @@ ${researchDecision.context
 ${researchDecision.context.sources.length ? researchDecision.context.sources.slice(0, 4).map((item) => `- Source: ${item.title} (${item.url})`).join("\n") : "- Source: [none]"}` : "- [none]"}
 
 ## Next
-Feature Builder
+${resolvedNextAgent}
 `;
 
     await this.finishStage({
@@ -194,9 +213,9 @@ Feature Builder
       viewFileName: "02-planner.md",
       viewContent: view,
       output,
-      nextAgent: "Feature Builder",
-      nextStage: "builder",
-      nextRequestFileName: STAGE_FILE_NAMES.builder,
+      nextAgent: resolvedNextAgent,
+      nextStage: resolvedNext.stage,
+      nextRequestFileName: resolvedNext.fileName,
       nextInputRef: `done/${DONE_FILE_NAMES.planner}`,
       startedAt,
       provider: result.provider,

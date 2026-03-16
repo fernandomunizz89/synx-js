@@ -49,14 +49,26 @@ export class DispatcherWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner" }',
+        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner | Sinx Front Expert | Sinx Mobile Expert | Sinx Back Expert | Sinx SEO Specialist", "targetExpert": "Sinx Front Expert | Sinx Mobile Expert | Sinx Back Expert | Sinx SEO Specialist | Feature Builder (only when nextAgent is Spec Planner, identifies the expert to use after planning)" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);
     output.knownFacts = unique([...output.knownFacts, ...projectProfileFactLines(projectProfile)]);
     const nextAgent = output.nextAgent;
-    const nextStage = nextAgent === "Bug Investigator" ? "bug-investigator" : "planner";
-    const nextFileName = nextAgent === "Bug Investigator" ? STAGE_FILE_NAMES.bugInvestigator : STAGE_FILE_NAMES.planner;
+
+    // Dream Stack 2026 routing
+    const stageMap: Record<string, { stage: string; fileName: string }> = {
+      "Bug Investigator":  { stage: "bug-investigator",  fileName: STAGE_FILE_NAMES.bugInvestigator },
+      "Spec Planner":      { stage: "planner",           fileName: STAGE_FILE_NAMES.planner },
+      "Sinx Front Expert": { stage: "sinx-front-expert",  fileName: STAGE_FILE_NAMES.sinxFrontExpert },
+      "Sinx Mobile Expert":{ stage: "sinx-mobile-expert", fileName: STAGE_FILE_NAMES.sinxMobileExpert },
+      "Sinx Back Expert":  { stage: "sinx-back-expert",   fileName: STAGE_FILE_NAMES.sinxBackExpert },
+      "Sinx QA Engineer":  { stage: "sinx-qa-engineer",   fileName: STAGE_FILE_NAMES.sinxQaEngineer },
+      "Sinx SEO Specialist": { stage: "sinx-seo-specialist", fileName: STAGE_FILE_NAMES.sinxSeoSpecialist },
+    };
+    const routing = stageMap[nextAgent] ?? { stage: "planner", fileName: STAGE_FILE_NAMES.planner };
+    const nextStage = routing.stage;
+    const nextFileName = routing.fileName;
 
     const view = `# HANDOFF
 

@@ -5,153 +5,210 @@
 ![Node](https://img.shields.io/badge/node->=18.0.0-brightgreen.svg)
 ![Build](https://img.shields.io/badge/build-passing-success.svg)
 
-> A human-friendly CLI for running a file-driven AI agents pipeline inside each repository.
+> A file-driven AI agent orchestrator that runs a specialized expert squad directly inside your repository.
 
 ---
 
 ## 🤖 AI Agent Context
-<ai-context>
-This project is an AI agent orchestration CLI named "SYNX". 
-It manages a multi-agent system executing directly within local repositories. The typical workflow stages include Dispatching, Planning, Investigating, Building/Fixing, Reviewing, QA Validation, and PR Creation. It runs autonomously in `.ai-agents/` within the target repository, utilizing structured JSON output from LLM providers (e.g., LM Studio, OpenAI, OpenRouter).
 
-Key architectural points for agents operating in this repository:
-- **Core Orchestrator:** This repo contains the orchestrator written in TypeScript (`src/index.ts` entrypoint).
-- **Agent Pipelines:** Implementations (`Bug Fixer`, `Feature Builder`, `QA`) apply real file edits in target workspaces.
-- **On-demand Research:** A gated `Researcher` service can be invoked by orchestrator logic when confidence drops or QA repeats the same failure.
-- **Config Precedence:** Global `~/.ai-agents/config.json` -> Project `<repo>/.ai-agents/config/project.json`.
-- **Primary Commands:** `setup`, `start`, `new`, `status`, `approve`, `reprove`, `doctor`, `resume`, `fix`, `metrics`.
-- **References:** Full operational manuals and implementation details reside in the `docs/` folder.
+<ai-context>
+SYNX is a CLI orchestrator for a multi-agent AI pipeline. It manages autonomous software development tasks inside local repositories using a file-driven, stage-based approach.
+
+**Dream Stack 2026 – Active Architecture:**
+The engine runs a specialized squad of domain experts. The Dispatcher triages each task and routes it — either directly to the right expert (simple/clear tasks) or through the Spec Planner first (complex/ambiguous tasks).
+
+Expert Squad:
+- `Sinx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
+- `Sinx Mobile Expert` – Expo, React Native, Reanimated, EAS
+- `Sinx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
+- `Sinx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API
+- `Sinx QA Engineer` – Playwright E2E + Vitest; auto-routes failures back to the originating expert
+
+**Conditional Planning:**
+The Dispatcher sets `nextAgent: "Spec Planner"` with a `targetExpert` hint for complex tasks. The Spec Planner decomposes the task and routes directly to the correct expert.
+
+**Key architectural points:**
+- Core orchestrator lives in `src/` (TypeScript, ESM)
+- Workers apply real file edits in the target workspace
+- On-demand Researcher for external technical context
+- Config precedence: Global `~/.ai-agents/config.json` → Project `.ai-agents/config/project.json`
+- Primary commands: `setup`, `start`, `new`, `status`, `approve`, `reprove`, `doctor`, `resume`, `fix`, `metrics`
+- Prompt stubs for each expert live in `.ai-agents/prompts/`
+- Full docs in the `docs/` folder
 </ai-context>
 
 ---
 
 ## 📖 Overview
 
-SYNX is an advanced agentic orchestrator that reduces operator friction by combining guided setup, interactive terminal menus (arrow keys + Enter), global and local config overrides, auto-repo discovery, robust crash recovery, and rich human-readable diagnostics.
+SYNX orchestrates a squad of specialized AI agents that work autonomously inside your repo. Each task is triaged by the Dispatcher and routed to the right domain expert — front-end, mobile, back-end, or SEO — before reaching the QA Engineer for validation.
 
-Whether you're dispatching a new minor feature or debugging a complex regression, SYNX spins up a structured, role-based pipeline of AI agents (e.g., Spec Planner, Builder, QA Validator) working autonomously in a secured `.ai-agents` environment.
+The pipeline is file-driven: every stage writes a JSON handoff to `.ai-agents/tasks/<task-id>/`, enabling crash recovery, auditing, and human review at any point.
+
+---
 
 ## ✨ Features
 
-- **Guided CLI:** Interactive terminal menus.
-- **Provider Agnostic:** Supports local models (e.g., LM Studio) and cloud models (OpenAI-compatible endpoints).
-- **Task Variety:** Easily trigger tasks typed as `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, or `Mixed`.
-- **Robust Quality Assurance:** Dynamic E2E test execution, strict sanity checks (lint, typescript compile), automatic remediation loops, and root-cause failure analysis.
-- **External Context Retrieval:** Researcher synthesizes web evidence (official docs/forums/issues) into structured guidance without editing code directly.
-- **Resilient Workflows:** Recovery of unfinished executions, stale lock eviction, and step-by-step pipeline re-entries.
-- **Real Workspace Edits:** Agents actually construct, refactor, and delete real code in target directories (minus protected zones).
-- **Actionable Diagnostics:** Tools like `doctor`, `status`, and `metrics` provide comprehensive views of the local orchestration.
+- **Domain Expert Squad:** Specialized agents for web (Next.js), mobile (Expo/RN), backend (NestJS/Fastify), and SEO (Core Web Vitals / JSON-LD).
+- **Conditional Planning:** The Dispatcher routes simple tasks directly to experts; complex tasks go through the Spec Planner first with a `targetExpert` hint.
+- **Smart QA Loop:** QA Engineer runs Playwright (E2E) or Vitest (unit) and automatically routes failures back to the originating expert, capped at 3 retries.
+- **Root Cause Intelligence:** QA carries structured failure context (`issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction`) in every handoff.
+- **Provider Agnostic:** Supports LM Studio (local) and any OpenAI-compatible cloud endpoint.
+- **Real Workspace Edits:** Agents create, replace, patch, and delete real files in target directories (protected paths blocked).
+- **On-demand Research:** Gated Researcher synthesizes web evidence without editing code.
+- **Resilient Execution:** Stale lock eviction, orphan recovery, interrupted task requeue, task cancellation.
+- **Rich Diagnostics:** `doctor`, `status`, `metrics` for full pipeline visibility.
 
-*(See [docs/FEATURES.md](docs/FEATURES.md) for a comprehensive list of capabilities).*
+*(See [docs/FEATURES.md](docs/FEATURES.md) for the full capability list.)*
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v18 or newer recommended)
-- A local AI provider (like [LM Studio](https://lmstudio.ai/)) or API keys for a cloud provider.
+- [Node.js](https://nodejs.org/) v18+
+- A local AI provider ([LM Studio](https://lmstudio.ai/)) or an OpenAI-compatible cloud endpoint.
 
-### Installation & Initialization
-
-1. **Clone the repository and build:**
-   ```bash
-   cd ~/Workspace/SYNX
-   npm install
-   npm run build
-   npm link
-   ```
-
-2. **Initialize SYNX in your target project:**
-   Navigate to the repository you want SYNX to monitor, then run:
-   ```bash
-   synx setup
-   ```
-   *Follow the interactive prompts to define your human reviewer name, establish global and local settings, and pinpoint your LLM provider options.*
-
-## 🕹️ Usage & Commands
-
-The main commands to interact with SYNX are highly human-friendly. 
-
-- **Start processing loops:**
-  ```bash
-  synx start
-  ```
-  *(Add `--dry-run` to emulate changes without writing to disk, and `--no-progress` for quiet standard outputs).*
-  In interactive TTY mode, `start` now includes a boxed `USER INPUT` prompt, quick actions (`?` or `F1` help, `F2` new task template, `F3` pause/resume, `F4` toggle `CONSOLE`/`EVENT STREAM`, `F10` graceful stop), and a `HUMAN INPUT` panel for approve/reprove decisions without opening another terminal.
-
-- **Create a new task:**
-  ```bash
-  synx new "Add dark mode toggle" --type Feature
-  ```
-
-- **Check progress and pending interactions:**
-  ```bash
-  synx status
-  ```
-
-- **Approve finalized pull requests:**
-  ```bash
-  synx approve
-  ```
-
-- **Reject and return to implementation:**
-  ```bash
-  synx reprove --reason "Main flow still fails after QA"
-  # Optional scoped rollback:
-  synx reprove --rollback task
-  ```
-
-### Advanced Operations
-
-- **Cancel a task:** `synx cancel <task-id>`
-- **Diagnose engine issues:** `synx doctor`
-- **Resume interrupted executions:** `synx resume`
-- **Apply automatic repairs:** `synx fix`
-- **View pipeline metrics:** `synx metrics --since 2026-03-15T21:25:19Z`
-
-*(For extensive day-to-day operation manuals and edge cases, see [docs/MANUAL.md](docs/MANUAL.md)).*
-
-## 🧪 Testing and Coverage
-
-This project uses `vitest` for fast and reliable unit testing. We maintain a minimum of 50% test coverage across Statements, Branches, Functions, and Lines. 
-
-To run the unit test suite locally:
+### Installation
 
 ```bash
-npm run test
+cd ~/Workspace/synx-js
+npm install
+npm run build
+npm link
 ```
 
-To generate and view the coverage report:
+### Initialize in your target project
 
 ```bash
-npm run test:coverage
+cd /path/to/your-project
+synx setup
 ```
 
-## 🧠 Architecture & Configuration
+Follow the interactive prompts to configure your provider, model, and human reviewer name.
 
-SYNX operates via a sequential multi-agent model orchestrated completely within the CLI context:
+---
 
-### The Agentic Pipeline
-Depending on the task type (e.g., `Feature` vs `Bug`), the CLI routes the request differently:
-- **Bugs:** `Dispatcher ➔ Bug Investigator ➔ Bug Fixer ➔ Reviewer ➔ QA ➔ PR Writer ➔ Human Appr.`
-- **Standard (Features/Refactors):** `Dispatcher ➔ Spec Planner ➔ Feature Builder ➔ Reviewer ➔ QA ➔ PR Writer ➔ Human Appr.`
-- **On-demand assist path:** `Researcher` can be called by `Spec Planner`, `Feature Builder`, or `Bug Fixer` when:
-  - upstream confidence is `< 0.6`, or
-  - QA reports the same issue for the second consecutive attempt.
-- **Research guardrails:** max `2` web searches per stage (default), anti-loop escalates to `waiting_human` if same recommendation persists for the same recurring issue.
+## 🕹️ Usage
+
+### Start the engine
+
+```bash
+synx start
+```
+
+In interactive TTY mode, `start` shows a live progress panel with per-task status, quick hotkeys (`?`, `F1`–`F4`, `F10`), and an inline `HUMAN INPUT` panel for approve/reprove without opening a second terminal.
+
+```bash
+synx start --dry-run    # simulate edits without writing files
+synx start --no-progress  # quiet stdout mode
+```
+
+### Create a task
+
+```bash
+synx new "Add dark mode toggle" --type Feature
+synx new "Fix auth regression" --type Bug --e2e required --e2e-framework playwright
+synx new  # interactive menus
+```
+
+**Task types:** `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`
+
+### Check progress
+
+```bash
+synx status        # focused view: current or latest task
+synx status --all  # full history
+```
+
+### Approve / Reprove
+
+```bash
+synx approve
+synx reprove --reason "Main flow still fails after QA"
+synx reprove --rollback task  # restore tracked files for this task
+```
+
+### Advanced operations
+
+```bash
+synx cancel <task-id>     # graceful cancellation
+synx doctor               # diagnose engine issues
+synx resume               # recover interrupted executions
+synx fix                  # automatic repair
+synx metrics --since 2026-03-16T00:00:00Z
+```
+
+*(See [docs/MANUAL.md](docs/MANUAL.md) for full operation manual.)*
+
+---
+
+## 🧠 Architecture — Dream Stack 2026
+
+SYNX uses a **Conditional Planning** model: the Dispatcher decides in real time whether a task needs decomposition or can flow directly to an expert.
+
+### Routing
+
+```
+Simple / clear tasks:
+  Dispatcher ──────────────────────────────► Expert ──► QA Engineer ──► Human Review
+
+Complex / ambiguous tasks:
+  Dispatcher (targetExpert hint)
+      │
+      ▼
+  Spec Planner (decomposes → routes to targetExpert)
+      │
+      ▼
+  Expert ──► QA Engineer ──► Human Review
+
+Bug tasks:
+  Dispatcher ──► Bug Investigator ──► Bug Fixer ──► QA Engineer ──► Human Review
+```
+
+### Expert Squad
+
+| Agent | Domain |
+|---|---|
+| `Sinx Front Expert` | Next.js App Router · TailwindCSS · WCAG 2.1 · RSC patterns |
+| `Sinx Mobile Expert` | Expo · React Native · Reanimated · EAS managed workflow |
+| `Sinx Back Expert` | NestJS / Fastify · Prisma ORM · Strict TypeScript · Vitest integration |
+| `Sinx SEO Specialist` | Core Web Vitals · JSON-LD / Schema.org · Next.js Metadata API · Lighthouse ≥ 90 |
+| `Sinx QA Engineer` | Playwright E2E · Vitest unit · auto-routes failures to originating expert |
+
+### QA Failure Loop
+
+When QA fails, it routes back to the expert that built the feature, carrying structured context. After 3 failed retries, the task escalates to `waiting_human`.
 
 ### Configuration Layers
-Configuration cascades locally to globally:
-1. Internal runtime defaults.
-2. Global environment: `~/.ai-agents/config.json`
-3. Targeted local overrides: `<repo>/.ai-agents/config/project.json`
 
-*(See [docs/IMPLEMENTATION-NOTES.md](docs/IMPLEMENTATION-NOTES.md) for detailed structural changes and historical pipeline stability iterations).*
+Priority (lowest → highest):
 
-## 📚 Documentation Reference
+1. Internal runtime defaults
+2. Global: `~/.ai-agents/config.json`
+3. Project: `<repo>/.ai-agents/config/project.json`
 
-For more elaborate context around the architecture, feature sets, and operational guides, please refer to the documents structured in the `/docs` directory:
+---
 
-- [FEATURES.md](docs/FEATURES.md) – Exhaustive, bulleted features present in the current build.
-- [IMPLEMENTATION-NOTES.md](docs/IMPLEMENTATION-NOTES.md) – Structural decisions, iteration highlights, and provider execution details.
-- [MANUAL.md](docs/MANUAL.md) – The extensive human user manual on recovering flows, troubleshooting providers, adjusting node scripts, and understanding agent stateless calls.
+## 🧪 Testing
+
+Uses **Vitest** with V8 coverage. Minimum 50% coverage gate.
+
+```bash
+npm test              # run test suite
+npm run test:coverage # generate coverage report
+npm run check         # TypeScript type check
+```
+
+**Current status:** 41 test files · 164 tests · 100% pass
+
+---
+
+## 📚 Documentation
+
+| File | Purpose |
+|---|---|
+| [FEATURES.md](docs/FEATURES.md) | Full capability list |
+| [MANUAL.md](docs/MANUAL.md) | Day-to-day operation, recovery flows, environment variables |
+| [IMPLEMENTATION-NOTES.md](docs/IMPLEMENTATION-NOTES.md) | Architecture decisions and iteration history |

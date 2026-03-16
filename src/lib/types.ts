@@ -19,7 +19,13 @@ export type AgentName =
   | "Reviewer"
   | "QA Validator"
   | "PR Writer"
-  | "Human Review";
+  | "Human Review"
+  // Dream Stack 2026 – Specialized Expert Squad
+  | "Sinx Front Expert"
+  | "Sinx Mobile Expert"
+  | "Sinx Back Expert"
+  | "Sinx QA Engineer"
+  | "Sinx SEO Specialist";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio";
 export type E2EPolicy = "auto" | "required" | "skip";

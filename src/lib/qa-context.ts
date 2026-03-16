@@ -1,6 +1,13 @@
 import { trimText } from "./text-utils.js";
 
-export type QaRemediationAgent = "Feature Builder" | "Bug Fixer";
+export type QaRemediationAgent =
+  | "Feature Builder"
+  | "Bug Fixer"
+  // Dream Stack 2026 – Expert Squad return routing
+  | "Sinx Front Expert"
+  | "Sinx Mobile Expert"
+  | "Sinx Back Expert"
+  | "Sinx SEO Specialist";
 
 export interface QaReturnContextItem {
   issue: string;

@@ -1,19 +1,17 @@
-# SYNX - Human-friendly manual
+# SYNX – Operations Manual
 
 ## What this tool does
-It runs a local agents pipeline inside your repository.
+It runs a local AI agent pipeline inside your repository using a specialized **Dream Stack 2026** expert squad.
 
 The system:
 - creates a safe hidden work area in `.ai-agents/`
-- creates tasks
-- moves tasks through stages automatically
-- routes bug tasks through `Bug Investigator -> Bug Fixer`
+- creates tasks and moves them through stages automatically
+- routes tasks to the right domain expert (Front, Mobile, Back, SEO Specialist)
+- validates results via the QA Engineer (Playwright E2E + Vitest unit)
 - stops at the final human approval step
 - logs how long every stage took
 - can recover unfinished work after interruptions
-- runs all pipeline agents with provider-backed structured outputs
-- sends failed QA back to the right implementation agent automatically
-- can invoke an on-demand `Researcher` service for external technical context
+- invokes an on-demand `Researcher` for external technical context
 
 ## The 4 commands you will use most
 
@@ -51,7 +49,7 @@ synx setup
 
 When running in an interactive terminal, `start` also shows a live progress panel:
 - SYNX cyber logo + tagline
-- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Planner]`
+- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Expert] ➔ [QA Engineer]`
 - double-line cards for control/config/task states
 - `USER INPUT` card (boxed prompt with visible cursor indicator)
 - inline event stream card (clean runtime updates without terminal pollution)
@@ -116,21 +114,23 @@ Supported task types:
 - `Mixed`
 
 Routing summary:
-- `Bug`: Dispatcher -> Bug Investigator -> Bug Fixer -> Reviewer -> QA -> PR Writer -> Human approval
-- Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
-- QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
-- On-demand `Researcher` (non-linear): can be called from `Spec Planner`, `Feature Builder`, or `Bug Fixer`
-  - trigger 1: upstream confidence signal `< 0.6`
-  - trigger 2: QA detects same issue on the 2nd consecutive cycle
-  - output only: structured knowledge JSON (no code edits)
-  - anti-loop: if recommendation repeats and issue persists, task escalates to `waiting_human`
-- QA captures compact diagnostics from failed checks (including E2E) and sends expected-vs-received evidence in the handoff
-- QA/implementation now follow human per-task E2E preferences (`--e2e`, `--e2e-framework`, `--qa-objective`)
-- QA fail handoff includes structured context per blocker: expected result, received result, evidence, and recommended action
-- QA return context is cumulative and updated on each loop so the next implementation attempt sees prior QA findings
-- QA now emits explicit test cases with expected vs actual results (real QA mindset)
-- In repeated QA loops, implementation agents are instructed to change strategy, not repeat the same failed approach
-- QA retry loop is capped (default 3 fails). After the cap, the task is escalated to human review (`waiting_human`).
+- **Bug tasks:** `Dispatcher → Bug Investigator → Bug Fixer → Sinx QA Engineer → Human Review`
+- **Simple/clear tasks:** `Dispatcher → Expert → Sinx QA Engineer → Human Review`
+- **Complex/ambiguous tasks:** `Dispatcher → Spec Planner (targetExpert hint) → Expert → Sinx QA Engineer → Human Review`
+
+Expert Squad:
+- `Sinx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
+- `Sinx Mobile Expert` – Expo, React Native, Reanimated, EAS
+- `Sinx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
+- `Sinx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API, Lighthouse ≥ 90
+- `Sinx QA Engineer` – Playwright E2E + Vitest unit; auto-routes failures to originating expert
+
+QA failure behavior:
+- QA failure context is cumulative across retries
+- QA retry loop is capped (default 3). Exceeded cap → escalates to `waiting_human`
+- On-demand `Researcher` triggers when confidence < 0.6 or the same QA failure repeats twice
+- Research anti-loop: if recommendation repeats while issue persists, task escalates to `waiting_human`
+- QA captures evidence per finding: `issue`, `expectedResult`, `receivedResult`, `evidence[]`, `recommendedAction`
 
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).
 
@@ -417,6 +417,11 @@ Agent defaults:
 - `QA Validator`: `0.05`
 - `PR Writer`: `0.3`
 - `Human Review`: `0.1`
+- `Sinx Front Expert`: `0.05`
+- `Sinx Mobile Expert`: `0.05`
+- `Sinx Back Expert`: `0.05`
+- `Sinx QA Engineer`: `0.05`
+- `Sinx SEO Specialist`: `0.10`
 
 Task-type defaults:
 - `Feature`: `0.1`
