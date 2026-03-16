@@ -106,4 +106,48 @@ describe.sequential("commands/new", () => {
       },
     });
   });
+
+  it("accepts --type in case-insensitive form and normalizes it", async () => {
+    await newCommand.parseAsync([
+      "node",
+      "synx",
+      "Normalize type parsing",
+      "--type",
+      "bUg",
+      "--e2e",
+      "required",
+      "--e2e-framework",
+      "playwright",
+    ]);
+
+    expect(mocks.createTask).toHaveBeenCalledTimes(1);
+    const createTaskInput = mocks.createTask.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(createTaskInput).toBeDefined();
+    expect(createTaskInput).toMatchObject({
+      title: "Normalize type parsing",
+      typeHint: "Bug",
+    });
+  });
+
+  it("accepts --type with common feature typo alias", async () => {
+    await newCommand.parseAsync([
+      "node",
+      "synx",
+      "Alias type parsing",
+      "--type",
+      "Featute",
+      "--e2e",
+      "required",
+      "--e2e-framework",
+      "playwright",
+    ]);
+
+    expect(mocks.createTask).toHaveBeenCalledTimes(1);
+    const createTaskInput = mocks.createTask.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(createTaskInput).toBeDefined();
+    expect(createTaskInput).toMatchObject({
+      title: "Alias type parsing",
+      typeHint: "Feature",
+    });
+  });
 });

@@ -8,6 +8,18 @@ import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
 import { resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 
+function parseTaskType(value: string | undefined): TaskType | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "feature" || normalized === "feat" || normalized === "featute") return "Feature";
+  if (normalized === "bug") return "Bug";
+  if (normalized === "refactor" || normalized === "refactoring") return "Refactor";
+  if (normalized === "research") return "Research";
+  if (normalized === "documentation" || normalized === "docs" || normalized === "doc") return "Documentation";
+  if (normalized === "mixed") return "Mixed";
+  throw new Error(`Invalid --type value "${value}". Use: Feature | Bug | Refactor | Research | Documentation | Mixed`);
+}
+
 function parseE2EPolicy(value: string | undefined): E2EPolicy | null {
   if (!value) return null;
   const normalized = value.trim().toLowerCase();
@@ -46,7 +58,7 @@ export const newCommand = new Command("new")
     }
 
     let finalTitle = title;
-    let finalType = options.type as TaskType | undefined;
+    let finalType = parseTaskType(options.type);
 
     if (!finalTitle || !finalType) {
       finalTitle = finalTitle || (await promptRequiredText("Task title (required):"));
