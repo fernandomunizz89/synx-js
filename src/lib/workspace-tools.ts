@@ -83,6 +83,9 @@ const MAX_FILE_SIZE_BYTES = 300_000;
 const MAX_FILE_CONTEXT_CHARS = 7000;
 const MAX_CONTEXT_FILES = 12;
 const MAX_TOTAL_CONTEXT_CHARS = 30_000;
+const DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS = 3000;
+
+const walkFilesCache = new Map<string, { cachedAtMs: number; files: string[] }>();
 
 export type WorkspaceEditAction = "create" | "replace" | "replace_snippet" | "delete";
 
@@ -204,6 +207,23 @@ function extractKeywords(text: string): string[] {
   return Array.from(new Set(words)).slice(0, 14);
 }
 
+function isWorkspaceScanCacheDisabled(): boolean {
+  const raw = (process.env.AI_AGENTS_DISABLE_WORKSPACE_SCAN_CACHE || "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
+function resolveWorkspaceScanCacheTtlMs(): number {
+  const raw = Number(process.env.AI_AGENTS_WORKSPACE_SCAN_CACHE_TTL_MS || String(DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS));
+  if (!Number.isFinite(raw)) return DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS;
+  const normalized = Math.floor(raw);
+  if (normalized <= 0) return DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS;
+  return Math.min(120_000, normalized);
+}
+
+function buildWalkFilesCacheKey(root: string, maxScanFiles: number, maxFileSizeBytes: number): string {
+  return `${path.resolve(root)}::scan=${maxScanFiles}::size=${maxFileSizeBytes}`;
+}
+
 function scoreText(text: string, keywords: string[]): number {
   if (!keywords.length) return 0;
   const lower = text.toLowerCase();
@@ -217,6 +237,17 @@ function scoreText(text: string, keywords: string[]): number {
 async function walkFiles(root: string, limits?: WorkspaceContextLimits): Promise<string[]> {
   const maxScanFiles = limits?.maxScanFiles ?? MAX_SCAN_FILES;
   const maxFileSizeBytes = limits?.maxFileSizeBytes ?? MAX_FILE_SIZE_BYTES;
+  const cacheDisabled = isWorkspaceScanCacheDisabled();
+  const cacheTtlMs = resolveWorkspaceScanCacheTtlMs();
+  const cacheKey = buildWalkFilesCacheKey(root, maxScanFiles, maxFileSizeBytes);
+
+  if (!cacheDisabled) {
+    const cached = walkFilesCache.get(cacheKey);
+    if (cached && (Date.now() - cached.cachedAtMs) <= cacheTtlMs) {
+      return [...cached.files];
+    }
+  }
+
   const out: string[] = [];
 
   async function walk(current: string): Promise<void> {
@@ -245,6 +276,15 @@ async function walkFiles(root: string, limits?: WorkspaceContextLimits): Promise
   }
 
   await walk(root);
+
+  if (!cacheDisabled) {
+    if (walkFilesCache.size > 60) walkFilesCache.clear();
+    walkFilesCache.set(cacheKey, {
+      cachedAtMs: Date.now(),
+      files: [...out],
+    });
+  }
+
   return out;
 }
 
