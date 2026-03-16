@@ -59,6 +59,11 @@ To disable it:
 ai-agents start --no-progress
 ```
 
+For a preview run that does not write code changes:
+```bash
+ai-agents start --dry-run
+```
+
 ### 3. `new`
 Creates a task.
 
@@ -276,6 +281,7 @@ Advanced tuning:
 - set `AI_AGENTS_DISABLE_PROVIDER_CACHE=1` to disable provider instance reuse cache
 - set `AI_AGENTS_POLL_INTERVAL_MS=<ms>` to adjust idle polling interval (default `1200`, min `200`)
 - set `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>` to limit immediate no-sleep cycles after processing work (default `3`)
+- set `AI_AGENTS_DRY_RUN=1` to simulate workspace edits without writing files
 
 Polling/queue audit logs:
 - `.ai-agents/logs/polling-metrics.jsonl`: loop action (`immediate`/`sleep`), reason, processed stages/tasks, and sleep-avoidance counters.

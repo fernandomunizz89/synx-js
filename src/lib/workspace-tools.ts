@@ -421,11 +421,17 @@ function unique(items: string[]): string[] {
 export async function applyWorkspaceEdits(args: {
   workspaceRoot: string;
   edits: WorkspaceEdit[];
+  dryRun?: boolean;
 }): Promise<AppliedWorkspaceEdits> {
+  const dryRun = typeof args.dryRun === "boolean" ? args.dryRun : envBoolean("AI_AGENTS_DRY_RUN", false);
   const appliedFiles: string[] = [];
   const changedFiles: string[] = [];
   const skippedEdits: string[] = [];
   const warnings: string[] = [];
+
+  if (dryRun) {
+    warnings.push("Dry-run mode is enabled. Workspace edits are simulated and no files are written.");
+  }
 
   for (const edit of args.edits) {
     try {
@@ -433,7 +439,9 @@ export async function applyWorkspaceEdits(args: {
 
       if (edit.action === "delete") {
         if (await exists(absolutePath)) {
-          await fs.unlink(absolutePath);
+          if (!dryRun) {
+            await fs.unlink(absolutePath);
+          }
           appliedFiles.push(relativePath);
           changedFiles.push(relativePath);
         } else {
@@ -463,7 +471,9 @@ export async function applyWorkspaceEdits(args: {
           skippedEdits.push(`${relativePath} (replace_snippet skipped: replacement produced no changes)`);
           continue;
         }
-        await fs.writeFile(absolutePath, next, "utf8");
+        if (!dryRun) {
+          await fs.writeFile(absolutePath, next, "utf8");
+        }
         appliedFiles.push(relativePath);
         changedFiles.push(relativePath);
         continue;
@@ -484,7 +494,9 @@ export async function applyWorkspaceEdits(args: {
       }
 
       await ensureDir(path.dirname(absolutePath));
-      await fs.writeFile(absolutePath, edit.content, "utf8");
+      if (!dryRun) {
+        await fs.writeFile(absolutePath, edit.content, "utf8");
+      }
       appliedFiles.push(relativePath);
       changedFiles.push(relativePath);
     } catch (error) {

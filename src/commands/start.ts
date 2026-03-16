@@ -121,9 +121,15 @@ export const startCommand = new Command("start")
   .description("Start the engine, recover unfinished work, and keep processing tasks")
   .option("--force", "start even when readiness checks fail")
   .option("--no-progress", "disable live progress indicator")
-  .action(async (options: { force?: boolean; progress?: boolean }) => {
+  .option("--dry-run", "simulate workspace edits without writing files")
+  .action(async (options: { force?: boolean; progress?: boolean; dryRun?: boolean }) => {
     await ensureGlobalInitialized();
     await ensureProjectInitialized();
+
+    if (options.dryRun) {
+      process.env.AI_AGENTS_DRY_RUN = "1";
+      console.log("Dry-run mode enabled: implementation edits will be simulated only.");
+    }
 
     const daemonStatePath = path.join(runtimeDir(), "daemon-state.json");
     if (await exists(daemonStatePath)) {

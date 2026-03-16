@@ -93,6 +93,11 @@ If you prefer quiet mode:
 ai-agents start --no-progress
 ```
 
+If you want a safe preview run without writing code changes:
+```bash
+ai-agents start --dry-run
+```
+
 `status` now defaults to a focused view:
 - shows the task currently in progress (or waiting your approval)
 - if no active task exists, shows the latest completed task
@@ -305,6 +310,7 @@ Rate limiting/backoff notes:
 - `AI_AGENTS_DISABLE_PROVIDER_CACHE=1`: disables in-memory provider instance reuse.
 - `AI_AGENTS_POLL_INTERVAL_MS=<ms>`: engine loop sleep interval when idle (default: `1200`, minimum accepted: `200`).
 - `AI_AGENTS_MAX_IMMEDIATE_CYCLES=<n>`: max immediate no-sleep cycles after processing work (default: `3`, max: `20`).
+- `AI_AGENTS_DRY_RUN=1`: simulate workspace edits (no file writes) while still running the pipeline.
 
 Polling observability:
 - Loop decisions are logged to `.ai-agents/logs/polling-metrics.jsonl` with action (`immediate` vs `sleep`), reason, processed stages/tasks, and sleep-avoidance counters.
