@@ -280,6 +280,7 @@ Advanced tuning:
 - set `AI_AGENTS_PROVIDER_INPUT_COST_PER_1K_USD` to estimate input-token USD cost in metrics output (default `0`)
 - set `AI_AGENTS_PROVIDER_OUTPUT_COST_PER_1K_USD` to estimate output-token USD cost in metrics output (default `0`)
 - token/cost estimates now use `src/lib/token-estimation.ts` with a chars-per-token heuristic plus optional known-model pricing fallback (env overrides still take precedence)
+- set `AI_AGENTS_PROVIDER_STREAMING=true` to enable SSE streaming mode for OpenAI-compatible provider calls (`false` by default)
 - set `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE=<n>` to enforce local provider-call throughput cap (`0` disables, default `0`)
 - set `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS=<ms>` to tune the local limiter window (default `60000`, min `200`)
 - set `AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES=<n>` for transient-provider retries (default `2`, max `6`)

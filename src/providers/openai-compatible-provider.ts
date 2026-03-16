@@ -3,7 +3,7 @@ import type { LlmProvider } from "./provider.js";
 import { extractJsonFromText } from "../lib/utils.js";
 import { logProviderParseRetry, logProviderThrottle } from "../lib/logging.js";
 import { sleep } from "../lib/utils.js";
-import { envNumber, envOptionalNumber } from "../lib/env.js";
+import { envBoolean, envNumber, envOptionalNumber } from "../lib/env.js";
 import { isTaskCancelRequested } from "../lib/task-cancel.js";
 import {
   buildTokenEstimateFromCounts,
@@ -170,6 +170,10 @@ function resolveMaxTokens(): number | undefined {
     min: 1,
     max: 200_000,
   });
+}
+
+function resolveProviderStreaming(): boolean {
+  return envBoolean("AI_AGENTS_PROVIDER_STREAMING", false);
 }
 
 function resolveJsonParseRetries(): number {
@@ -617,6 +621,127 @@ async function callChatCompletionsOnce(args: {
   return typeof content === "string" ? content : (content || []).map((item) => item.text || "").join("\n");
 }
 
+function extractStreamChunkText(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+  const root = value as {
+    choices?: Array<{
+      delta?: { content?: string | Array<{ text?: string }> };
+      message?: { content?: string | Array<{ text?: string }> };
+      text?: string;
+    }>;
+  };
+  const choice = root.choices?.[0];
+  if (!choice) return "";
+
+  const fromDelta = choice.delta?.content;
+  if (typeof fromDelta === "string") return fromDelta;
+  if (Array.isArray(fromDelta)) return fromDelta.map((item) => item?.text || "").join("");
+
+  const fromMessage = choice.message?.content;
+  if (typeof fromMessage === "string") return fromMessage;
+  if (Array.isArray(fromMessage)) return fromMessage.map((item) => item?.text || "").join("");
+
+  if (typeof choice.text === "string") return choice.text;
+  return "";
+}
+
+async function callChatCompletionsStreaming(args: {
+  baseUrl: string;
+  headers: Record<string, string>;
+  timeoutMs: number;
+  payload: Record<string, unknown>;
+  cancellationSignal?: AbortSignal;
+  onChunk?: (chunk: string) => void;
+}): Promise<string> {
+  let response: Response;
+  try {
+    const timeoutSignal = AbortSignal.timeout(args.timeoutMs);
+    const signal = args.cancellationSignal ? AbortSignal.any([timeoutSignal, args.cancellationSignal]) : timeoutSignal;
+    response = await fetch(`${args.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: args.headers,
+      signal,
+      body: JSON.stringify({ ...args.payload, stream: true }),
+    });
+  } catch (error) {
+    if (args.cancellationSignal?.aborted) {
+      throw createProviderCallError({
+        message: "Task cancellation requested. Provider stream aborted.",
+        transient: false,
+        errorCode: "task_cancelled",
+      });
+    }
+    const name = error && typeof error === "object" && "name" in error ? (error as { name?: string }).name : "";
+    if (name === "TimeoutError" || name === "AbortError") {
+      throw createProviderCallError({
+        message: `Provider stream timed out after ${args.timeoutMs}ms.`,
+        transient: true,
+        errorCode: "timeout",
+      });
+    }
+    if (error instanceof Error) {
+      const lower = (error.message || "").toLowerCase();
+      const likelyConfigIssue = lower.includes("invalid url") || lower.includes("only absolute urls are supported");
+      throw createProviderCallError({
+        message: error.message || "Provider streaming request failed before receiving a response.",
+        transient: !likelyConfigIssue,
+        errorCode: likelyConfigIssue ? "invalid_request_config" : "network_error",
+      });
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw createProviderCallError({
+      message: `Provider request failed with ${response.status}: ${body}`,
+      transient: transientStatusCodes.has(response.status),
+      statusCode: response.status,
+      errorCode: `http_${response.status}`,
+      retryAfterMs: parseRetryAfterMs(response.headers.get("retry-after")),
+    });
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw createProviderCallError({
+      message: "Provider stream response body is not readable.",
+      transient: true,
+      errorCode: "stream_unreadable",
+    });
+  }
+
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      try {
+        const parsed = JSON.parse(data) as unknown;
+        const chunkText = extractStreamChunkText(parsed);
+        if (!chunkText) continue;
+        fullText += chunkText;
+        args.onChunk?.(chunkText);
+      } catch {
+        // Ignore malformed stream fragments and continue with subsequent chunks.
+      }
+    }
+  }
+
+  return fullText;
+}
+
 async function callChatCompletionsWithResilience(args: {
   request: ProviderRequest;
   provider: string;
@@ -625,6 +750,7 @@ async function callChatCompletionsWithResilience(args: {
   headers: Record<string, string>;
   timeoutMs: number;
   payload: Record<string, unknown>;
+  streamingEnabled: boolean;
   maxRequestsPerMinute: number;
   rateLimitWindowMs: number;
   maxConcurrentRequestsPerModel: number;
@@ -706,13 +832,21 @@ async function callChatCompletionsWithResilience(args: {
             errorCode: "task_cancelled",
           });
         }
-        const rawText = await callChatCompletionsOnce({
-          baseUrl: args.baseUrl,
-          headers: args.headers,
-          timeoutMs: args.timeoutMs,
-          payload: args.payload,
-          cancellationSignal: args.cancellationSignal,
-        });
+        const rawText = args.streamingEnabled
+          ? await callChatCompletionsStreaming({
+            baseUrl: args.baseUrl,
+            headers: args.headers,
+            timeoutMs: args.timeoutMs,
+            payload: args.payload,
+            cancellationSignal: args.cancellationSignal,
+          })
+          : await callChatCompletionsOnce({
+            baseUrl: args.baseUrl,
+            headers: args.headers,
+            timeoutMs: args.timeoutMs,
+            payload: args.payload,
+            cancellationSignal: args.cancellationSignal,
+          });
 
         if (attempt > 1) {
           await logProviderThrottle({
@@ -871,6 +1005,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const rateLimitWindowMs = resolveRateLimitWindowMs();
     const maxConcurrentRequestsPerModel = resolveMaxConcurrentRequestsPerModel();
     const backoff = resolveBackoffSettings();
+    const streamingEnabled = resolveProviderStreaming();
     const parseAttemptsMax = 1 + parseRetriesMax;
     const parseFailures: string[] = [];
     let parseRetriesUsed = 0;
@@ -935,6 +1070,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           headers,
           timeoutMs,
           payload,
+          streamingEnabled,
           maxRequestsPerMinute,
           rateLimitWindowMs,
           maxConcurrentRequestsPerModel,

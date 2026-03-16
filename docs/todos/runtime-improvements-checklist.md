@@ -3,7 +3,7 @@
 - [x] 1. Consolidate duplicated text/risk helpers into shared modules and replace local copies.
 - [x] 2. Decompose `workspace-tools.ts` into focused modules with a compatibility barrel.
 - [x] 3. Ensure token/cost estimation module and provider integration are complete and documented.
-- [ ] 4. Add optional streaming mode in OpenAI-compatible provider (`AI_AGENTS_PROVIDER_STREAMING`).
+- [x] 4. Add optional streaming mode in OpenAI-compatible provider (`AI_AGENTS_PROVIDER_STREAMING`).
 - [x] 5. Make stage view markdown write atomic in `WorkerBase.finishStage`.
 - [x] 6. Restore immediate-cycle budget guard for fast-path polling.
 - [x] 7. Simplify `provider-error-meta.ts` defaults after successful Zod parse.
