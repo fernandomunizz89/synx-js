@@ -18,6 +18,7 @@ This version is designed to reduce operator friction:
 - `new`
 - `status`
 - `approve`
+- `cancel`
 - `doctor`
 - `resume`
 - `fix`
@@ -78,6 +79,7 @@ ai-agents setup
 ai-agents start
 ai-agents new
 ai-agents status
+ai-agents cancel <task-id>
 ai-agents approve
 ```
 

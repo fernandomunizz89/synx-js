@@ -4,6 +4,7 @@ import { extractJsonFromText } from "../lib/utils.js";
 import { logProviderParseRetry, logProviderThrottle } from "../lib/logging.js";
 import { sleep } from "../lib/utils.js";
 import { envNumber, envOptionalNumber } from "../lib/env.js";
+import { isTaskCancelRequested } from "../lib/task-cancel.js";
 
 interface ChatCompletionsResponse {
   choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
@@ -369,6 +370,50 @@ function parseFailureReason(error: unknown): string {
   return String(error);
 }
 
+interface TaskCancellationWatcher {
+  signal?: AbortSignal;
+  stop: () => void;
+}
+
+function createTaskCancellationWatcher(taskId?: string): TaskCancellationWatcher {
+  if (!taskId) {
+    return {
+      signal: undefined,
+      stop: () => undefined,
+    };
+  }
+
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | null = null;
+  let checking = false;
+
+  const checkCancellation = async (): Promise<void> => {
+    if (checking || controller.signal.aborted) return;
+    checking = true;
+    try {
+      const requested = await isTaskCancelRequested(taskId);
+      if (requested) controller.abort(`task-cancelled:${taskId}`);
+    } catch {
+      // Cancellation probing issues should not break provider requests.
+    } finally {
+      checking = false;
+    }
+  };
+
+  void checkCancellation();
+  timer = setInterval(() => {
+    void checkCancellation();
+  }, 400);
+
+  return {
+    signal: controller.signal,
+    stop: () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+    },
+  };
+}
+
 function shortenText(value: string, maxChars: number): string {
   const next = value.trim();
   if (next.length <= maxChars) return next;
@@ -540,16 +585,26 @@ async function callChatCompletionsOnce(args: {
   headers: Record<string, string>;
   timeoutMs: number;
   payload: Record<string, unknown>;
+  cancellationSignal?: AbortSignal;
 }): Promise<string> {
   let response: Response;
   try {
+    const timeoutSignal = AbortSignal.timeout(args.timeoutMs);
+    const signal = args.cancellationSignal ? AbortSignal.any([timeoutSignal, args.cancellationSignal]) : timeoutSignal;
     response = await fetch(`${args.baseUrl}/chat/completions`, {
       method: "POST",
       headers: args.headers,
-      signal: AbortSignal.timeout(args.timeoutMs),
+      signal,
       body: JSON.stringify(args.payload),
     });
   } catch (error) {
+    if (args.cancellationSignal?.aborted) {
+      throw createProviderCallError({
+        message: "Task cancellation requested. Provider call aborted.",
+        transient: false,
+        errorCode: "task_cancelled",
+      });
+    }
     const name = error && typeof error === "object" && "name" in error ? (error as { name?: string }).name : "";
     if (name === "TimeoutError" || name === "AbortError") {
       throw createProviderCallError({
@@ -598,6 +653,7 @@ async function callChatCompletionsWithResilience(args: {
   rateLimitWindowMs: number;
   maxConcurrentRequestsPerModel: number;
   backoff: ProviderBackoffSettings;
+  cancellationSignal?: AbortSignal;
 }): Promise<ProviderCallOutcome> {
   const maxAttempts = 1 + args.backoff.maxRetries;
   const rateLimitKey = `${args.baseUrl}::${args.model}`;
@@ -667,11 +723,19 @@ async function callChatCompletionsWithResilience(args: {
 
     try {
       try {
+        if (args.cancellationSignal?.aborted) {
+          throw createProviderCallError({
+            message: "Task cancellation requested. Provider call aborted before dispatch.",
+            transient: false,
+            errorCode: "task_cancelled",
+          });
+        }
         const rawText = await callChatCompletionsOnce({
           baseUrl: args.baseUrl,
           headers: args.headers,
           timeoutMs: args.timeoutMs,
           payload: args.payload,
+          cancellationSignal: args.cancellationSignal,
         });
 
         if (attempt > 1) {
@@ -844,8 +908,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const providerThrottleReasons: string[] = [];
     let estimatedInputTokens = 0;
     let estimatedOutputTokens = 0;
-
-    for (let attempt = 1; attempt <= parseAttemptsMax; attempt += 1) {
+    const cancellationWatcher = createTaskCancellationWatcher(request.taskId);
+    try {
+      for (let attempt = 1; attempt <= parseAttemptsMax; attempt += 1) {
       const isRetry = attempt > 1;
       const messages = isRetry
         ? buildParseRetryMessages({
@@ -898,6 +963,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           rateLimitWindowMs,
           maxConcurrentRequestsPerModel,
           backoff,
+          cancellationSignal: cancellationWatcher.signal,
         });
       } catch (rawError) {
         if (isRetry) {
@@ -1027,6 +1093,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           throw errorWithMeta;
         }
       }
+    }
+    } finally {
+      cancellationWatcher.stop();
     }
 
     throw new Error("Provider JSON parsing failed without a terminal parse attempt.");

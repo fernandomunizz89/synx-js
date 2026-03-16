@@ -10,6 +10,12 @@ import { extractProviderErrorMeta } from "../lib/provider-error-meta.js";
 import type { AgentName, NewTaskInput, StageEnvelope, TimingEntry } from "../lib/types.js";
 import { nowIso, sleep } from "../lib/utils.js";
 import { newTaskInputSchema, stageEnvelopeSchema } from "../lib/schema.js";
+import { clearTaskCancelRequest, isTaskCancelRequested, loadTaskCancelRequest } from "../lib/task-cancel.js";
+
+function isTaskCancellationError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
+  return String((error as { errorCode?: unknown }).errorCode || "") === "task_cancelled";
+}
 
 export abstract class WorkerBase {
   abstract readonly agent: AgentName;
@@ -30,6 +36,11 @@ export abstract class WorkerBase {
 
     try {
       await moveFile(inboxFile, workingFile);
+      if (await isTaskCancelRequested(taskId)) {
+        const cancelled = new Error("Task cancellation requested before stage execution.") as Error & { errorCode?: string };
+        cancelled.errorCode = "task_cancelled";
+        throw cancelled;
+      }
       const request = await readJsonValidated(workingFile, stageEnvelopeSchema);
       const stageStartAt = nowIso();
       const requestCreatedAt = typeof request.createdAt === "string" ? request.createdAt : "";
@@ -91,9 +102,16 @@ export abstract class WorkerBase {
       const providerBackoffWaitMs = errorMeta.providerBackoffWaitMs;
       const providerRateLimitWaitMs = errorMeta.providerRateLimitWaitMs;
       const providerThrottleReasons = errorMeta.providerThrottleReasons;
+      const cancellationRequested = isTaskCancellationError(error) || await isTaskCancelRequested(taskId);
+      const cancelRequest = cancellationRequested ? await loadTaskCancelRequest(taskId) : null;
       const meta = await loadTaskMeta(taskId);
-      meta.status = "failed";
-      meta.currentAgent = this.agent;
+      meta.status = cancellationRequested ? "blocked" : "failed";
+      meta.currentAgent = cancellationRequested ? "Human Review" : this.agent;
+      if (cancellationRequested) {
+        meta.currentStage = "cancelled";
+        meta.nextAgent = "";
+        meta.humanApprovalRequired = false;
+      }
       await saveTaskMeta(taskId, meta);
 
       const timing: TimingEntry = {
@@ -113,7 +131,9 @@ export abstract class WorkerBase {
       };
       await logTiming(taskPath, timing);
 
-      const humanMessage = providerErrorToHuman(error instanceof Error ? error.message : String(error));
+      const humanMessage = cancellationRequested
+        ? `Task cancelled by user${cancelRequest?.reason ? `: ${cancelRequest.reason}` : "."}`
+        : providerErrorToHuman(error instanceof Error ? error.message : String(error));
       if (parseRetries > 0) {
         await logTaskEvent(
           taskPath,
@@ -148,6 +168,9 @@ export abstract class WorkerBase {
         },
       });
       await fs.unlink(workingFile).catch(() => undefined);
+      if (cancellationRequested) {
+        await clearTaskCancelRequest(taskId);
+      }
       return false;
     } finally {
       await releaseLock(lockName);

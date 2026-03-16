@@ -11,6 +11,7 @@ import { resumeCommand } from "./commands/resume.js";
 import { fixCommand } from "./commands/fix.js";
 import { metricsCommand } from "./commands/metrics.js";
 import { showConfigCommand } from "./commands/show-config.js";
+import { cancelCommand } from "./commands/cancel.js";
 
 const program = new Command();
 
@@ -25,6 +26,7 @@ program.addCommand(resumeCommand);
 program.addCommand(fixCommand);
 program.addCommand(metricsCommand);
 program.addCommand(showConfigCommand);
+program.addCommand(cancelCommand);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error("\nError:", error instanceof Error ? error.message : String(error));

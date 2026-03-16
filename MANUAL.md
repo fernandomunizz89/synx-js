@@ -123,6 +123,18 @@ ai-agents approve
 
 `approve` now lets you select from pending tasks when more than one is waiting.
 
+## Cancel an active task
+To stop an active task without killing the engine process:
+
+```bash
+ai-agents cancel <task-id>
+```
+
+Notes:
+- cancellation is graceful: the current stage is interrupted safely when possible
+- task status becomes `blocked`
+- if you omit `<task-id>`, the CLI tries the most recently active task
+
 ## When something goes wrong
 
 ### `doctor`
