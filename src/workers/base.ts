@@ -1,6 +1,6 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { exists, moveFile, readJson, writeJson } from "../lib/fs.js";
+import { exists, moveFile, readJsonValidated, writeJson } from "../lib/fs.js";
 import { logAgentAudit, logDaemon, logQueueLatency, logTaskEvent, logTiming } from "../lib/logging.js";
 import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
@@ -9,6 +9,7 @@ import { providerErrorToHuman } from "../lib/human-messages.js";
 import { extractProviderErrorMeta } from "../lib/provider-error-meta.js";
 import type { AgentName, NewTaskInput, StageEnvelope, TimingEntry } from "../lib/types.js";
 import { nowIso, sleep } from "../lib/utils.js";
+import { newTaskInputSchema, stageEnvelopeSchema } from "../lib/schema.js";
 
 export abstract class WorkerBase {
   abstract readonly agent: AgentName;
@@ -29,7 +30,7 @@ export abstract class WorkerBase {
 
     try {
       await moveFile(inboxFile, workingFile);
-      const request = await readJson<StageEnvelope>(workingFile);
+      const request = await readJsonValidated(workingFile, stageEnvelopeSchema);
       const stageStartAt = nowIso();
       const requestCreatedAt = typeof request.createdAt === "string" ? request.createdAt : "";
       const requestCreatedAtMs = requestCreatedAt ? new Date(requestCreatedAt).getTime() : Number.NaN;
@@ -296,7 +297,7 @@ export abstract class WorkerBase {
   }
 
   protected async loadTaskInput(taskId: string): Promise<NewTaskInput> {
-    return readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
+    return readJsonValidated(path.join(taskDir(taskId), "input", "new-task.json"), newTaskInputSchema);
   }
 
   protected async loadReferencedInput(taskId: string, request: StageEnvelope): Promise<unknown | null> {
@@ -309,7 +310,7 @@ export abstract class WorkerBase {
     if (!(await exists(target))) {
       throw new Error(`Referenced input file not found: ${request.inputRef}`);
     }
-    return readJson<unknown>(target);
+    return readJsonValidated(target, stageEnvelopeSchema);
   }
 
   protected async buildAgentInput(taskId: string, request: StageEnvelope): Promise<{

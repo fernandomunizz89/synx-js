@@ -2,6 +2,29 @@ import { z } from "zod";
 
 export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]);
 export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio"]);
+export const taskStatusSchema = z.enum([
+  "new",
+  "in_progress",
+  "waiting_agent",
+  "waiting_human",
+  "blocked",
+  "failed",
+  "done",
+  "archived",
+]);
+export const agentNameSchema = z.enum([
+  "Dispatcher",
+  "Spec Planner",
+  "Bug Investigator",
+  "Bug Fixer",
+  "Feature Builder",
+  "Reviewer",
+  "QA Validator",
+  "PR Writer",
+  "Human Review",
+]);
+export const e2ePolicySchema = z.enum(["auto", "required", "skip"]);
+export const e2eFrameworkSchema = z.enum(["auto", "cypress", "playwright", "other"]);
 
 export const providerStageConfigSchema = z.object({
   type: providerTypeSchema,
@@ -34,6 +57,66 @@ export const localProjectConfigSchema = z.object({
     dispatcher: providerStageConfigSchema.partial().optional(),
     planner: providerStageConfigSchema.partial().optional(),
   }).optional(),
+});
+
+export const newTaskInputSchema = z.object({
+  title: z.string(),
+  typeHint: taskTypeSchema,
+  project: z.string(),
+  rawRequest: z.string(),
+  extraContext: z.object({
+    relatedFiles: z.array(z.string()),
+    logs: z.array(z.string()),
+    notes: z.array(z.string()),
+    qaPreferences: z.object({
+      e2ePolicy: e2ePolicySchema.optional(),
+      e2eFramework: e2eFrameworkSchema.optional(),
+      objective: z.string().optional(),
+    }).optional(),
+  }),
+});
+
+export const stageEnvelopeSchema = z.object({
+  taskId: z.string(),
+  stage: z.string(),
+  status: z.enum(["request", "done", "failed"]),
+  createdAt: z.string(),
+  agent: agentNameSchema,
+  inputRef: z.string().optional(),
+  output: z.unknown().optional(),
+  error: z.string().optional(),
+});
+
+export const taskMetaHistoryItemSchema = z.object({
+  stage: z.string(),
+  agent: agentNameSchema,
+  startedAt: z.string(),
+  endedAt: z.string(),
+  durationMs: z.number(),
+  status: z.enum(["done", "failed"]),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  parseRetries: z.number().optional(),
+  validationPassed: z.boolean().optional(),
+  providerAttempts: z.number().optional(),
+  providerBackoffRetries: z.number().optional(),
+  providerBackoffWaitMs: z.number().optional(),
+  providerRateLimitWaitMs: z.number().optional(),
+});
+
+export const taskMetaSchema = z.object({
+  taskId: z.string(),
+  title: z.string(),
+  type: taskTypeSchema,
+  project: z.string(),
+  status: taskStatusSchema,
+  currentStage: z.string(),
+  currentAgent: z.union([agentNameSchema, z.literal("")]),
+  nextAgent: z.union([agentNameSchema, z.literal("")]),
+  humanApprovalRequired: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  history: z.array(taskMetaHistoryItemSchema),
 });
 
 export const dispatcherOutputSchema = z.object({

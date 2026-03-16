@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import type { ZodType } from "zod";
 
 export async function ensureDir(dirPath: string): Promise<void> {
   await fs.mkdir(dirPath, { recursive: true });
@@ -49,6 +50,17 @@ export async function readText(filePath: string): Promise<string> {
 export async function readJson<T>(filePath: string): Promise<T> {
   const raw = await fs.readFile(filePath, "utf8");
   return JSON.parse(raw) as T;
+}
+
+export async function readJsonValidated<T>(filePath: string, schema: ZodType<T>): Promise<T> {
+  const raw = await readJson<unknown>(filePath);
+  const result = schema.safeParse(raw);
+  if (result.success) return result.data;
+  const issuePreview = result.error.issues
+    .slice(0, 3)
+    .map((issue) => `${issue.path.join(".") || "$"}: ${issue.message}`)
+    .join("; ");
+  throw new Error(`Invalid JSON structure in ${filePath}: ${issuePreview || "schema validation failed"}`);
 }
 
 export async function writeJson(filePath: string, value: unknown): Promise<void> {

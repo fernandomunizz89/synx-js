@@ -1,9 +1,10 @@
 import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "./constants.js";
-import { ensureDir, exists, listDirectories, readJson, writeJson, writeText } from "./fs.js";
+import { ensureDir, exists, listDirectories, readJsonValidated, writeJson, writeText } from "./fs.js";
 import { taskDir, tasksDir } from "./paths.js";
 import type { NewTaskInput, StageEnvelope, TaskMeta } from "./types.js";
 import { nowIso, randomId, slugify, todayDate } from "./utils.js";
+import { taskMetaSchema } from "./schema.js";
 
 export async function ensureTaskStructure(baseTaskDir: string): Promise<void> {
   const dirs = ["input", "inbox", "working", "done", "failed", "human", "artifacts", "logs", "views"];
@@ -45,7 +46,7 @@ export async function createTask(input: NewTaskInput): Promise<{ taskId: string;
 }
 
 export async function loadTaskMeta(taskId: string): Promise<TaskMeta> {
-  return readJson<TaskMeta>(path.join(taskDir(taskId), "meta.json"));
+  return readJsonValidated(path.join(taskDir(taskId), "meta.json"), taskMetaSchema);
 }
 
 export async function saveTaskMeta(taskId: string, meta: TaskMeta): Promise<void> {
