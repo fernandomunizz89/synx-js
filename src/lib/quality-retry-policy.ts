@@ -62,6 +62,14 @@ export function resolveQualityRepairMaxAttempts(): number {
   return 3;
 }
 
+export function resolveRepeatedSignatureLimit(): number {
+  const raw = Number(process.env.AI_AGENTS_QUALITY_REPEAT_SIGNATURE_LIMIT || "2");
+  if (Number.isFinite(raw) && raw >= 2) {
+    return Math.min(6, Math.floor(raw));
+  }
+  return 2;
+}
+
 export function buildFailureSignature(lines: string[]): string {
   return uniqueNormalized(lines)
     .map((line) => line.toLowerCase().replace(/\d+/g, "#"))

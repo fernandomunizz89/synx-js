@@ -10,7 +10,7 @@ import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferenc
 import { normalizeBuilderLikeModelOutput } from "../lib/model-output-recovery.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { runPostEditSanityChecks } from "../lib/post-edit-sanity.js";
-import { buildFailureSignature, buildRetryStrategyInstructions, decideAdaptiveRetry, resolveQualityRepairMaxAttempts, type RetryStrategy } from "../lib/quality-retry-policy.js";
+import { buildFailureSignature, buildRetryStrategyInstructions, decideAdaptiveRetry, resolveQualityRepairMaxAttempts, resolveRepeatedSignatureLimit, type RetryStrategy } from "../lib/quality-retry-policy.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../lib/task-artifacts.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
@@ -644,6 +644,7 @@ Return exactly this JSON shape:
     let qualityRepairAttempted = false;
     let qualityRepairAttempts = 0;
     const maxQualityRepairAttempts = resolveQualityRepairMaxAttempts();
+    const repeatedSignatureLimit = resolveRepeatedSignatureLimit();
     const blockingSignatureCounts = new Map<string, number>();
     let noProgressStreak = 0;
     let previousRetryState: {
@@ -720,10 +721,10 @@ Return exactly this JSON shape:
       qualityRepairAttempted = true;
       qualityRepairAttempts = nextAttempt;
       blockingSignatureCounts.set(blockingSignature, signatureAttempts);
-      if (signatureAttempts > 3) {
+      if (signatureAttempts > repeatedSignatureLimit) {
         output.risks = uniqueNormalized([
           ...output.risks,
-          `Quality repair halted: blocking failure signature repeated ${signatureAttempts - 1} times without progress.`,
+          `Quality repair halted: blocking failure signature repeated ${signatureAttempts - 1} times without progress (limit=${repeatedSignatureLimit}).`,
         ]);
         break;
       }
