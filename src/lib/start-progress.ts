@@ -1,7 +1,7 @@
 import cliSpinners from "cli-spinners";
 import { createLogUpdate } from "log-update";
 import type { TaskMeta } from "./types.js";
-import { formatSynxStatus, renderSynxLogo, renderSynxPanel, synxControlFlowDiagram, synxMuted, type SynxLogoStyle } from "./synx-ui.js";
+import { formatSynxStatus, renderSynxLogo, renderSynxPanel, synxControlFlowDiagram, synxCyan, synxMagenta, synxMuted, synxWaiting } from "./synx-ui.js";
 
 const BAR_WIDTH = 22;
 
@@ -96,6 +96,11 @@ export interface StartProgressSnapshot {
   loop: number;
   engineStartedAtMs: number;
   metas: TaskMeta[];
+  paused: boolean;
+  interactionMode: "command" | "human_input";
+  inputBuffer: string;
+  humanInputLines: string[];
+  eventLogLines: string[];
 }
 
 export interface StartProgressStaticFrame {
@@ -123,13 +128,11 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
     enginePanelLines: [],
   };
   private resizePending = false;
-  private needsFullClear = true;
   private readonly handleResize = (): void => {
     if (this.resizePending) return;
     this.resizePending = true;
     setTimeout(() => {
       this.resizePending = false;
-      this.needsFullClear = true;
       this.draw();
     }, 24);
   };
@@ -155,6 +158,11 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       loop: 0,
       engineStartedAtMs: Date.now(),
       metas: [] as TaskMeta[],
+      paused: false,
+      interactionMode: "command",
+      inputBuffer: "",
+      humanInputLines: [] as string[],
+      eventLogLines: [] as string[],
     };
     this.tick += 1;
     const spinner = this.frames[this.tick % this.frames.length];
@@ -188,6 +196,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       width,
       lines: [
         `${spinner} uptime ${formatDuration(now - snapshot.engineStartedAtMs)} | loop ${snapshot.loop}`,
+        `Engine: ${snapshot.paused ? synxWaiting("Paused") : formatSynxStatus("processing")}`,
         `Flow: ${synxControlFlowDiagram()}`,
         `Queues: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`,
       ],
@@ -216,6 +225,32 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       width,
       lines: taskBusLines,
     });
+
+    const humanInputPanel = snapshot.humanInputLines.length
+      ? renderSynxPanel({
+        title: "HUMAN INPUT",
+        borderColor: "yellow",
+        width,
+        lines: snapshot.humanInputLines,
+      })
+      : "";
+
+    const eventLines = snapshot.eventLogLines.length
+      ? snapshot.eventLogLines
+      : [synxMuted("No events yet. Waiting for activity...")];
+    const eventPanel = renderSynxPanel({
+      title: "EVENT STREAM",
+      borderColor: "magenta",
+      width,
+      lines: eventLines,
+    });
+
+    const promptLabel = snapshot.interactionMode === "human_input" ? synxWaiting("HUMAN INPUT") : synxCyan("SYNX");
+    const promptBody = snapshot.inputBuffer.trim()
+      ? snapshot.inputBuffer
+      : synxMuted("[aguardando comando...]");
+    const promptLine = `${promptLabel} ${synxMagenta(">")} ${promptBody}`;
+    const quickActionsLine = `${synxMuted("Quick Actions:")} ${synxCyan("[F1] Ajuda")} | ${synxCyan("[F2] Nova Tarefa")} | ${synxCyan("[F3] Pausar")} | ${synxCyan("[F10] Sair")}`;
 
     const lineCount = (text: string): number => text.split("\n").length;
     const maxLines = Math.max(10, (process.stdout.rows || 24) - 1);
@@ -261,12 +296,26 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       used += needed;
     }
 
+    if (humanInputPanel) {
+      const needed = lineCount(humanInputPanel);
+      if (used + needed <= maxLines) {
+        sections.push(humanInputPanel);
+        used += needed;
+      }
+    }
+
+    const eventNeeded = lineCount(eventPanel);
+    if (used + eventNeeded <= maxLines) {
+      sections.push(eventPanel);
+      used += eventNeeded;
+    }
+
+    sections.push(promptLine);
+    sections.push(quickActionsLine);
     const frame = sections.join("\n");
 
-    if (this.needsFullClear) {
+    if (this.resizePending) {
       this.log.clear();
-      process.stdout.write("\x1b[2J\x1b[0;0H");
-      this.needsFullClear = false;
     }
     this.log(frame);
   }

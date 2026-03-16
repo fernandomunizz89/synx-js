@@ -1,10 +1,11 @@
 import { Command } from "commander";
 import path from "node:path";
+import readline from "node:readline";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
-import { allTaskIds, loadTaskMeta } from "../lib/task.js";
-import { writeDaemonState, logDaemon, logPollingCycle } from "../lib/logging.js";
+import { allTaskIds, createTask, loadTaskMeta, saveTaskMeta } from "../lib/task.js";
+import { writeDaemonState, logDaemon, logPollingCycle, logTaskEvent } from "../lib/logging.js";
 import { workers } from "../workers/index.js";
-import { POLL_INTERVAL_MS } from "../lib/constants.js";
+import { DONE_FILE_NAMES, POLL_INTERVAL_MS, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { sleep, nowIso } from "../lib/utils.js";
 import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles, processIsRunning } from "../lib/runtime.js";
 import { checkProviderHealth } from "../lib/provider-health.js";
@@ -13,8 +14,8 @@ import { providerHealthToHuman } from "../lib/human-messages.js";
 import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
 import { createStartProgressRenderer } from "../lib/start-progress.js";
-import { exists, readJson } from "../lib/fs.js";
-import { runtimeDir } from "../lib/paths.js";
+import { exists, readJson, writeJson } from "../lib/fs.js";
+import { runtimeDir, taskDir } from "../lib/paths.js";
 import { envNumber } from "../lib/env.js";
 import { decideLoopAction } from "../lib/loop-action.js";
 import {
@@ -28,6 +29,9 @@ import {
   synxSuccess,
   synxWaiting,
 } from "../lib/synx-ui.js";
+import { mapFunctionKeyToAction, parseHumanInputCommand, parseInlineCommand, type InlineCommand } from "../lib/start-inline-command.js";
+import type { AgentName, StageEnvelope, TaskMeta, TaskType } from "../lib/types.js";
+import { resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 
 function resolvePollIntervalMs(): number {
   return envNumber("AI_AGENTS_POLL_INTERVAL_MS", POLL_INTERVAL_MS, {
@@ -56,6 +60,119 @@ function resolveTaskConcurrency(): number {
 interface TaskProcessOutcome {
   taskId: string;
   processedStages: number;
+}
+
+interface RemediationTarget {
+  agent: AgentName;
+  stage: string;
+  requestFileName: string;
+}
+
+interface StatusCounts {
+  active: number;
+  waitingHuman: number;
+  failed: number;
+  done: number;
+}
+
+function taskUpdatedAtMs(meta: TaskMeta): number {
+  const timestamp = meta.updatedAt || meta.createdAt;
+  const ms = new Date(timestamp).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function byMostRecent(a: TaskMeta, b: TaskMeta): number {
+  return taskUpdatedAtMs(b) - taskUpdatedAtMs(a);
+}
+
+function summarizeTaskCounts(metas: TaskMeta[]): StatusCounts {
+  return {
+    active: metas.filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status)).length,
+    waitingHuman: metas.filter((x) => x.status === "waiting_human").length,
+    failed: metas.filter((x) => x.status === "failed").length,
+    done: metas.filter((x) => x.status === "done").length,
+  };
+}
+
+function remediationTarget(taskType: TaskType): RemediationTarget {
+  if (taskType === "Bug") {
+    return {
+      agent: "Bug Fixer",
+      stage: "bug-fixer",
+      requestFileName: STAGE_FILE_NAMES.bugFixer,
+    };
+  }
+
+  return {
+    agent: "Feature Builder",
+    stage: "builder",
+    requestFileName: STAGE_FILE_NAMES.builder,
+  };
+}
+
+function appendEvent(logLines: string[], message: string): void {
+  logLines.push(formatSynxStreamLog(message, "SYNX"));
+  while (logLines.length > 12) logLines.shift();
+}
+
+function pickFocusedTask(metas: TaskMeta[]): { meta: TaskMeta; reason: string } {
+  const sorted = [...metas].sort(byMostRecent);
+
+  const waitingHuman = sorted.find((x) => x.status === "waiting_human");
+  if (waitingHuman) {
+    return {
+      meta: waitingHuman,
+      reason: "task waiting for your approval",
+    };
+  }
+
+  const active = sorted.find((x) => ["new", "in_progress", "waiting_agent"].includes(x.status));
+  if (active) {
+    return {
+      meta: active,
+      reason: "task currently in progress",
+    };
+  }
+
+  const latestDone = sorted.find((x) => x.status === "done");
+  if (latestDone) {
+    return {
+      meta: latestDone,
+      reason: "latest completed task",
+    };
+  }
+
+  const latestFailed = sorted.find((x) => x.status === "failed");
+  if (latestFailed) {
+    return {
+      meta: latestFailed,
+      reason: "latest failed task",
+    };
+  }
+
+  return {
+    meta: sorted[0],
+    reason: "most recently updated task",
+  };
+}
+
+function resolveHumanTask(metas: TaskMeta[]): TaskMeta | null {
+  const waiting = metas
+    .filter((meta) => meta.humanApprovalRequired || meta.status === "waiting_human")
+    .sort(byMostRecent);
+  return waiting[0] || null;
+}
+
+function buildHumanInputLines(humanTask: TaskMeta | null): string[] {
+  if (!humanTask) return [];
+
+  return [
+    synxWaiting(`Task waiting human review: ${humanTask.taskId}`),
+    `Title: ${humanTask.title}`,
+    `Type: ${humanTask.type} | Stage: ${humanTask.currentStage}`,
+    "Type `approve` to finalize, or `reprove --reason \"...\"` to send it back.",
+    "Tip: in this mode, free-text reply is treated as reprove reason.",
+  ];
 }
 
 async function processTaskWithWorkers(taskId: string): Promise<TaskProcessOutcome> {
@@ -87,6 +204,13 @@ async function processTasksWithConcurrency(taskIds: string[], concurrency: numbe
 
   await Promise.all(runners);
   return outcomes.filter((item): item is TaskProcessOutcome => Boolean(item));
+}
+
+async function loadMetasSafe(taskIds: string[]): Promise<TaskMeta[]> {
+  const metaResults = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
+  return metaResults
+    .filter((item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof loadTaskMeta>>> => item.status === "fulfilled")
+    .map((item) => item.value);
 }
 
 export const startCommand = new Command("start")
@@ -135,7 +259,7 @@ export const startCommand = new Command("start")
     const readiness = await collectReadinessReport({ includeProviderChecks: true });
     printReadinessReport(readiness, "Readiness checks");
     if (!readiness.ok && !options.force) {
-      console.log(`\nStart aborted to prevent failed runs in a broken setup.`);
+      console.log("\nStart aborted to prevent failed runs in a broken setup.");
       console.log(`Next step: run \`${commandExample("setup")}\` and then \`${commandExample("start")}\`.`);
       console.log(`If you still want to start now, run \`${commandExample("start --force")}\`.`);
       return;
@@ -189,7 +313,7 @@ export const startCommand = new Command("start")
 
     const enginePanelLines = [
       synxSuccess("SYNX engine started. Press Ctrl+C to stop."),
-      `Tip: in another terminal, run \`${commandExample("new")}\` and \`${commandExample("status")}\`.`,
+      "Tip: command prompt is integrated below TASK BUS (type `help` for quick usage).",
     ];
     await logDaemon("SYNX engine started.");
     await writeDaemonState({
@@ -223,6 +347,7 @@ export const startCommand = new Command("start")
         borderColor: "magenta",
       }));
     }
+
     const pollIntervalMs = resolvePollIntervalMs();
     const maxImmediateCycles = resolveMaxImmediateCycles();
     const taskConcurrency = resolveTaskConcurrency();
@@ -239,12 +364,275 @@ export const startCommand = new Command("start")
     let stopSignal: NodeJS.Signals | "" = "";
     let lastActiveTaskCount = 0;
 
+    let paused = false;
+    let interactionMode: "command" | "human_input" = "command";
+    let inputBuffer = "";
+    const eventLogLines: string[] = [];
+    let humanInputLines: string[] = [];
+    let preferredHumanTaskId = "";
+    let latestMetas: TaskMeta[] = [];
+
+    const renderInteractiveSnapshot = (): void => {
+      progress.render({
+        loop,
+        engineStartedAtMs,
+        metas: latestMetas,
+        paused,
+        interactionMode,
+        inputBuffer,
+        humanInputLines,
+        eventLogLines,
+      });
+    };
+
+    appendEvent(eventLogLines, "Interactive prompt ready. Type `help` for commands.");
+    renderInteractiveSnapshot();
+
     const requestStop = (signal: NodeJS.Signals): void => {
       if (stopRequested) return;
       stopRequested = true;
       stopSignal = signal;
-      console.log(`\n${formatSynxStreamLog(`${signal} received. Waiting current cycle to finish for graceful shutdown...`)}`);
+      appendEvent(eventLogLines, `${signal} received. Waiting current cycle to finish for graceful shutdown...`);
+      renderInteractiveSnapshot();
     };
+
+    const runInlineCommand = async (command: InlineCommand): Promise<void> => {
+      if (command.kind === "help") {
+        appendEvent(eventLogLines, "Commands: new \"title\" --type Bug|Feature|Refactor|Research|Documentation|Mixed");
+        appendEvent(eventLogLines, "Commands: status [--all] | approve [--task-id] | reprove --reason \"...\" [--task-id] | stop");
+        return;
+      }
+
+      if (command.kind === "stop") {
+        requestStop("SIGTERM");
+        return;
+      }
+
+      if (command.kind === "unknown") {
+        appendEvent(eventLogLines, command.message);
+        return;
+      }
+
+      if (command.kind === "new") {
+        const draftTaskInput = {
+          title: command.title,
+          typeHint: command.type,
+          project: "",
+          rawRequest: command.title,
+          extraContext: {
+            relatedFiles: [],
+            logs: [],
+            notes: [],
+            qaPreferences: {
+              e2ePolicy: "required" as const,
+              e2eFramework: "auto" as const,
+              objective: "",
+            },
+          },
+        };
+        const resolvedPreferences = resolveTaskQaPreferences(draftTaskInput);
+        const { taskId } = await createTask({
+          ...draftTaskInput,
+          extraContext: {
+            ...draftTaskInput.extraContext,
+            qaPreferences: {
+              ...draftTaskInput.extraContext.qaPreferences,
+              objective: resolvedPreferences.objective,
+            },
+          },
+        });
+        appendEvent(eventLogLines, `Task created: ${taskId} (${command.type})`);
+        return;
+      }
+
+      if (command.kind === "status") {
+        const ids = await allTaskIds();
+        if (!ids.length) {
+          appendEvent(eventLogLines, "No tasks found.");
+          return;
+        }
+
+        const metas = await loadMetasSafe(ids);
+        const counts = summarizeTaskCounts(metas);
+        appendEvent(eventLogLines, `Summary: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`);
+
+        if (command.all) {
+          for (const meta of [...metas].sort(byMostRecent).slice(0, 4)) {
+            appendEvent(eventLogLines, `${meta.taskId} | ${meta.status} | ${meta.currentStage} | ${meta.currentAgent || "[none]"}`);
+          }
+        } else if (metas.length) {
+          const focused = pickFocusedTask(metas);
+          appendEvent(eventLogLines, `Focused (${focused.reason}): ${focused.meta.taskId} | ${focused.meta.status} | ${focused.meta.currentStage}`);
+        }
+        return;
+      }
+
+      if (command.kind === "approve") {
+        const meta = await loadTaskMeta(command.taskId);
+        if (!meta.humanApprovalRequired) {
+          appendEvent(eventLogLines, `Task ${command.taskId} is not waiting for human approval.`);
+          return;
+        }
+
+        meta.status = "done";
+        meta.currentStage = "approved";
+        meta.currentAgent = "Human Review";
+        meta.nextAgent = "";
+        meta.humanApprovalRequired = false;
+        await saveTaskMeta(command.taskId, meta);
+        await logTaskEvent(taskDir(command.taskId), "Human approval completed. Task marked as done.");
+        appendEvent(eventLogLines, `Task approved: ${command.taskId}`);
+        return;
+      }
+
+      if (command.kind === "reprove") {
+        const reason = command.reason.trim();
+        if (!reason) {
+          appendEvent(eventLogLines, "Reprove requires a non-empty reason.");
+          return;
+        }
+
+        const meta = await loadTaskMeta(command.taskId);
+        if (!meta.humanApprovalRequired) {
+          appendEvent(eventLogLines, `Task ${command.taskId} is not waiting for human review.`);
+          return;
+        }
+
+        const target = remediationTarget(meta.type);
+        const now = nowIso();
+        const qaDoneRef = `done/${DONE_FILE_NAMES.qa}`;
+        const prDoneRef = `done/${DONE_FILE_NAMES.pr}`;
+        const nextInputRef = await exists(path.join(taskDir(command.taskId), qaDoneRef)) ? qaDoneRef : prDoneRef;
+
+        meta.status = "waiting_agent";
+        meta.currentStage = "reproved";
+        meta.currentAgent = "Human Review";
+        meta.nextAgent = target.agent;
+        meta.humanApprovalRequired = false;
+        await saveTaskMeta(command.taskId, meta);
+
+        const stageRequest: StageEnvelope = {
+          taskId: command.taskId,
+          stage: target.stage,
+          status: "request",
+          createdAt: now,
+          agent: target.agent,
+          inputRef: nextInputRef,
+        };
+
+        await writeJson(path.join(taskDir(command.taskId), "inbox", target.requestFileName), stageRequest);
+        await writeJson(path.join(taskDir(command.taskId), "human", "90-final-review.reproved.json"), {
+          taskId: command.taskId,
+          stage: "human-review",
+          status: "done",
+          createdAt: now,
+          agent: "Human Review",
+          output: {
+            decision: "reproved",
+            returnedTo: target.agent,
+            reason,
+            rollbackMode: "none",
+          },
+        });
+        await logTaskEvent(taskDir(command.taskId), `Human reprove completed. Task returned to ${target.agent}. Reason: ${reason}`);
+        appendEvent(eventLogLines, `Task reproved: ${command.taskId} -> ${target.agent}`);
+      }
+    };
+
+    const executeInlineCommand = async (command: InlineCommand): Promise<void> => {
+      try {
+        await runInlineCommand(command);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        appendEvent(eventLogLines, `Command failed: ${message}`);
+      }
+      renderInteractiveSnapshot();
+    };
+
+    let commandExecution = Promise.resolve();
+    const queueCommand = (command: InlineCommand): void => {
+      commandExecution = commandExecution
+        .then(async () => executeInlineCommand(command))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          appendEvent(eventLogLines, `Command pipeline error: ${message}`);
+          renderInteractiveSnapshot();
+        });
+    };
+
+    let keypressBound = false;
+    const keypressHandler = (str: string, key: { name?: string; sequence?: string; ctrl?: boolean; meta?: boolean }): void => {
+      if (key.ctrl && key.name === "c") {
+        requestStop("SIGINT");
+        return;
+      }
+
+      const action = mapFunctionKeyToAction(key);
+      if (action === "help") {
+        queueCommand({ kind: "help" });
+        return;
+      }
+      if (action === "new") {
+        interactionMode = "command";
+        inputBuffer = "new \"\" --type Feature";
+        appendEvent(eventLogLines, "F2 loaded new-task template in prompt.");
+        renderInteractiveSnapshot();
+        return;
+      }
+      if (action === "pause_toggle") {
+        paused = !paused;
+        appendEvent(eventLogLines, paused ? "Engine paused (F3)." : "Engine resumed (F3).");
+        renderInteractiveSnapshot();
+        return;
+      }
+      if (action === "stop") {
+        requestStop("SIGTERM");
+        return;
+      }
+
+      if (key.name === "return" || key.name === "enter") {
+        const submitted = inputBuffer.trim();
+        inputBuffer = "";
+        if (!submitted) {
+          renderInteractiveSnapshot();
+          return;
+        }
+
+        const command = interactionMode === "human_input"
+          ? parseHumanInputCommand(submitted, preferredHumanTaskId)
+          : parseInlineCommand(submitted, preferredHumanTaskId);
+        queueCommand(command);
+        renderInteractiveSnapshot();
+        return;
+      }
+
+      if (key.name === "backspace" || key.name === "delete") {
+        inputBuffer = inputBuffer.slice(0, -1);
+        renderInteractiveSnapshot();
+        return;
+      }
+
+      if (key.ctrl || key.meta) return;
+      if (!str) return;
+      if (/\r|\n/.test(str)) return;
+      if (/^[\x20-\x7E]$/.test(str)) {
+        inputBuffer += str;
+        if (inputBuffer.length > 320) {
+          inputBuffer = inputBuffer.slice(0, 320);
+        }
+        renderInteractiveSnapshot();
+      }
+    };
+
+    if (progressEnabled && process.stdin.isTTY) {
+      readline.emitKeypressEvents(process.stdin);
+      process.stdin.setRawMode(true);
+      process.stdin.on("keypress", keypressHandler);
+      process.stdin.resume();
+      keypressBound = true;
+      appendEvent(eventLogLines, "Inline command mode active. Use F1 for help.");
+      renderInteractiveSnapshot();
+    }
 
     process.on("SIGINT", requestStop);
     process.on("SIGTERM", requestStop);
@@ -253,7 +641,7 @@ export const startCommand = new Command("start")
         const loopStartedAtMs = Date.now();
         loop += 1;
         const taskIds = await allTaskIds();
-        const outcomes = await processTasksWithConcurrency(taskIds, taskConcurrency);
+        const outcomes = paused ? [] : await processTasksWithConcurrency(taskIds, taskConcurrency);
         let processedStages = 0;
         const processedTaskIds = new Set<string>();
 
@@ -274,25 +662,38 @@ export const startCommand = new Command("start")
           );
         }
 
-        const metaResults = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
-        const metas = metaResults
-          .filter((item): item is PromiseFulfilledResult<Awaited<ReturnType<typeof loadTaskMeta>>> => item.status === "fulfilled")
-          .map((item) => item.value);
+        const metas = await loadMetasSafe(taskIds);
+        latestMetas = metas;
+        const humanTask = resolveHumanTask(metas);
+        const previousHumanTaskId = preferredHumanTaskId;
+        preferredHumanTaskId = humanTask?.taskId || "";
+        humanInputLines = buildHumanInputLines(humanTask);
+        if (preferredHumanTaskId) {
+          interactionMode = "human_input";
+          if (preferredHumanTaskId !== previousHumanTaskId) {
+            appendEvent(eventLogLines, `Human input required for ${preferredHumanTaskId}. Prompt focus switched.`);
+          }
+        } else if (interactionMode === "human_input") {
+          interactionMode = "command";
+          appendEvent(eventLogLines, "No pending human review. Prompt focus returned to command mode.");
+        }
+
         const activeTaskCount = metas.filter((meta) => ["new", "in_progress", "waiting_agent"].includes(meta.status)).length;
         lastActiveTaskCount = activeTaskCount;
-        progress.render({
-          loop,
-          engineStartedAtMs,
-          metas,
-        });
+        renderInteractiveSnapshot();
 
-        const decision = decideLoopAction({
-          processedStages,
-          activeTaskCount,
-          immediateCycleStreak,
-          maxImmediateCycles,
-          wasPreviousLoopProductive,
-        });
+        const decision = paused
+          ? {
+            action: "sleep" as const,
+            reason: "engine paused via interactive control",
+          }
+          : decideLoopAction({
+            processedStages,
+            activeTaskCount,
+            immediateCycleStreak,
+            maxImmediateCycles,
+            wasPreviousLoopProductive,
+          });
 
         if (decision.action === "immediate") {
           immediateCycleStreak += 1;
@@ -353,6 +754,13 @@ export const startCommand = new Command("start")
     } finally {
       process.off("SIGINT", requestStop);
       process.off("SIGTERM", requestStop);
+
+      if (keypressBound) {
+        process.stdin.off("keypress", keypressHandler);
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+      }
+
       await logDaemon(`SYNX engine stopped${stopSignal ? ` via ${stopSignal}` : ""}.`);
       await writeDaemonState({
         pid: process.pid,
