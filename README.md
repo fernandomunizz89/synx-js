@@ -18,7 +18,7 @@ Key architectural points for agents operating in this repository:
 - **Core Orchestrator:** This repo contains the orchestrator written in TypeScript (`src/index.ts` entrypoint).
 - **Agent Pipelines:** Implementations (`Bug Fixer`, `Feature Builder`, `QA`) apply real file edits in target workspaces.
 - **Config Precedence:** Global `~/.ai-agents/config.json` -> Project `<repo>/.ai-agents/config/project.json`.
-- **Primary Commands:** `setup`, `start`, `new`, `status`, `approve`, `doctor`, `resume`, `fix`, `metrics`.
+- **Primary Commands:** `setup`, `start`, `new`, `status`, `approve`, `reprove`, `doctor`, `resume`, `fix`, `metrics`.
 - **References:** Full operational manuals and implementation details reside in the `docs/` folder.
 </ai-context>
 
@@ -89,6 +89,13 @@ The main commands to interact with SYNX are highly human-friendly.
 - **Approve finalized pull requests:**
   ```bash
   synx approve
+  ```
+
+- **Reject and return to implementation:**
+  ```bash
+  synx reprove --reason "Main flow still fails after QA"
+  # Optional scoped rollback:
+  synx reprove --rollback task
   ```
 
 ### Advanced Operations

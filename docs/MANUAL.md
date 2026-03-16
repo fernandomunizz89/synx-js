@@ -129,13 +129,26 @@ synx status --all
 ```
 
 ## Final human step
-When a task reaches `waiting_human`, approve it with:
+When a task reaches `waiting_human`, you can either approve or reprove it.
+
+Approve:
 
 ```bash
 synx approve
 ```
 
 `approve` now lets you select from pending tasks when more than one is waiting.
+
+Reprove (send back to implementation):
+
+```bash
+synx reprove --reason "Expected timer to change, received static value"
+```
+
+Rollback behavior on `reprove`:
+- default is safe mode (`--rollback none`): no code rollback is executed automatically
+- optional scoped rollback: `--rollback task` restores tracked files and removes untracked files referenced by this task implementation artifacts
+- rollback is explicit by design to avoid reverting unrelated valid work
 
 ## Cancel an active task
 To stop an active task without killing the engine process:
@@ -220,6 +233,13 @@ synx metrics --since 2026-03-15T21:25:19Z --json
 ### Approve final result
 ```bash
 synx approve
+```
+
+### Reprove final result
+```bash
+synx reprove --reason "QA evidence is still insufficient"
+# optional scoped rollback
+synx reprove --rollback task
 ```
 
 ## New machine or new user

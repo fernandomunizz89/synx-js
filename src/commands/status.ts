@@ -118,7 +118,7 @@ export const statusCommand = new Command("status")
     }
 
     if (counts.waitingHuman > 0) {
-      console.log(`\nNext step: run \`${commandExample("approve")}\` to close reviewed tasks.`);
+      console.log(`\nNext step: run \`${commandExample("approve")}\` to close reviewed tasks or \`${commandExample("reprove")}\` to return them to implementation.`);
     } else if (counts.failed > 0 && counts.active === 0) {
       console.log(`\nNext step: run \`${commandExample("doctor")}\` to diagnose failures.`);
     } else if (counts.active === 0) {
