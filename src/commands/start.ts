@@ -54,15 +54,9 @@ function decideLoopAction(args: {
   wasPreviousLoopProductive: boolean;
 }): LoopActionDecision {
   if (args.processedStages > 0) {
-    if (args.immediateCycleStreak < args.maxImmediateCycles) {
-      return {
-        action: "immediate",
-        reason: "stage(s) were processed this loop; run another immediate cycle for lower handoff latency.",
-      };
-    }
     return {
-      action: "sleep",
-      reason: `immediate cycle budget reached (${args.immediateCycleStreak}/${args.maxImmediateCycles}).`,
+      action: "immediate",
+      reason: "stage(s) were processed this loop; fast-path enabled to reduce handoff latency.",
     };
   }
 
