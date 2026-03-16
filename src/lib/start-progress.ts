@@ -160,7 +160,6 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
     const spinner = this.frames[this.tick % this.frames.length];
     const now = Date.now();
     const width = process.stdout.columns || 80;
-    const rows = process.stdout.rows || 24;
 
     const counts = {
       active: snapshot.metas.filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status)).length,
@@ -218,42 +217,51 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       lines: taskBusLines,
     });
 
-    const composeFrame = (logoStyle: SynxLogoStyle, headerLines: string[]): string => {
-      const frameSections = [
-        renderSynxLogo(width, logoStyle),
-        ...headerLines,
-        fixedControlPanel,
-        enginePanel,
-        liveControlPanel,
-        taskBus,
-      ].filter((x) => Boolean(x && x.trim()));
-      return frameSections.join("\n");
-    };
-
-    let headerLines = this.staticFrame.headerContextLines.slice(0, 4);
-    let logoStyle: SynxLogoStyle = "auto";
-    let frame = composeFrame(logoStyle, headerLines);
-
     const lineCount = (text: string): number => text.split("\n").length;
-    const maxLines = Math.max(10, rows - 1);
-    if (lineCount(frame) > maxLines) {
-      headerLines = headerLines.slice(-2);
-      logoStyle = rows < 22 ? "compact" : "auto";
-      frame = composeFrame(logoStyle, headerLines);
+    const maxLines = Math.max(10, (process.stdout.rows || 24) - 1);
+    const headerLines = this.staticFrame.headerContextLines.slice(0, 2);
+    const logo = renderSynxLogo(width, "auto");
+
+    const sections: string[] = [logo];
+    let used = lineCount(logo);
+
+    for (const headerLine of headerLines) {
+      const needed = lineCount(headerLine);
+      if (used + needed <= maxLines) {
+        sections.push(headerLine);
+        used += needed;
+      }
     }
-    if (lineCount(frame) > maxLines) {
-      headerLines = headerLines.slice(-1);
-      logoStyle = "micro";
-      frame = composeFrame(logoStyle, headerLines);
+
+    // Priority (when height is tight): keep fixed control panel and drop engine first.
+    const optionalPanels = [enginePanel, fixedControlPanel];
+    for (const panel of optionalPanels) {
+      const needed = lineCount(panel);
+      if (used + needed <= maxLines) {
+        sections.push(panel);
+        used += needed;
+      }
     }
-    if (lineCount(frame) > maxLines) {
-      frame = [
-        renderSynxLogo(width, "micro"),
-        ...headerLines.slice(-1),
-        liveControlPanel,
-        taskBus,
-      ].join("\n");
+
+    const requiredPanels = [liveControlPanel, taskBus];
+    for (const panel of requiredPanels) {
+      const needed = lineCount(panel);
+      if (used + needed <= maxLines) {
+        sections.push(panel);
+        used += needed;
+        continue;
+      }
+      // When space is tight we still keep structural integrity by adding the panel and
+      // dropping lower-priority optional sections above.
+      while (sections.length > 1 && used + needed > maxLines) {
+        const removed = sections.splice(1, 1)[0];
+        used -= lineCount(removed);
+      }
+      sections.push(panel);
+      used += needed;
     }
+
+    const frame = sections.join("\n");
 
     if (this.needsFullClear) {
       this.log.clear();
