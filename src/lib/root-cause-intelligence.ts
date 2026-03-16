@@ -1,3 +1,5 @@
+import { unique } from "./text-utils.js";
+
 export interface QaFindingLike {
   issue: string;
   expectedResult: string;
@@ -17,10 +19,6 @@ export interface QaRootCauseFocus {
 
 const SOURCE_PATH_PATTERN = /((?:src|app|apps|packages|services|libs|server|client|web|frontend|backend)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/g;
 const ABSOLUTE_SOURCE_PATH_PATTERN = /\/((?:src|app|apps|packages|services|libs|server|client|web|frontend|backend)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/g;
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
 
 function normalizePath(filePath: string): string {
   return filePath.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "");

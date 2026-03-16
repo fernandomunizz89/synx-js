@@ -2,6 +2,7 @@ import path from "node:path";
 import { existsSync, promises as fs } from "node:fs";
 import type { ResolvedProjectConfig } from "./types.js";
 import { runCommand, type TestCapabilities, detectTestCapabilities } from "./workspace-tools.js";
+import { unique } from "./text-utils.js";
 
 const IGNORED_DIRS = new Set([
   ".git",
@@ -107,10 +108,6 @@ export interface SymbolContract {
   expectedImportShape: string;
   mismatchSummary: string;
   confidence: "high" | "medium" | "low";
-}
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
 }
 
 function selectPackageManager(workspaceRoot: string): PackageManager {

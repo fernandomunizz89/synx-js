@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { ensureDir, exists } from "./fs.js";
 import { nowIso } from "./utils.js";
 import { envBoolean, envNumber } from "./env.js";
+import { unique } from "./text-utils.js";
 
 const IGNORED_DIRS = new Set([
   ".git",
@@ -412,10 +413,6 @@ export function resolveWorkspacePath(workspaceRoot: string, filePath: string): {
   }
 
   return { absolutePath, relativePath };
-}
-
-function unique(items: string[]): string[] {
-  return Array.from(new Set(items));
 }
 
 export async function applyWorkspaceEdits(args: {

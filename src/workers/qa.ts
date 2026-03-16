@@ -23,31 +23,10 @@ import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { ensureQaCypressBootstrap } from "../lib/qa-cypress-bootstrap.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
+import { normalizeRiskLevel, raiseRisk, type RiskLevel } from "../lib/risk.js";
+import { normalizeIssueLine, trimText, unique, uniqueNormalized } from "../lib/text-utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runCypressSelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
-}
-
-function normalizeIssueLine(value: string): string {
-  return value
-    .replace(/\s+/g, " ")
-    .replace(/[.]+$/, "")
-    .trim();
-}
-
-function uniqueNormalized(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const value of values.map((x) => normalizeIssueLine(x)).filter(Boolean)) {
-    const key = value.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(value);
-  }
-  return out;
-}
 
 interface QaRetryConfig {
   sameIssueMaxRetries: number;
@@ -69,12 +48,6 @@ function resolveQaRetryConfig(): QaRetryConfig {
     sameIssueMaxRetries,
     diverseIssueMaxRetries,
   };
-}
-
-function trimText(value: string, maxChars = 240): string {
-  const next = value.trim();
-  if (next.length <= maxChars) return next;
-  return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function normalizeQaIssueKey(value: string): string {
@@ -1023,27 +996,6 @@ async function loadReportedUnitTests(taskId: string): Promise<string[]> {
   }
 
   return unique(reported);
-}
-
-type RiskLevel = "low" | "medium" | "high" | "unknown";
-
-const RISK_LEVEL_SCORE: Record<RiskLevel, number> = {
-  unknown: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
-
-function normalizeRiskLevel(value: string | undefined): RiskLevel {
-  const normalized = (value || "").trim().toLowerCase();
-  if (normalized === "low" || normalized === "medium" || normalized === "high" || normalized === "unknown") {
-    return normalized;
-  }
-  return "unknown";
-}
-
-function raiseRisk(current: RiskLevel, candidate: RiskLevel): RiskLevel {
-  return RISK_LEVEL_SCORE[candidate] > RISK_LEVEL_SCORE[current] ? candidate : current;
 }
 
 function extractFileHintsFromLines(lines: string[]): string[] {

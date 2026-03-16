@@ -1,6 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { exists } from "./fs.js";
+import { unique } from "./text-utils.js";
 import type { WorkspaceEdit } from "./workspace-tools.js";
 
 export interface QaFindingLike {
@@ -26,10 +27,6 @@ describe("Main flow smoke test", () => {
   });
 });
 `;
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
-}
 
 function normalizePath(filePath: string): string {
   return filePath.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "");

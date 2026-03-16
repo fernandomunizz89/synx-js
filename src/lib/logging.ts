@@ -4,6 +4,7 @@ import { logsDir } from "./paths.js";
 import type { AgentName, TimingEntry } from "./types.js";
 import { nowIso } from "./utils.js";
 import { formatSynxStreamLog } from "./synx-ui.js";
+import { trimText } from "./text-utils.js";
 
 export async function logDaemon(message: string): Promise<void> {
   await appendText(path.join(logsDir(), "daemon.log"), `${formatSynxStreamLog(normalizeLogLine(message), "SYNX", nowIso())}\n`);
@@ -235,12 +236,6 @@ function normalizeAgentSlug(agent: AgentName): string {
 
 function normalizeLogLine(value: string): string {
   return value.replace(/\s+/g, " ").trim();
-}
-
-function trimText(value: string, maxChars = 200): string {
-  const next = value.trim();
-  if (next.length <= maxChars) return next;
-  return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function summarizeOutput(output: unknown): Record<string, unknown> {

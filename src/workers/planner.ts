@@ -6,12 +6,9 @@ import { ARTIFACT_FILES, loadTaskArtifact, saveTaskArtifact } from "../lib/task-
 import { createProvider } from "../providers/factory.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { nowIso } from "../lib/utils.js";
+import { unique } from "../lib/text-utils.js";
 import { WorkerBase } from "./base.js";
 import { plannerOutputSchema } from "../lib/schema.js";
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
-}
 
 export class PlannerWorker extends WorkerBase {
   readonly agent = "Spec Planner" as const;

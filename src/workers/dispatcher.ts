@@ -9,12 +9,9 @@ import { ARTIFACT_FILES, saveTaskArtifact } from "../lib/task-artifacts.js";
 import { createProvider } from "../providers/factory.js";
 import type { NewTaskInput, StageEnvelope } from "../lib/types.js";
 import { nowIso } from "../lib/utils.js";
+import { unique } from "../lib/text-utils.js";
 import { WorkerBase } from "./base.js";
 import { dispatcherOutputSchema } from "../lib/schema.js";
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
-}
 
 export class DispatcherWorker extends WorkerBase {
   readonly agent = "Dispatcher" as const;

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { existsSync, promises as fs } from "node:fs";
 import { runCommand, type ValidationCheckResult } from "./workspace-tools.js";
+import { unique } from "./text-utils.js";
 
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -31,10 +32,6 @@ interface SanityCommand {
   note: string;
   category: "cheap" | "heavy";
   isFullBuild?: boolean;
-}
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
 }
 
 function selectPackageManager(workspaceRoot: string): PackageManager {

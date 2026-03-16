@@ -1,3 +1,5 @@
+import { trimText } from "./text-utils.js";
+
 export type QaRemediationAgent = "Feature Builder" | "Bug Fixer";
 
 export interface QaReturnContextItem {
@@ -65,12 +67,6 @@ function isQaRemediationAgent(value: string): value is QaRemediationAgent {
 
 function contextKey(item: QaReturnContextItem): string {
   return `${item.issue.toLowerCase()}|||${item.expectedResult.toLowerCase()}|||${item.receivedResult.toLowerCase()}`;
-}
-
-function trimText(value: string, maxChars: number): string {
-  const trimmed = value.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
 function normalizeIssueKey(value: string): string {

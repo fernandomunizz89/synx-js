@@ -1,6 +1,7 @@
 import path from "node:path";
 import { existsSync, promises as fs } from "node:fs";
 import { runCommand } from "./workspace-tools.js";
+import { unique } from "./text-utils.js";
 
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -18,10 +19,6 @@ export interface CodeQualityBootstrapResult {
 
 function hasQualityScript(scripts: Record<string, string>): boolean {
   return Boolean(scripts.lint || scripts.typecheck || scripts.check || scripts.build);
-}
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
 }
 
 function selectPackageManager(workspaceRoot: string): PackageManager {

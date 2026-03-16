@@ -1,3 +1,5 @@
+import { uniqueNormalized } from "./text-utils.js";
+
 export type RetryStrategy = "local_patch" | "expanded_context" | "strategy_shift";
 
 export interface RetryContextLimits {
@@ -33,25 +35,6 @@ export interface RetryDecisionInput {
     blockingCount: number;
     category: string;
   };
-}
-
-function normalizeIssueLine(value: string): string {
-  return value
-    .replace(/\s+/g, " ")
-    .replace(/[.]+$/, "")
-    .trim();
-}
-
-function uniqueNormalized(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const value of values.map((x) => normalizeIssueLine(x)).filter(Boolean)) {
-    const key = value.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(value);
-  }
-  return out;
 }
 
 export function resolveQualityRepairMaxAttempts(): number {

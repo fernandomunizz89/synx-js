@@ -18,17 +18,8 @@ import { bugInvestigatorOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
+import { trimText, unique } from "../lib/text-utils.js";
 import { WorkerBase } from "./base.js";
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
-}
-
-function trimText(value: string, maxChars = 220): string {
-  const next = value.trim();
-  if (next.length <= maxChars) return next;
-  return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
-}
 
 function extractFilePathHints(lines: string[]): string[] {
   const out: string[] = [];

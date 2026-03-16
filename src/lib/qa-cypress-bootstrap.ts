@@ -1,6 +1,7 @@
 import path from "node:path";
 import { existsSync, promises as fs } from "node:fs";
 import { exists } from "./fs.js";
+import { unique } from "./text-utils.js";
 import { runCommand, type ValidationCheckResult } from "./workspace-tools.js";
 
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
@@ -37,10 +38,6 @@ export default defineConfig({
 const CYPRESS_SUPPORT_E2E_TEMPLATE = `// QA bootstrap: default Cypress support entry.
 export {};
 `;
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values.map((x) => x.trim()).filter(Boolean)));
-}
 
 function selectPackageManager(workspaceRoot: string): PackageManager {
   if (existsSync(path.join(workspaceRoot, "pnpm-lock.yaml"))) return "pnpm";
