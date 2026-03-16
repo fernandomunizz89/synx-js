@@ -75,6 +75,7 @@ The main commands to interact with SYNX are highly human-friendly.
   synx start
   ```
   *(Add `--dry-run` to emulate changes without writing to disk, and `--no-progress` for quiet standard outputs).*
+  In interactive TTY mode, `start` now includes an inline command prompt (`SYNX >`), hotkeys (`F1` help, `F2` new task template, `F3` pause/resume, `F10` graceful stop), and a `HUMAN INPUT` panel for approve/reprove decisions without opening another terminal.
 
 - **Create a new task:**
   ```bash
