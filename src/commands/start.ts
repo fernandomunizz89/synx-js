@@ -32,6 +32,15 @@ function resolveMaxImmediateCycles(): number {
   return normalized;
 }
 
+function resolveTaskConcurrency(): number {
+  const raw = Number(process.env.AI_AGENTS_TASK_CONCURRENCY || "3");
+  if (!Number.isFinite(raw)) return 3;
+  const normalized = Math.floor(raw);
+  if (normalized < 1) return 1;
+  if (normalized > 20) return 20;
+  return normalized;
+}
+
 interface LoopActionDecision {
   action: "immediate" | "sleep";
   reason: string;
@@ -75,6 +84,43 @@ function decideLoopAction(args: {
     action: "sleep",
     reason: "no active tasks available; sleeping with low CPU profile.",
   };
+}
+
+interface TaskProcessOutcome {
+  taskId: string;
+  processedStages: number;
+}
+
+async function processTaskWithWorkers(taskId: string): Promise<TaskProcessOutcome> {
+  let processedStages = 0;
+  for (const worker of workers) {
+    const processed = await worker.tryProcess(taskId);
+    if (processed) processedStages += 1;
+  }
+  return {
+    taskId,
+    processedStages,
+  };
+}
+
+async function processTasksWithConcurrency(taskIds: string[], concurrency: number): Promise<TaskProcessOutcome[]> {
+  if (!taskIds.length) return [];
+  const safeConcurrency = Math.max(1, Math.min(concurrency, taskIds.length));
+  const outcomes = new Array<TaskProcessOutcome>(taskIds.length);
+  let cursor = 0;
+
+  const runners = Array.from({ length: safeConcurrency }, async () => {
+    while (true) {
+      const nextIndex = cursor;
+      cursor += 1;
+      if (nextIndex >= taskIds.length) return;
+      const taskId = taskIds[nextIndex];
+      outcomes[nextIndex] = await processTaskWithWorkers(taskId);
+    }
+  });
+
+  await Promise.all(runners);
+  return outcomes.filter((item): item is TaskProcessOutcome => Boolean(item));
 }
 
 export const startCommand = new Command("start")
@@ -154,6 +200,7 @@ export const startCommand = new Command("start")
     const progress = createStartProgressRenderer({ enabled: options.progress !== false });
     const pollIntervalMs = resolvePollIntervalMs();
     const maxImmediateCycles = resolveMaxImmediateCycles();
+    const taskConcurrency = resolveTaskConcurrency();
 
     let loop = 0;
     let immediateCycleStreak = 0;
@@ -168,16 +215,14 @@ export const startCommand = new Command("start")
         const loopStartedAtMs = Date.now();
         loop += 1;
         const taskIds = await allTaskIds();
+        const outcomes = await processTasksWithConcurrency(taskIds, taskConcurrency);
         let processedStages = 0;
         const processedTaskIds = new Set<string>();
 
-        for (const taskId of taskIds) {
-          for (const worker of workers) {
-            const processed = await worker.tryProcess(taskId);
-            if (processed) {
-              processedStages += 1;
-              processedTaskIds.add(taskId);
-            }
+        for (const outcome of outcomes) {
+          processedStages += outcome.processedStages;
+          if (outcome.processedStages > 0) {
+            processedTaskIds.add(outcome.taskId);
           }
         }
         totalProcessedStages += processedStages;
@@ -232,6 +277,7 @@ export const startCommand = new Command("start")
           loopDurationMs,
           pollIntervalMs,
           maxImmediateCycles,
+          taskConcurrency,
         });
         await logPollingCycle({
           loop,
@@ -249,6 +295,7 @@ export const startCommand = new Command("start")
           action: decision.action,
           reason: decision.reason,
           sleepMs: decision.action === "sleep" ? pollIntervalMs : 0,
+          taskConcurrency,
         });
 
         wasPreviousLoopProductive = processedStages > 0;

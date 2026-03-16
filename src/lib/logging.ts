@@ -39,6 +39,7 @@ export interface PollingCycleLogEntry {
   action: "immediate" | "sleep";
   reason: string;
   sleepMs: number;
+  taskConcurrency?: number;
 }
 
 export async function logPollingCycle(entry: PollingCycleLogEntry): Promise<void> {
@@ -59,6 +60,7 @@ export async function logPollingCycle(entry: PollingCycleLogEntry): Promise<void
     action: entry.action,
     reason: trimText(entry.reason, 220),
     sleepMs: entry.sleepMs,
+    taskConcurrency: typeof entry.taskConcurrency === "number" ? entry.taskConcurrency : undefined,
   };
   await appendText(path.join(logsDir(), "polling-metrics.jsonl"), `${JSON.stringify(payload)}\n`);
 }
