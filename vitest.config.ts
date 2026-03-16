@@ -7,6 +7,8 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
+      all: true,
+      include: ["src/**/*.ts"],
       exclude: [
         "dist/**",
         "src/index.ts",
@@ -15,6 +17,14 @@ export default defineConfig({
         "src/lib/constants.ts",
         "**/*.test.ts",
       ],
+      thresholds: {
+        global: {
+          branches: 15,
+          functions: 20,
+          lines: 20,
+          statements: 20,
+        },
+      },
     },
   },
 });
