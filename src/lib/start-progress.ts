@@ -1,7 +1,10 @@
 import cliSpinners from "cli-spinners";
 import { createLogUpdate } from "log-update";
+import stringWidth from "string-width";
+import stripAnsi from "strip-ansi";
+import wrapAnsi from "wrap-ansi";
 import type { TaskMeta } from "./types.js";
-import { formatSynxStatus, renderSynxLogo, renderSynxPanel, synxControlFlowDiagram, synxCyan, synxMagenta, synxMuted, synxWaiting } from "./synx-ui.js";
+import { formatSynxStatus, renderSynxLogo, renderSynxPanel, synxControlFlowDiagram, synxCyan, synxMuted, synxWaiting } from "./synx-ui.js";
 
 const BAR_WIDTH = 22;
 
@@ -92,14 +95,95 @@ function taskTone(meta: TaskMeta): "processing" | "success" | "critical_error" |
   return "processing";
 }
 
+function visibleWidth(line: string): number {
+  return stringWidth(stripAnsi(line));
+}
+
+function leftAlignLogoBlock(text: string): string {
+  const lines = text.split("\n");
+  const contentLines = lines.filter((line) => line.trim().length > 0);
+  if (!contentLines.length) return text;
+  const commonLeading = Math.min(
+    ...contentLines.map((line) => {
+      const match = line.match(/^ */);
+      return match ? match[0].length : 0;
+    }),
+  );
+  if (!Number.isFinite(commonLeading) || commonLeading <= 0) return text;
+  return lines.map((line) => line.slice(Math.min(commonLeading, line.length))).join("\n");
+}
+
+function padRightAnsi(line: string, targetWidth: number): string {
+  const pad = Math.max(0, targetWidth - visibleWidth(line));
+  return `${line}${" ".repeat(pad)}`;
+}
+
+function mergeBlocksHorizontally(left: string, right: string, gap = 2): string {
+  const leftLines = left.split("\n");
+  const rightLines = right.split("\n");
+  const rows = Math.max(leftLines.length, rightLines.length);
+  const leftWidth = Math.max(0, ...leftLines.map((line) => visibleWidth(line)));
+  const spacer = " ".repeat(gap);
+  const output: string[] = [];
+
+  for (let i = 0; i < rows; i += 1) {
+    const leftLine = leftLines[i] || "";
+    const rightLine = rightLines[i] || "";
+    output.push(`${padRightAnsi(leftLine, leftWidth)}${spacer}${rightLine}`);
+  }
+  return output.join("\n");
+}
+
+function addBlockPadding(text: string, padding: { top: number; right: number; bottom: number; left: number }): string {
+  const lines = text.split("\n");
+  const visibleMax = Math.max(0, ...lines.map((line) => visibleWidth(line)));
+  const paddedLines = lines.map((line) => `${" ".repeat(padding.left)}${line}${" ".repeat(padding.right)}`);
+  const blankLine = " ".repeat(padding.left + visibleMax + padding.right);
+  const top = Array.from({ length: Math.max(0, padding.top) }, () => blankLine);
+  const bottom = Array.from({ length: Math.max(0, padding.bottom) }, () => blankLine);
+  return [...top, ...paddedLines, ...bottom].join("\n");
+}
+
+function buildUserInputLines(args: {
+  width: number;
+  promptIndicator: string;
+  promptCursor: string;
+  inputBuffer: string;
+  placeholder: string;
+}): string[] {
+  const contentWidth = Math.max(18, args.width - 8);
+  const maxLines = 5;
+  const prefix = `${args.promptIndicator} `;
+  const placeholderLine = `${prefix}${synxMuted(args.placeholder)}${args.promptCursor}`;
+
+  if (!args.inputBuffer.trim()) return [placeholderLine];
+
+  const fullLine = `${prefix}${args.inputBuffer}${args.promptCursor}`;
+  const wrapped = wrapAnsi(fullLine, contentWidth, { hard: false, trim: false }).split("\n");
+
+  if (wrapped.length <= maxLines) return wrapped;
+  const tail = wrapped.slice(-maxLines);
+  tail[0] = `${synxMuted("...")} ${tail[0]}`;
+  return tail;
+}
+
+function renderTextCursor(waitingHumanMode: boolean, nowMs: number): string {
+  const visible = Math.floor(nowMs / 530) % 2 === 0;
+  const glyph = visible ? "|" : " ";
+  return waitingHumanMode ? synxWaiting(glyph) : synxCyan(glyph);
+}
+
 export interface StartProgressSnapshot {
   loop: number;
   engineStartedAtMs: number;
   metas: TaskMeta[];
   paused: boolean;
+  enginePanelHasCritical: boolean;
+  logViewMode: "console" | "event_stream";
   interactionMode: "command" | "human_input";
   inputBuffer: string;
   humanInputLines: string[];
+  consoleLogLines: string[];
   eventLogLines: string[];
 }
 
@@ -121,6 +205,8 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
   private tick = 0;
   private readonly log = createLogUpdate(process.stdout);
   private readonly frames = cliSpinners.dots12.frames;
+  private readonly heartbeat: NodeJS.Timeout;
+  private lastFrameLineCount = 0;
   private lastSnapshot: StartProgressSnapshot | null = null;
   private staticFrame: StartProgressStaticFrame = {
     headerContextLines: [],
@@ -141,6 +227,11 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
     if (process.stdout.isTTY) {
       process.stdout.on("resize", this.handleResize);
     }
+    this.heartbeat = setInterval(() => {
+      if (!this.lastSnapshot) return;
+      this.draw();
+    }, 350);
+    this.heartbeat.unref();
   }
 
   setStaticFrame(frame: StartProgressStaticFrame): void {
@@ -159,9 +250,12 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       engineStartedAtMs: Date.now(),
       metas: [] as TaskMeta[],
       paused: false,
+      enginePanelHasCritical: false,
+      logViewMode: "console",
       interactionMode: "command",
       inputBuffer: "",
       humanInputLines: [] as string[],
+      consoleLogLines: [] as string[],
       eventLogLines: [] as string[],
     };
     this.tick += 1;
@@ -176,8 +270,8 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       done: snapshot.metas.filter((x) => x.status === "done").length,
     };
 
-    const fixedControlPanel = renderSynxPanel({
-      title: "SYNX CONTROL PANEL",
+    const configPanel = renderSynxPanel({
+      title: "CONFIG",
       borderColor: "cyan",
       width,
       lines: this.staticFrame.fixedControlPanelLines,
@@ -185,7 +279,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
 
     const enginePanel = renderSynxPanel({
       title: "ENGINE",
-      borderColor: "magenta",
+      borderColor: snapshot.enginePanelHasCritical ? "red" : "magenta",
       width,
       lines: this.staticFrame.enginePanelLines,
     });
@@ -195,7 +289,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       borderColor: "cyan",
       width,
       lines: [
-        `${spinner} uptime ${formatDuration(now - snapshot.engineStartedAtMs)} | loop ${snapshot.loop}`,
+        `Uptime: ${synxCyan(formatDuration(now - snapshot.engineStartedAtMs))}`,
         `Engine: ${snapshot.paused ? synxWaiting("Paused") : formatSynxStatus("processing")}`,
         `Flow: ${synxControlFlowDiagram()}`,
         `Queues: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`,
@@ -207,6 +301,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
     const taskBusLines: string[] = [];
+    const taskSpinner = synxCyan(spinner);
     const current = active[0];
     if (!current) {
       taskBusLines.push(synxMuted("No active tasks. Waiting for new work..."));
@@ -214,7 +309,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       const progress = progressForMeta(current);
       const currentStage = stageLabel(current.currentStage);
       const currentAgent = current.currentAgent || current.nextAgent || "[none]";
-      taskBusLines.push(`Task: ${shortTaskId(current.taskId)} | Type: ${current.type}`);
+      taskBusLines.push(`${taskSpinner} Task: ${shortTaskId(current.taskId)} | Type: ${current.type}`);
       taskBusLines.push(`State: ${formatSynxStatus(taskTone(current))} | Stage: ${currentStage} | Agent: ${currentAgent}`);
       taskBusLines.push(`Progress: ${progressBar(progress.ratio)} ${progress.done}/${progress.total}`);
     }
@@ -235,30 +330,62 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       })
       : "";
 
-    const eventLines = snapshot.eventLogLines.length
-      ? snapshot.eventLogLines
-      : [synxMuted("No events yet. Waiting for activity...")];
+    const isConsoleView = snapshot.logViewMode === "console";
+    const eventLines = isConsoleView
+      ? (snapshot.consoleLogLines.length ? snapshot.consoleLogLines.slice(-5) : [synxMuted("No console messages yet.")])
+      : (snapshot.eventLogLines.length ? snapshot.eventLogLines.slice(-5) : [synxMuted("No events yet. Waiting for activity...")]);
     const eventPanel = renderSynxPanel({
-      title: "EVENT STREAM",
-      borderColor: "magenta",
+      title: isConsoleView ? "CONSOLE" : "EVENT STREAM",
+      borderColor: isConsoleView ? "cyan" : "magenta",
       width,
       lines: eventLines,
     });
 
-    const promptLabel = snapshot.interactionMode === "human_input" ? synxWaiting("HUMAN INPUT") : synxCyan("SYNX");
-    const promptBody = snapshot.inputBuffer.trim()
-      ? snapshot.inputBuffer
-      : synxMuted("[aguardando comando...]");
-    const promptLine = `${promptLabel} ${synxMagenta(">")} ${promptBody}`;
-    const quickActionsLine = `${synxMuted("Quick Actions:")} ${synxCyan("[F1] Ajuda")} | ${synxCyan("[F2] Nova Tarefa")} | ${synxCyan("[F3] Pausar")} | ${synxCyan("[F10] Sair")}`;
+    const waitingHumanMode = snapshot.interactionMode === "human_input";
+    const promptCursor = renderTextCursor(waitingHumanMode, now);
+    const promptIndicator = waitingHumanMode ? synxWaiting("❯") : synxCyan("❯");
+    const inputLines = buildUserInputLines({
+      width,
+      promptIndicator,
+      promptCursor,
+      inputBuffer: snapshot.inputBuffer,
+      placeholder: waitingHumanMode ? "[reply to continue...]" : "[waiting for command...]",
+    });
+    const inputPanel = renderSynxPanel({
+      title: "USER INPUT",
+      borderColor: waitingHumanMode ? "yellow" : "cyan",
+      width,
+      lines: inputLines,
+    });
+
+    const viewToggle = isConsoleView ? "Event Stream" : "Console";
+    const quickActionsLine = `${synxMuted("Quick Actions:")} ${synxCyan("[?] Commands")} | ${synxCyan("[F1] Help")} | ${synxCyan("[F2] New Task")} | ${synxCyan("[F3] Pause")} | ${synxCyan(`[F4] ${viewToggle}`)} | ${synxCyan("[F10] Exit")}`;
 
     const lineCount = (text: string): number => text.split("\n").length;
     const maxLines = Math.max(10, (process.stdout.rows || 24) - 1);
     const headerLines = this.staticFrame.headerContextLines.slice(0, 2);
-    const logo = renderSynxLogo(width, "auto");
+    const logo = addBlockPadding(leftAlignLogoBlock(renderSynxLogo(width, "auto")), {
+      top: 1,
+      right: 2,
+      bottom: 1,
+      left: 2,
+    });
+    const logoWidth = Math.max(0, ...logo.split("\n").map((line) => visibleWidth(line)));
+    const topGap = 2;
+    const minConfigWidth = 34;
+    const rightConfigWidth = Math.max(0, width - logoWidth - topGap);
+    const configOnRight = rightConfigWidth >= minConfigWidth;
+    const topBlock = configOnRight
+      ? mergeBlocksHorizontally(logo, renderSynxPanel({
+        title: "CONFIG",
+        borderColor: "cyan",
+        width: rightConfigWidth,
+        lines: this.staticFrame.fixedControlPanelLines,
+      }), topGap)
+      : logo;
 
-    const sections: string[] = [logo];
-    let used = lineCount(logo);
+    const sections: string[] = [topBlock];
+    let used = lineCount(topBlock);
 
     for (const headerLine of headerLines) {
       const needed = lineCount(headerLine);
@@ -268,8 +395,8 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       }
     }
 
-    // Priority (when height is tight): keep fixed control panel and drop engine first.
-    const optionalPanels = [enginePanel, fixedControlPanel];
+    // Priority (when height is tight): keep user input and live task panels first.
+    const optionalPanels = configOnRight ? [enginePanel, eventPanel] : [enginePanel, configPanel, eventPanel];
     for (const panel of optionalPanels) {
       const needed = lineCount(panel);
       if (used + needed <= maxLines) {
@@ -278,7 +405,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       }
     }
 
-    const requiredPanels = [liveControlPanel, taskBus];
+    const requiredPanels = [liveControlPanel, taskBus, inputPanel];
     for (const panel of requiredPanels) {
       const needed = lineCount(panel);
       if (used + needed <= maxLines) {
@@ -304,23 +431,19 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       }
     }
 
-    const eventNeeded = lineCount(eventPanel);
-    if (used + eventNeeded <= maxLines) {
-      sections.push(eventPanel);
-      used += eventNeeded;
-    }
-
-    sections.push(promptLine);
     sections.push(quickActionsLine);
     const frame = sections.join("\n");
 
-    if (this.resizePending) {
+    const currentLineCount = frame.split("\n").length;
+    if (this.resizePending || currentLineCount < this.lastFrameLineCount) {
       this.log.clear();
     }
     this.log(frame);
+    this.lastFrameLineCount = currentLineCount;
   }
 
   stop(): void {
+    clearInterval(this.heartbeat);
     if (process.stdout.isTTY) {
       process.stdout.off("resize", this.handleResize);
     }

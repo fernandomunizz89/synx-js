@@ -112,7 +112,13 @@ function remediationTarget(taskType: TaskType): RemediationTarget {
 
 function appendEvent(logLines: string[], message: string): void {
   logLines.push(formatSynxStreamLog(message, "SYNX"));
-  while (logLines.length > 12) logLines.shift();
+  while (logLines.length > 5) logLines.shift();
+}
+
+function appendConsole(logLines: string[], message: string, level: "info" | "critical"): void {
+  const prefix = level === "critical" ? "ERROR" : "INFO";
+  logLines.push(`${prefix}: ${message}`);
+  while (logLines.length > 5) logLines.shift();
 }
 
 function pickFocusedTask(metas: TaskMeta[]): { meta: TaskMeta; reason: string } {
@@ -311,10 +317,7 @@ export const startCommand = new Command("start")
       else console.log(message);
     }
 
-    const enginePanelLines = [
-      synxSuccess("SYNX engine started. Press Ctrl+C to stop."),
-      "Tip: command prompt is integrated below TASK BUS (type `help` for quick usage).",
-    ];
+    const enginePanelLines = [synxSuccess("SYNX engine started. Press Ctrl+C to stop.")];
     await logDaemon("SYNX engine started.");
     await writeDaemonState({
       pid: process.pid,
@@ -365,12 +368,23 @@ export const startCommand = new Command("start")
     let lastActiveTaskCount = 0;
 
     let paused = false;
+    let enginePanelHasCritical = false;
+    let logViewMode: "console" | "event_stream" = "console";
     let interactionMode: "command" | "human_input" = "command";
     let inputBuffer = "";
+    const consoleLogLines: string[] = [];
     const eventLogLines: string[] = [];
     let humanInputLines: string[] = [];
     let preferredHumanTaskId = "";
     let latestMetas: TaskMeta[] = [];
+
+    const pushEvent = (message: string, level: "info" | "critical" = "info"): void => {
+      appendEvent(eventLogLines, message);
+      appendConsole(consoleLogLines, message, level);
+      if (level === "critical") {
+        enginePanelHasCritical = true;
+      }
+    };
 
     const renderInteractiveSnapshot = (): void => {
       progress.render({
@@ -378,28 +392,37 @@ export const startCommand = new Command("start")
         engineStartedAtMs,
         metas: latestMetas,
         paused,
+        enginePanelHasCritical,
+        logViewMode,
         interactionMode,
         inputBuffer,
         humanInputLines,
+        consoleLogLines,
         eventLogLines,
       });
     };
 
-    appendEvent(eventLogLines, "Interactive prompt ready. Type `help` for commands.");
+    const refreshMetasForUi = async (): Promise<void> => {
+      const ids = await allTaskIds();
+      latestMetas = await loadMetasSafe(ids);
+    };
+
+    pushEvent("Interactive prompt ready. Type `help` for commands.");
     renderInteractiveSnapshot();
 
     const requestStop = (signal: NodeJS.Signals): void => {
       if (stopRequested) return;
       stopRequested = true;
       stopSignal = signal;
-      appendEvent(eventLogLines, `${signal} received. Waiting current cycle to finish for graceful shutdown...`);
+      pushEvent(`${signal} received. Waiting current cycle to finish for graceful shutdown...`);
       renderInteractiveSnapshot();
     };
 
     const runInlineCommand = async (command: InlineCommand): Promise<void> => {
       if (command.kind === "help") {
-        appendEvent(eventLogLines, "Commands: new \"title\" --type Bug|Feature|Refactor|Research|Documentation|Mixed");
-        appendEvent(eventLogLines, "Commands: status [--all] | approve [--task-id] | reprove --reason \"...\" [--task-id] | stop");
+        pushEvent("Commands: new \"title\" --type Bug|Feature|Refactor|Research|Documentation|Mixed");
+        pushEvent("Commands: status [--all] | approve [--task-id] | reprove --reason \"...\" [--task-id] | stop");
+        pushEvent("Shortcuts: ?/F1 Show help | F2 New task template | F3 Pause/Resume | F4 Toggle Console/Event Stream | F10 Exit");
         return;
       }
 
@@ -409,7 +432,7 @@ export const startCommand = new Command("start")
       }
 
       if (command.kind === "unknown") {
-        appendEvent(eventLogLines, command.message);
+        pushEvent(command.message);
         return;
       }
 
@@ -441,28 +464,28 @@ export const startCommand = new Command("start")
             },
           },
         });
-        appendEvent(eventLogLines, `Task created: ${taskId} (${command.type})`);
+        pushEvent(`Task created: ${taskId} (${command.type})`);
         return;
       }
 
       if (command.kind === "status") {
         const ids = await allTaskIds();
         if (!ids.length) {
-          appendEvent(eventLogLines, "No tasks found.");
+          pushEvent("No tasks found.");
           return;
         }
 
         const metas = await loadMetasSafe(ids);
         const counts = summarizeTaskCounts(metas);
-        appendEvent(eventLogLines, `Summary: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`);
+        pushEvent(`Summary: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`);
 
         if (command.all) {
           for (const meta of [...metas].sort(byMostRecent).slice(0, 4)) {
-            appendEvent(eventLogLines, `${meta.taskId} | ${meta.status} | ${meta.currentStage} | ${meta.currentAgent || "[none]"}`);
+            pushEvent(`${meta.taskId} | ${meta.status} | ${meta.currentStage} | ${meta.currentAgent || "[none]"}`);
           }
         } else if (metas.length) {
           const focused = pickFocusedTask(metas);
-          appendEvent(eventLogLines, `Focused (${focused.reason}): ${focused.meta.taskId} | ${focused.meta.status} | ${focused.meta.currentStage}`);
+          pushEvent(`Focused (${focused.reason}): ${focused.meta.taskId} | ${focused.meta.status} | ${focused.meta.currentStage}`);
         }
         return;
       }
@@ -470,7 +493,7 @@ export const startCommand = new Command("start")
       if (command.kind === "approve") {
         const meta = await loadTaskMeta(command.taskId);
         if (!meta.humanApprovalRequired) {
-          appendEvent(eventLogLines, `Task ${command.taskId} is not waiting for human approval.`);
+          pushEvent(`Task ${command.taskId} is not waiting for human approval.`);
           return;
         }
 
@@ -481,20 +504,20 @@ export const startCommand = new Command("start")
         meta.humanApprovalRequired = false;
         await saveTaskMeta(command.taskId, meta);
         await logTaskEvent(taskDir(command.taskId), "Human approval completed. Task marked as done.");
-        appendEvent(eventLogLines, `Task approved: ${command.taskId}`);
+        pushEvent(`Task approved: ${command.taskId}`);
         return;
       }
 
       if (command.kind === "reprove") {
         const reason = command.reason.trim();
         if (!reason) {
-          appendEvent(eventLogLines, "Reprove requires a non-empty reason.");
+          pushEvent("Reprove requires a non-empty reason.");
           return;
         }
 
         const meta = await loadTaskMeta(command.taskId);
         if (!meta.humanApprovalRequired) {
-          appendEvent(eventLogLines, `Task ${command.taskId} is not waiting for human review.`);
+          pushEvent(`Task ${command.taskId} is not waiting for human review.`);
           return;
         }
 
@@ -535,7 +558,7 @@ export const startCommand = new Command("start")
           },
         });
         await logTaskEvent(taskDir(command.taskId), `Human reprove completed. Task returned to ${target.agent}. Reason: ${reason}`);
-        appendEvent(eventLogLines, `Task reproved: ${command.taskId} -> ${target.agent}`);
+        pushEvent(`Task reproved: ${command.taskId} -> ${target.agent}`);
       }
     };
 
@@ -544,7 +567,12 @@ export const startCommand = new Command("start")
         await runInlineCommand(command);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        appendEvent(eventLogLines, `Command failed: ${message}`);
+        pushEvent(`Command failed: ${message}`, "critical");
+      }
+      try {
+        await refreshMetasForUi();
+      } catch {
+        // UI refresh is best-effort; runtime loop will refresh again soon.
       }
       renderInteractiveSnapshot();
     };
@@ -555,7 +583,7 @@ export const startCommand = new Command("start")
         .then(async () => executeInlineCommand(command))
         .catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          appendEvent(eventLogLines, `Command pipeline error: ${message}`);
+          pushEvent(`Command pipeline error: ${message}`, "critical");
           renderInteractiveSnapshot();
         });
     };
@@ -567,6 +595,11 @@ export const startCommand = new Command("start")
         return;
       }
 
+      if (str === "?" && !key.ctrl && !key.meta && interactionMode === "command" && inputBuffer.length === 0) {
+        queueCommand({ kind: "help" });
+        return;
+      }
+
       const action = mapFunctionKeyToAction(key);
       if (action === "help") {
         queueCommand({ kind: "help" });
@@ -575,13 +608,19 @@ export const startCommand = new Command("start")
       if (action === "new") {
         interactionMode = "command";
         inputBuffer = "new \"\" --type Feature";
-        appendEvent(eventLogLines, "F2 loaded new-task template in prompt.");
+        pushEvent("F2 loaded new-task template in prompt.");
         renderInteractiveSnapshot();
         return;
       }
       if (action === "pause_toggle") {
         paused = !paused;
-        appendEvent(eventLogLines, paused ? "Engine paused (F3)." : "Engine resumed (F3).");
+        pushEvent(paused ? "Engine paused (F3)." : "Engine resumed (F3).");
+        renderInteractiveSnapshot();
+        return;
+      }
+      if (action === "toggle_log_view") {
+        logViewMode = logViewMode === "console" ? "event_stream" : "console";
+        pushEvent(logViewMode === "console" ? "View switched to CONSOLE." : "View switched to EVENT STREAM.");
         renderInteractiveSnapshot();
         return;
       }
@@ -630,7 +669,7 @@ export const startCommand = new Command("start")
       process.stdin.on("keypress", keypressHandler);
       process.stdin.resume();
       keypressBound = true;
-      appendEvent(eventLogLines, "Inline command mode active. Use F1 for help.");
+      pushEvent("Inline command mode active. Use ? or F1 for help. Press F4 to switch Console/Event Stream.");
       renderInteractiveSnapshot();
     }
 
@@ -671,11 +710,11 @@ export const startCommand = new Command("start")
         if (preferredHumanTaskId) {
           interactionMode = "human_input";
           if (preferredHumanTaskId !== previousHumanTaskId) {
-            appendEvent(eventLogLines, `Human input required for ${preferredHumanTaskId}. Prompt focus switched.`);
+            pushEvent(`Human input required for ${preferredHumanTaskId}. Prompt focus switched.`);
           }
         } else if (interactionMode === "human_input") {
           interactionMode = "command";
-          appendEvent(eventLogLines, "No pending human review. Prompt focus returned to command mode.");
+          pushEvent("No pending human review. Prompt focus returned to command mode.");
         }
 
         const activeTaskCount = metas.filter((meta) => ["new", "in_progress", "waiting_agent"].includes(meta.status)).length;

@@ -47,6 +47,7 @@ describe("start-inline-command", () => {
     expect(mapFunctionKeyToAction({ name: "f1" })).toBe("help");
     expect(mapFunctionKeyToAction({ name: "f2" })).toBe("new");
     expect(mapFunctionKeyToAction({ name: "f3" })).toBe("pause_toggle");
+    expect(mapFunctionKeyToAction({ name: "f4" })).toBe("toggle_log_view");
     expect(mapFunctionKeyToAction({ sequence: "\u001b[21~" })).toBe("stop");
   });
 

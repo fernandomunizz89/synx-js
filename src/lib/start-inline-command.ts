@@ -9,7 +9,7 @@ export type InlineCommand =
   | { kind: "reprove"; taskId: string; reason: string }
   | { kind: "unknown"; raw: string; message: string };
 
-export type HotkeyAction = "help" | "new" | "pause_toggle" | "stop" | "none";
+export type HotkeyAction = "help" | "new" | "pause_toggle" | "toggle_log_view" | "stop" | "none";
 
 export function tokenizeCommandLine(input: string): string[] {
   const out: string[] = [];
@@ -226,12 +226,14 @@ export function mapFunctionKeyToAction(key: {
   if (name === "f1") return "help";
   if (name === "f2") return "new";
   if (name === "f3") return "pause_toggle";
+  if (name === "f4") return "toggle_log_view";
   if (name === "f10") return "stop";
 
   const sequence = String(key.sequence || "");
   if (sequence === "\u001bOP") return "help";
   if (sequence === "\u001bOQ") return "new";
   if (sequence === "\u001bOR") return "pause_toggle";
+  if (sequence === "\u001bOS") return "toggle_log_view";
   if (sequence === "\u001b[21~" || sequence === "\u001b[10~") return "stop";
   return "none";
 }
