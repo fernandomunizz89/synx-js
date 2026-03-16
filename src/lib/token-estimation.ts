@@ -18,14 +18,10 @@ function resolveModelPricing(model: string): { input: number; output: number } |
   const normalized = normalizeModel(model);
   if (!normalized) return null;
   if (MODEL_COST_PER_1K[normalized]) return MODEL_COST_PER_1K[normalized];
-
-  for (const [key, value] of Object.entries(MODEL_COST_PER_1K)) {
-    if (normalized.startsWith(`${key}-`) || normalized.includes(key)) {
-      return value;
-    }
-  }
-
-  return null;
+  const candidate = Object.entries(MODEL_COST_PER_1K)
+    .filter(([key]) => normalized.startsWith(`${key}-`) || normalized.includes(key))
+    .sort((a, b) => b[0].length - a[0].length)[0];
+  return candidate ? candidate[1] : null;
 }
 
 function resolveInputCostPer1kTokensUsd(model: string): number {

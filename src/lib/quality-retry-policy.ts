@@ -54,8 +54,10 @@ export function resolveRepeatedSignatureLimit(): number {
 }
 
 export function buildFailureSignature(lines: string[]): string {
-  return uniqueNormalized(lines)
-    .map((line) => line.toLowerCase().replace(/\d+/g, "#"))
+  return Array.from(new Set(
+    uniqueNormalized(lines)
+      .map((line) => line.toLowerCase().replace(/\d+/g, "#")),
+  ))
     .sort()
     .join(" | ");
 }

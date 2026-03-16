@@ -9,7 +9,8 @@ export function trimText(value: string, maxChars = 220): string {
 }
 
 export function normalizeIssueLine(value: string): string {
-  return value.replace(/\s+/g, " ").replace(/[.]+$/, "").trim();
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.replace(/[.]+$/, "").trim();
 }
 
 export function uniqueNormalized(values: string[]): string[] {
