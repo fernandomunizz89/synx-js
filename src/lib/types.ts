@@ -22,7 +22,7 @@ export type AgentName =
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio";
 export type E2EPolicy = "auto" | "required" | "skip";
-export type E2EFramework = "auto" | "cypress" | "playwright" | "other";
+export type E2EFramework = "auto" | "playwright" | "other";
 
 export interface ProviderStageConfig {
   type: ProviderType;

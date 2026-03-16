@@ -9,7 +9,6 @@ import {
   readPackageScripts,
   type PackageManager,
 } from "./command-runner.js";
-import { buildCypressQaOverrides, readCypressReportDiagnostics } from "./cypress-tools.js";
 import { IGNORED_DIRS, normalizeInputPath } from "./workspace-scanner.js";
 
 export interface ValidationCheckResult {
@@ -51,12 +50,10 @@ export const E2E_SCRIPT_CANDIDATES = [
   "test:e2e:ci",
   "playwright",
   "playwright:test",
-  "cypress",
-  "cypress:run",
 ] as const;
 
 const E2E_SPEC_FILE_PATTERN = /\.(?:cy|spec)\.[cm]?[jt]sx?$/i;
-const E2E_SPEC_DIR_CANDIDATES = ["e2e", "cypress/e2e"] as const;
+const E2E_SPEC_DIR_CANDIDATES = ["e2e"] as const;
 
 async function collectE2eSpecFiles(workspaceRoot: string): Promise<string[]> {
   const out: string[] = [];
@@ -107,12 +104,6 @@ function extractSignalLines(text: string, patterns: RegExp[], maxItems = 8): str
     if (out.length >= maxItems) break;
   }
   return unique(out);
-}
-
-function isCypressScript(script: string, scripts: Record<string, string>): boolean {
-  const scriptName = script.toLowerCase();
-  const body = (scripts[script] || "").toLowerCase();
-  return scriptName.includes("cypress") || /\bcypress\b/.test(body);
 }
 
 function hasChangedFile(changedFiles: string[], pattern: RegExp): boolean {
@@ -238,108 +229,26 @@ function isCommandUnavailableResult(stdout: string, stderr: string, exitCode: nu
 }
 
 async function buildCheckDiagnostics(args: {
-  workspaceRoot: string;
-  isCypress: boolean;
   stdout: string;
   stderr: string;
-  cypressReportPath?: string;
 }): Promise<{ diagnostics: string[]; artifacts: string[] }> {
   const combined = `${args.stdout}\n${args.stderr}`;
-  const genericPatterns = [
+  const patterns = [
     /\b(assertionerror|typeerror|referenceerror|syntaxerror|failed|error)\b/i,
     /\bts\d{4}\b/i,
     /\bexpected\b.+\bto\b/i,
     /\btimed out\b/i,
     /\bdoes not provide an export named\b/i,
+    /\bno spec files were found\b/i,
+    /\bplaywright\b/i,
+    /\be2e\b/i,
     /[A-Za-z0-9_./-]+\.[cm]?[jt]sx?:\d+:\d+/,
   ];
-  const cypressPatterns = [
-    /\bcypresserror\b/i,
-    /\bassertionerror\b/i,
-    /\btimed out retrying\b/i,
-    /\bfailing\b/i,
-    /\bcypress could not verify that this server is running\b/i,
-    /\bcypress failed to verify that your server is running\b/i,
-    /\bconfigfile is invalid\b/i,
-    /\byour configfile is invalid\b/i,
-    /\bsupportfile\b/i,
-    /\bproject does not contain a default supportfile\b/i,
-    /\bcypress\/support\/e2e\.[jt]sx?\b/i,
-    /\bts\d{4}\b/i,
-    /\bexports is not defined in es module scope\b/i,
-    /\breferenceerror:\s*exports is not defined\b/i,
-    /\bdoes not provide an export named\b/i,
-    /\bcypress\.config\.[cm]?[jt]s\b/i,
-    /\bno spec files were found\b/i,
-    /\bcan'?t run because no spec files were found\b/i,
-    /[A-Za-z0-9_./-]+\.(?:cy|spec)\.[cm]?[jt]sx?:\d+:\d+/,
-  ];
 
-  const rawLineDiagnostics = extractSignalLines(combined, args.isCypress ? cypressPatterns : genericPatterns, args.isCypress ? 10 : 5);
-  const lineDiagnostics = args.isCypress
-    ? rawLineDiagnostics.filter((line) => {
-      const lower = line.toLowerCase();
-      if (/^>\s*cypress run\b/.test(lower)) return false;
-      if (/^>\s*npm run\b/.test(lower)) return false;
-      if (/^warning:\s*the allowcypressenv configuration option is enabled/.test(lower)) return false;
-      return true;
-    })
-    : rawLineDiagnostics;
-  const artifacts: string[] = [];
-  let reportDiagnostics: string[] = [];
-  let reportArtifact = "";
-
-  if (args.isCypress && args.cypressReportPath) {
-    reportArtifact = normalizeInputPath(path.relative(args.workspaceRoot, args.cypressReportPath));
-    const report = await readCypressReportDiagnostics({
-      workspaceRoot: args.workspaceRoot,
-      reportPath: args.cypressReportPath,
-      maxItems: 8,
-    });
-    reportDiagnostics = report.diagnostics;
-    artifacts.push(...report.artifacts);
-  }
-
-  const combinedDiagnostics = unique([...reportDiagnostics, ...lineDiagnostics]).slice(0, 10);
-  if (args.isCypress && combinedDiagnostics.length === 0) {
-    if (/cypress could not verify that this server is running|cypress failed to verify that your server is running/i.test(combined)) {
-      return {
-        diagnostics: [
-          "Cypress could not reach the configured baseUrl; start the app server (for example Vite on http://localhost:5173) before running E2E checks.",
-        ],
-        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
-      };
-    }
-    if (/project does not contain a default supportfile|supportfile to exist|support-file-missing-or-invalid|supportfile is not necessary/i.test(combined)) {
-      return {
-        diagnostics: ["Cypress supportFile is missing or invalid; create cypress/support/e2e.ts or set supportFile=false in cypress config."],
-        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
-      };
-    }
-    if (/configfile is invalid|your configfile is invalid|failed loading cypress config|exports is not defined in es module scope|referenceerror:\s*exports is not defined/i.test(combined)) {
-      return {
-        diagnostics: ["Cypress config is invalid at runtime (config file could not be loaded)."],
-        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
-      };
-    }
-    if (/no spec files were found|can'?t run because no spec files were found/i.test(combined)) {
-      return {
-        diagnostics: [
-          "Cypress did not find E2E spec files; add specs under cypress/e2e/** or e2e/** and ensure Cypress specPattern includes them.",
-        ],
-        artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
-      };
-    }
-    const fallback = "No actionable Cypress assertion text was captured; adjust Cypress output/reporter config for terminal-readable failure details.";
-    return {
-      diagnostics: [fallback],
-      artifacts: artifacts.length ? artifacts : reportArtifact ? [`${reportArtifact} (not generated)`] : [],
-    };
-  }
-
+  const diagnostics = extractSignalLines(combined, patterns, 8);
   return {
-    diagnostics: combinedDiagnostics,
-    artifacts,
+    diagnostics,
+    artifacts: [],
   };
 }
 
@@ -397,30 +306,18 @@ export async function runProjectChecks(args: {
   const results: ValidationCheckResult[] = [];
 
   for (const script of available) {
-    const cypressScript = isCypressScript(script, scripts);
-    let cypressReportPath: string | undefined;
-    let qaConfigNotes: string[] = [];
-    let command = buildScriptCommand(manager, script);
-    if (cypressScript) {
-      const overrides = await buildCypressQaOverrides(workspaceRoot, script);
-      cypressReportPath = overrides.reportPath;
-      qaConfigNotes = overrides.qaConfigNotes;
-      command = buildScriptCommand(manager, script, overrides.extraArgs);
-    }
+    const command = buildScriptCommand(manager, script);
 
     const result = await runCommand({
       command: command.command,
       commandArgs: command.args,
       cwd: workspaceRoot,
       timeoutMs,
-      maxOutputChars: cypressScript ? 12_000 : 5_000,
+      maxOutputChars: 8_000,
     });
     const diagnostics = await buildCheckDiagnostics({
-      workspaceRoot,
-      isCypress: cypressScript,
       stdout: result.stdout,
       stderr: result.stderr,
-      cypressReportPath,
     });
 
     results.push({
@@ -432,7 +329,7 @@ export async function runProjectChecks(args: {
       stdoutPreview: compactCommandPreview(result.stdout),
       stderrPreview: compactCommandPreview(result.stderr),
       diagnostics: diagnostics.diagnostics,
-      qaConfigNotes,
+      qaConfigNotes: [],
       artifacts: diagnostics.artifacts,
     });
   }
@@ -448,8 +345,6 @@ export async function runProjectChecks(args: {
       });
       const unavailable = isCommandUnavailableResult(result.stdout, result.stderr, result.exitCode);
       const diagnostics = await buildCheckDiagnostics({
-        workspaceRoot,
-        isCypress: false,
         stdout: result.stdout,
         stderr: result.stderr,
       });

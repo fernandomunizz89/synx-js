@@ -33,7 +33,7 @@ const taskMetaCurrentAgentSchema = z
     return value;
   });
 export const e2ePolicySchema = z.enum(["auto", "required", "skip"]);
-export const e2eFrameworkSchema = z.enum(["auto", "cypress", "playwright", "other"]);
+export const e2eFrameworkSchema = z.enum(["auto", "playwright", "other"]);
 
 export const providerStageConfigSchema = z.object({
   type: providerTypeSchema,

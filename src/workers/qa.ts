@@ -20,12 +20,11 @@ import {
 } from "../lib/qa-context.js";
 import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
-import { ensureQaCypressBootstrap } from "../lib/qa-cypress-bootstrap.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
 import { normalizeRiskLevel, raiseRisk, type RiskLevel } from "../lib/risk.js";
 import { normalizeIssueLine, trimText, unique, uniqueNormalized } from "../lib/text-utils.js";
-import { detectTestCapabilities, getGitChangedFiles, runCypressSelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
+import { detectTestCapabilities, getGitChangedFiles, runE2ESelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
 
 interface QaRetryConfig {
@@ -275,7 +274,7 @@ function buildFallbackQaTestCases(args: {
       output.push({
         id: `CHK-${output.length + 1}`,
         title: `Run check: ${check.command}`,
-        type: /e2e|playwright|cypress/i.test(check.command) ? "e2e" : "regression",
+        type: /e2e|playwright/i.test(check.command) ? "e2e" : "regression",
         steps: [`Execute ${check.command}`],
         expectedResult: "Command exits with code 0.",
         actualResult: check.diagnostics?.[0]
@@ -294,7 +293,7 @@ function buildFallbackQaTestCases(args: {
     output.push({
       id: `RC-${output.length + 1}`,
       title: item.issue,
-      type: /e2e|playwright|cypress/i.test(item.issue) ? "e2e" : "functional",
+      type: /e2e|playwright/i.test(item.issue) ? "e2e" : "functional",
       steps: ["Reproduce the issue using current workspace state."],
       expectedResult: item.expectedResult,
       actualResult: item.receivedResult,
@@ -308,7 +307,7 @@ function buildFallbackQaTestCases(args: {
       output.push({
         id: `F-${output.length + 1}`,
         title: trimText(failure, 120),
-        type: /e2e|playwright|cypress/i.test(failure) ? "e2e" : "functional",
+        type: /e2e|playwright/i.test(failure) ? "e2e" : "functional",
         steps: ["Reproduce the failure from QA report."],
         expectedResult: "Acceptance criteria should pass.",
         actualResult: trimText(failure, 220),
@@ -331,7 +330,7 @@ function formatTestCasesForView(testCases: QaTestCaseLike[]): string {
 }
 
 function isE2eCheckCommand(command: string): boolean {
-  return /\be2e\b|playwright|cypress/i.test(command);
+  return /\be2e\b|playwright|e2e/i.test(command);
 }
 
 function extractSourceLocations(lines: string[]): string[] {
@@ -379,7 +378,7 @@ function buildCheckDrivenReturnContext(args: {
     const artifacts = (check.artifacts || []).map((item) => trimText(item, 160)).slice(0, 2);
     const sourceLocations = extractSourceLocations(diagnostics);
     const e2eCheck = isE2eCheckCommand(check.command);
-    const cypressCheck = /\bcypress\b/i.test(check.command);
+    const lowSignalE2eCheck = /\be2e\b|playwright/i.test(check.command);
 
     const issue = e2eCheck
       ? `E2E check failed: ${trimText(check.command, 120)}`
@@ -411,8 +410,8 @@ function buildCheckDrivenReturnContext(args: {
         "A runtime value expected to change remained identical across assertions. Inspect and fix source/state update logic first, then adjust E2E timing/assertion flow only if evidence confirms a test defect, and re-run this E2E command.";
     }
 
-    if (cypressCheck && diagnostics.length < 2) {
-      recommendedAction = `${recommendedAction} If failure output is still low-signal, update Cypress config/scripts to keep terminal-readable assertion output (reporter + stack traces) and avoid screenshot-only diagnostics.`;
+    if (lowSignalE2eCheck && diagnostics.length < 2) {
+      recommendedAction = `${recommendedAction} If failure output is still low-signal, update E2E config/scripts to keep terminal-readable assertion output (reporter + stack traces) and avoid screenshot-only diagnostics.`;
     }
 
     items.push({
@@ -423,10 +422,10 @@ function buildCheckDrivenReturnContext(args: {
       recommendedAction,
     });
 
-    if (cypressCheck && diagnostics.length < 2) {
+    if (lowSignalE2eCheck && diagnostics.length < 2) {
       items.push({
-        issue: "Cypress diagnostics are low-signal for QA handoff.",
-        expectedResult: "Cypress failures include assertion message and source location in terminal/report output.",
+        issue: "E2E diagnostics are low-signal for QA handoff.",
+        expectedResult: "E2E failures include assertion message and source location in terminal/report output.",
         receivedResult: "Failure details were too generic and relied on low-value artifacts.",
         evidence: unique([
           ...qaConfigNotes,
@@ -434,7 +433,7 @@ function buildCheckDrivenReturnContext(args: {
           ...diagnostics,
         ]).slice(0, 5),
         recommendedAction:
-          "Adjust Cypress configuration/scripts so failed runs emit actionable assertion and location details for remediation agents.",
+          "Adjust E2E configuration/scripts so failed runs emit actionable assertion and location details for remediation agents.",
       });
     }
   }
@@ -489,12 +488,12 @@ function buildSelectorPreflightReturnContext(
     const specs = item.specPaths.length ? item.specPaths : ["[unknown spec]"];
     return {
       issue: `Missing data-cy="${item.selector}" selector hook`,
-      expectedResult: `At least one DOM element should expose data-cy="${item.selector}" for Cypress selection.`,
-      receivedResult: `No source file currently exposes data-cy="${item.selector}", so Cypress selectors fail.`,
+      expectedResult: `At least one DOM element should expose data-cy="${item.selector}" for E2E selection.`,
+      receivedResult: `No source file currently exposes data-cy="${item.selector}", so E2E selectors fail.`,
       evidence: [
         `Referenced in specs: ${specs.join(", ")}`,
       ],
-      recommendedAction: `Add data-cy="${item.selector}" in ${defaultSelectorTargetHint(item.selector)} and re-run Cypress.`,
+      recommendedAction: `Add data-cy="${item.selector}" in ${defaultSelectorTargetHint(item.selector)} and re-run E2E.`,
     };
   });
 }
@@ -544,14 +543,14 @@ function buildMissingE2eSpecReturnContext(checks: Array<{
     const signal = diagnostics.find((item) => isMissingE2eSpecText(item));
     if (!signal) continue;
     output.push({
-      issue: "Cypress E2E spec files are missing.",
-      expectedResult: "At least one runnable E2E spec should exist under e2e/** or cypress/e2e/** and be matched by Cypress specPattern.",
+      issue: "E2E spec files are missing.",
+      expectedResult: "At least one runnable E2E spec should exist under e2e/** and be matched by project E2E test discovery.",
       receivedResult: signal,
       evidence: unique([
         `Command: ${check.command}`,
         ...diagnostics.slice(0, 4),
       ]),
-      recommendedAction: "Create at least one E2E spec file (for example e2e/main-flow.cy.ts), ensure cypress.config.ts specPattern includes it, and re-run Cypress.",
+      recommendedAction: "Create at least one E2E spec file (for example e2e/main-flow.spec.ts), align project E2E discovery, and re-run E2E.",
     });
   }
 
@@ -569,12 +568,12 @@ function hasConfigFailureSignal(checks: Array<{
     .join("\n")
     .toLowerCase();
 
-  return /configfile is invalid|your configfile is invalid|invalid cypress config|cypress configuration.+invalid|missing.+baseurl|missing.+specpattern|cannot find.+cypress\.config/.test(corpus);
+  return /configfile is invalid|your configfile is invalid|invalid e2e config|e2e configuration.+invalid|missing.+baseurl|missing.+specpattern|cannot find.+e2e\.config/.test(corpus);
 }
 
 function isConfigRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
-  return /configfile is invalid|your configfile is invalid|invalid cypress config|cypress configuration.+invalid|failed to load cypress config|cannot find.+cypress\.config|missing.+baseurl|missing.+specpattern|baseurl.+(missing|invalid)|specpattern.+(missing|invalid)|config mismatch/.test(lower);
+  return /configfile is invalid|your configfile is invalid|invalid e2e config|e2e configuration.+invalid|failed to load e2e config|cannot find.+e2e\.config|missing.+baseurl|missing.+specpattern|baseurl.+(missing|invalid)|specpattern.+(missing|invalid)|config mismatch/.test(lower);
 }
 
 function filterUnsupportedConfigFailures(
@@ -807,7 +806,7 @@ function pickBestFailedCheckForContextItem(args: {
   const scored = args.failedChecks.map((check) => {
     const checkCorpus = `${check.command}\n${(check.diagnostics || []).join("\n")}`.toLowerCase();
     let score = 0;
-    if (/\bcypress\b/.test(corpus) && /\bcypress\b/.test(checkCorpus)) score += 4;
+    if (/\bplaywright\b/.test(corpus) && /\bplaywright\b/.test(checkCorpus)) score += 4;
     if (/\be2e\b|\bui\b|\bdom\b|\binteraction\b|\bruntime\b|\bbehavior\b/.test(corpus) && isE2eCheckCommand(check.command)) score += 3;
     if (/\btypescript\b|type error|ts\d{4}\b/.test(corpus) && /\btsc\b|typecheck|lint/.test(checkCorpus)) score += 3;
     if (/\bimport\b|\bexport\b|\bmodule\b/.test(corpus)
@@ -1082,26 +1081,19 @@ export class QaWorker extends WorkerBase {
     const meta = await loadTaskMeta(taskId);
     const workspaceRoot = process.cwd();
     const qualityBootstrap = await ensureCodeQualityBootstrap({ workspaceRoot });
-    const shouldPrepareCypress = qaPreferences.e2ePolicy !== "skip"
-      && (qaPreferences.e2eFramework === "cypress" || qaPreferences.e2eFramework === "auto");
-    const cypressBootstrap = shouldPrepareCypress
-      ? await ensureQaCypressBootstrap({ workspaceRoot })
-      : { checks: [], notes: [], warnings: [], changedFiles: [] };
+    const shouldPrepareE2E = qaPreferences.e2ePolicy !== "skip";
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
     const reportedUnitTests = await loadReportedUnitTests(taskId);
     const changedFiles = unique([
       ...(await getGitChangedFiles(workspaceRoot)),
-      ...cypressBootstrap.changedFiles,
       ...qualityBootstrap.changedFiles,
     ]);
-    const shouldRunCypressPreflight = shouldPrepareCypress;
-    const selectorPreflight = shouldRunCypressPreflight
-      ? await runCypressSelectorPreflight(workspaceRoot)
+    const selectorPreflight = shouldPrepareE2E
+      ? await runE2ESelectorPreflight(workspaceRoot)
       : null;
     const missingSelectorFindings = selectorPreflight?.missingSelectors || [];
     const skipHeavyE2ERun = missingSelectorFindings.length > 0;
     const executedChecks = [
-      ...cypressBootstrap.checks,
       ...(await runProjectChecks({
         workspaceRoot,
         timeoutMsPerCheck: 150_000,
@@ -1111,7 +1103,7 @@ export class QaWorker extends WorkerBase {
     ];
     if (missingSelectorFindings.length) {
       executedChecks.push({
-        command: "cypress selector preflight",
+        command: "e2e selector preflight",
         status: "failed",
         exitCode: 1,
         timedOut: false,
@@ -1120,7 +1112,7 @@ export class QaWorker extends WorkerBase {
         stderrPreview: "",
         diagnostics: buildSelectorPreflightDiagnostics(missingSelectorFindings),
         qaConfigNotes: [
-          "QA preflight: skipped heavy Cypress run because required data-cy selectors are missing in source.",
+          "QA preflight: skipped heavy E2E run because required data-cy selectors are missing in source.",
         ],
         artifacts: [],
       });
@@ -1139,9 +1131,6 @@ export class QaWorker extends WorkerBase {
     if (!changedFiles.length) {
       hardFailures.push("No code changes detected in git diff.");
     }
-    for (const warning of cypressBootstrap.warnings.slice(0, 6)) {
-      hardFailures.push(`QA Cypress bootstrap warning: ${trimText(warning, 180)}`);
-    }
     for (const item of missingSelectorFindings.slice(0, 8)) {
       hardFailures.push(`Missing selector hook: data-cy="${item.selector}" (referenced in ${item.specPaths.join(", ")}).`);
     }
@@ -1156,12 +1145,12 @@ export class QaWorker extends WorkerBase {
       );
     }
     if (hasMissingE2eSpecSignal(compactChecks)) {
-      hardFailures.push("Cypress did not find runnable E2E spec files under e2e/** or cypress/e2e/**.");
+      hardFailures.push("E2E did not find runnable E2E spec files under e2e/**.");
     }
 
     const requiresE2E = qaPreferences.e2eRequired;
     const requiresUnitTests = requiresE2E;
-    const e2eChecks = executedChecks.filter((x) => /\be2e\b|playwright|cypress/i.test(x.command));
+    const e2eChecks = executedChecks.filter((x) => /\be2e\b|playwright/i.test(x.command));
     const frameworkChecks = qaPreferences.e2eFramework === "auto" || qaPreferences.e2eFramework === "other"
       ? e2eChecks
       : e2eChecks.filter((x) => matchesE2EFrameworkCommand(x.command, qaPreferences.e2eFramework));
@@ -1217,9 +1206,9 @@ export class QaWorker extends WorkerBase {
           notes: qualityBootstrap.notes.slice(0, 6),
           warnings: qualityBootstrap.warnings.slice(0, 6),
         },
-        cypressBootstrap: {
-          notes: cypressBootstrap.notes.slice(0, 6),
-          warnings: cypressBootstrap.warnings.slice(0, 6),
+        e2eBootstrap: {
+          notes: [],
+          warnings: [],
         },
         selectorPreflight: {
           skippedHeavyE2ERun: skipHeavyE2ERun,
@@ -1234,25 +1223,25 @@ MANDATORY VALIDATION CONTRACT:
 - Use "validationEvidence.changedFiles" and "validationEvidence.executedChecks" as primary evidence.
 - Use "validationEvidence.reportedUnitTests" as additional evidence from implementation stages.
 - Use "validationEvidence.codeQualityBootstrap" to report lint/typecheck bootstrap actions before validation.
-- Use "validationEvidence.cypressBootstrap" to report setup/install/config actions taken before validation.
+- Use "validationEvidence.e2eBootstrap" to report setup/install/config actions taken before validation.
 - Use "validationEvidence.selectorPreflight.missingSelectors" to report missing data-cy hooks with exact selector names and referenced spec files.
 - If any check failed, verdict must be "fail".
 - If changedFiles is empty, verdict must be "fail".
 - If task type is Feature/Bug/Refactor/Mixed and no E2E check was executed, verdict must be "fail".
 - Follow qaPreferences.e2ePolicy and qaPreferences.objective as the explicit human quality target.
 - If qaPreferences.e2ePolicy is "required", E2E evidence is mandatory.
-- If qaPreferences.e2eFramework is "cypress" or "playwright", require evidence for that framework specifically.
+- If qaPreferences.e2eFramework is "playwright", require evidence for that framework specifically.
 - If verdict is "fail", set "nextAgent" to "${remediationAgent}".
 - If verdict is "fail", fill "returnContext" with actionable items using "issue", "expectedResult", and "receivedResult".
 - Each "returnContext" item must include concrete evidence and a recommended action for the next agent.
 - Use executedChecks[].diagnostics, qaConfigNotes, and artifacts to make returnContext specific (avoid screenshot-only guidance).
-- For Cypress/E2E failures, include assertion/location evidence and remediation direction in returnContext.
-- For Cypress/E2E failures, point to likely application-code root cause paths first; do not give test-only remediation unless evidence shows the test is wrong.
+- For E2E failures, include assertion/location evidence and remediation direction in returnContext.
+- For E2E failures, point to likely application-code root cause paths first; do not give test-only remediation unless evidence shows the test is wrong.
 - If failures suggest missing data-cy selectors, list required selectors and target files in returnContext.
 - If failures suggest import/export mismatch, call out the exact symbol/file contract mismatch in returnContext.
-- If failures suggest Cypress config mismatch (baseUrl/specPattern/configFile), call out exact config edits needed.
+- If failures suggest E2E config mismatch, call out exact config edits needed.
 - If failures suggest flawed E2E test logic (scoping/order/assertion form), call out exact test file fixes.
-- If failures show missing E2E spec files, explicitly request creation of runnable specs under e2e/** or cypress/e2e/** and reference specPattern alignment.
+- If failures show missing E2E spec files, explicitly request creation of runnable specs under e2e/** and reference project test discovery alignment.
 - Populate "testCases" as a real QA would: include concrete expectedResult vs actualResult and status.
 - Keep "testCases" concise and evidence-driven (max 6).
 - Explicitly fill filesReviewed, validationMode, technicalRiskSummary, recommendedChecks, manualValidationNeeded, and residualRisks.
@@ -1524,9 +1513,8 @@ ${output.verdict}
 ${qualityBootstrap.notes.length ? qualityBootstrap.notes.map((x) => `- ${x}`).join("\n") : "- [none]"}
 ${qualityBootstrap.warnings.length ? qualityBootstrap.warnings.map((x) => `- WARNING: ${x}`).join("\n") : ""}
 
-## Cypress Bootstrap
-${cypressBootstrap.notes.length ? cypressBootstrap.notes.map((x) => `- ${x}`).join("\n") : "- [none]"}
-${cypressBootstrap.warnings.length ? cypressBootstrap.warnings.map((x) => `- WARNING: ${x}`).join("\n") : ""}
+## E2E Bootstrap
+- [none]
 
 ## E2E Plan
 ${output.e2ePlan.length ? output.e2ePlan.map((x) => `- ${x}`).join("\n") : "- [none]"}

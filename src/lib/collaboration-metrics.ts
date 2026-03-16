@@ -207,7 +207,7 @@ function classifyFailure(message: string): string {
   if (lower.includes("quality gate")) return "quality_gate";
   if (lower.includes("lint") || lower.includes("no-unused-vars")) return "lint";
   if (lower.includes("typescript") || lower.includes("ts")) return "typecheck";
-  if (lower.includes("cypress") || lower.includes("e2e") || lower.includes("playwright")) return "e2e";
+  if (lower.includes("e2e") || lower.includes("playwright")) return "e2e";
   if (lower.includes("test")) return "tests";
   return "other";
 }

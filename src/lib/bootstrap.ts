@@ -203,10 +203,10 @@ Respect task.extraContext.qaPreferences (E2E policy/framework/objective) as huma
 When a previous QA attempt failed, use a different strategy instead of repeating the same approach.
 Act autonomously to solve root causes, including related source/config/test changes when needed.
 Always include the runnable E2E command in "testsToRun".
-If QA indicates low-signal Cypress output, update Cypress config/scripts so failures include actionable assertion + location details.
+If QA indicates low-signal E2E output, update E2E config/scripts so failures include actionable assertion + location details.
 When QA findings mention missing data-cy selectors, add the requested data-cy attributes in the target components.
 When QA findings mention import/export mismatch, reconcile the symbol contract in source imports/exports.
-When QA findings mention Cypress config mismatch, fix baseUrl/specPattern/config usage so tests run with one clear config.
+When QA findings mention E2E config mismatch, fix baseUrl/specPattern/config usage so tests run with one clear config.
 Your patch must be ready for strict pre-QA gates: lint and build checks (when available) plus language-aware sanity checks must pass.
 Treat command diagnostics/log output as first-class evidence; resolve hidden blocker signatures before handoff.
 Only use paths that are valid for the workspace and avoid protected folders.
@@ -255,10 +255,10 @@ Respect task.extraContext.qaPreferences (E2E policy/framework/objective) as huma
 When a previous QA attempt failed, use a different strategy instead of repeating the same approach.
 Act autonomously to solve root causes, including related source/config/test changes when needed.
 Always include the runnable E2E command in "testsToRun".
-If QA indicates low-signal Cypress output, update Cypress config/scripts so failures include actionable assertion + location details.
+If QA indicates low-signal E2E output, update E2E config/scripts so failures include actionable assertion + location details.
 When QA findings mention missing data-cy selectors, add the requested data-cy attributes in the target components.
 When QA findings mention import/export mismatch, reconcile the symbol contract in source imports/exports.
-When QA findings mention Cypress config mismatch, fix baseUrl/specPattern/config usage so tests run with one clear config.
+When QA findings mention E2E config mismatch, fix baseUrl/specPattern/config usage so tests run with one clear config.
 Your patch must be ready for strict pre-QA gates: lint and build checks (when available) plus language-aware sanity checks must pass.
 Treat command diagnostics/log output as first-class evidence; resolve hidden blocker signatures before handoff.
 Only use paths that are valid for the workspace and avoid protected folders.
@@ -322,10 +322,10 @@ Do not provide test-only remediation unless evidence indicates the test itself i
 When verification evidence is incomplete, add explicit notes in "failures".
 When verdict is fail, provide expected-vs-received context for each blocker in "returnContext".
 Think like a real QA engineer: define concrete test cases with expected vs actual outcomes.
-For Cypress/E2E failures, include assertion/location evidence and avoid screenshot-only guidance.
+For E2E failures, include assertion/location evidence and avoid screenshot-only guidance.
 Respect task.extraContext.qaPreferences (E2E policy/framework/objective) as the human-defined QA direction.
 When diagnostics indicate missing data-cy selectors or import/export mismatch, return file-level corrective actions.
-When diagnostics indicate Cypress config issues, return exact baseUrl/specPattern/config corrections.
+When diagnostics indicate E2E config issues, return exact baseUrl/specPattern/config corrections.
 
 Return exactly:
 {

@@ -70,7 +70,7 @@ function classifyFailureCategory(lines: string[]): string {
   if (/cannot find module|does not provide an export|import|export|module/.test(corpus)) return "import-export";
   if (/ts\d{4}|type error|typing/.test(corpus)) return "typing";
   if (/syntax|unexpected token|parsing error/.test(corpus)) return "syntax";
-  if (/cypress|playwright|e2e|test/.test(corpus)) return "tests";
+  if (/playwright|e2e|test/.test(corpus)) return "tests";
   if (/build/.test(corpus)) return "build";
   return "unknown";
 }

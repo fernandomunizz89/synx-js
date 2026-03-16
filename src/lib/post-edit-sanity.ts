@@ -151,7 +151,7 @@ function intersectsScope(paths: string[], scope: Set<string>): boolean {
 
 function inferScriptCategory(script: string, scriptBody: string): "cheap" | "heavy" {
   if (script === "build") return "heavy";
-  if (script === "check" && /\b(build|test|cypress|playwright|e2e|vitest|jest|mocha)\b/i.test(scriptBody)) {
+  if (script === "check" && /\b(build|test|playwright|e2e|vitest|jest|mocha)\b/i.test(scriptBody)) {
     return "heavy";
   }
   return "cheap";

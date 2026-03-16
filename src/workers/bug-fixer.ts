@@ -3,7 +3,6 @@ import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../lib/code-quality-bootstrap.js";
-import { enforceCypressConfigScriptConsistency } from "../lib/cypress-recovery.js";
 import { extractQaHandoffContext } from "../lib/qa-context.js";
 import { deriveQaFileHints, synthesizeQaSelectorHotfixEdits } from "../lib/qa-remediation.js";
 import { matchesE2EFrameworkCommand, preferredE2ECommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
@@ -32,7 +31,7 @@ function extractQaFailures(previousStage: unknown): string[] {
 }
 
 function contextMentionsE2e(text: string): boolean {
-  return /\be2e\b|playwright|cypress/i.test(text);
+  return /\be2e\b|playwright/i.test(text);
 }
 
 function textSignalsMissingE2eSpecs(text: string): boolean {
@@ -86,30 +85,6 @@ function compactQaHistoryForModel(
     returnedTo: entry.returnedTo,
     findingIssues: entry.findings.map((x) => trimText(x.issue, 120)).slice(0, 4),
   }));
-}
-
-function collectQaSignals(args: {
-  qaFailures: string[];
-  latestFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
-  cumulativeFindings: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[]; recommendedAction: string }>;
-}): string[] {
-  return [
-    ...args.qaFailures,
-    ...args.latestFindings.flatMap((item) => [
-      item.issue,
-      item.expectedResult,
-      item.receivedResult,
-      item.recommendedAction,
-      ...item.evidence,
-    ]),
-    ...args.cumulativeFindings.flatMap((item) => [
-      item.issue,
-      item.expectedResult,
-      item.receivedResult,
-      item.recommendedAction,
-      ...item.evidence,
-    ]),
-  ].filter(Boolean);
 }
 
 function buildQaFeedbackQuery(args: {
@@ -216,8 +191,7 @@ function hasE2eInfraEdits(edits: Array<{ path: string }>): boolean {
       p.includes("/e2e/") ||
       p.endsWith(".spec.ts") ||
       p.endsWith(".spec.tsx") ||
-      p.includes("playwright") ||
-      p.includes("cypress")
+      p.includes("playwright")
     );
   });
 }
@@ -375,7 +349,7 @@ MANDATORY EXECUTION CONTRACT:
 - If executionContract.testCapabilities.hasUnitTestScript is true, include at least one updated unit test path in "unitTestsAdded".
 - Follow executionContract.qaPreferences.objective as the human-defined validation target.
 - If executionContract.requiresE2eMainFlow is true, include runnable e2e command(s) in "testsToRun".
-- If executionContract.qaPreferences.e2eFramework is cypress or playwright, include the corresponding framework command in "testsToRun".
+- If executionContract.qaPreferences.e2eFramework is playwright, include the corresponding framework command in "testsToRun".
 - If executionContract.mustCreateE2eInfra is true, create missing e2e script/config and at least one runnable e2e spec for the main flow.
 - If executionContract.requiresE2eRepair is true, fix existing e2e coverage gaps called out by QA.
 - If executionContract.requiresQaFeedbackRemediation is true, address every item from qaFeedback.latestExpectedVsReceived.
@@ -389,11 +363,11 @@ MANDATORY EXECUTION CONTRACT:
 - If executionContract.rootCauseFocus.mustPrioritizeSourceFix is true, include at least one concrete src/** edit targeting the likely root-cause area before/alongside test updates.
 - Use executionContract.rootCauseFocus.sourceHints as priority files for source-level investigation.
 - Preserve previous QA fixes described in qaFeedback.cumulativeExpectedVsReceived and avoid regressions.
-- If QA evidence points to Cypress/E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
+- If QA evidence points to E2E diagnostics or config gaps, include required E2E config/script/test edits to make failures actionable and stable.
 - If QA findings mention missing data-cy selectors, add those data-cy attributes directly in the relevant UI components.
 - Never place data-cy on custom React component invocations (capitalized JSX tags like <Controls ...>); attach data-cy only to native DOM/SVG elements actually rendered in the browser.
 - If QA findings mention import/export mismatch (e.g., "does not provide an export named"), reconcile import/export contracts in source code.
-- If QA findings mention Cypress config issues (baseUrl/specPattern/configFile), fix and unify Cypress config so tests run consistently.
+- If QA findings mention E2E config issues, fix and unify E2E configuration so tests run consistently.
 - If QA findings mention flaky/incorrect E2E test logic (e.g., variable scope across then blocks), patch the test code itself.
 - If QA findings show a value expected to change stayed identical across assertions, inspect source/state update logic first and only then adjust E2E timing/assertion flow if the test is at fault.
 - If QA findings mention missing E2E selectors, either add matching data-cy attributes in source or update E2E spec to canonical selectors that already exist in source.
@@ -516,23 +490,6 @@ Return exactly this JSON shape:
         ...output.risks,
         `Root-cause-first guard: QA signals indicate application-code defect, but no src/** edit was proposed. Priority hints: ${rootCauseFocus.sourceHints.join(", ") || "[none]"}.`,
       ]);
-    }
-
-    const cypressRecovery = await enforceCypressConfigScriptConsistency({
-      workspaceRoot,
-      edits: output.edits,
-      signals: collectQaSignals({
-        qaFailures,
-        latestFindings: latestQaFindings,
-        cumulativeFindings: cumulativeQaFindings,
-      }),
-    });
-    output.edits = cypressRecovery.edits;
-    if (cypressRecovery.changed && cypressRecovery.note) {
-      output.changesMade = unique([...output.changesMade, cypressRecovery.note]);
-    }
-    if (cypressRecovery.warning) {
-      output.risks = unique([...output.risks, cypressRecovery.warning]);
     }
 
     const selectorHotfix = await synthesizeQaSelectorHotfixEdits({

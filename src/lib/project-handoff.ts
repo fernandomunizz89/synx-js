@@ -51,7 +51,6 @@ export interface ProjectProfile {
   dependencies: string[];
   tooling: {
     hasTsConfig: boolean;
-    hasCypressConfig: boolean;
     hasPlaywrightConfig: boolean;
     hasEslintConfig: boolean;
   };
@@ -186,7 +185,6 @@ function detectFrameworksFromDeps(dependencies: string[]): string[] {
   if (depSet.has("express")) frameworks.push("Express");
   if (depSet.has("fastify")) frameworks.push("Fastify");
   if (depSet.has("@nestjs/core")) frameworks.push("NestJS");
-  if (depSet.has("cypress")) frameworks.push("Cypress");
   if (depSet.has("@playwright/test")) frameworks.push("Playwright");
   return frameworks;
 }
@@ -198,7 +196,7 @@ function summarizeScripts(scripts: Record<string, string>): ProjectProfile["scri
     typecheck: names.filter((x) => /typecheck|tsc|check-types/i.test(x)),
     check: names.filter((x) => /^check$|check:/i.test(x)),
     test: names.filter((x) => /^test$|test:/i.test(x)),
-    e2e: names.filter((x) => /e2e|cypress|playwright/i.test(x)),
+    e2e: names.filter((x) => /e2e|playwright/i.test(x)),
     build: names.filter((x) => /build/i.test(x)),
   };
 }
@@ -220,13 +218,11 @@ export async function collectProjectProfile(args: {
   const testCapabilities = await detectTestCapabilities(workspaceRoot);
 
   const sourceFiles = files.filter((x) => /^src\/.+\.(ts|tsx|js|jsx)$/i.test(x)).slice(0, 12);
-  const testFiles = files.filter((x) => /(\/__tests__\/|\.test\.|\.spec\.|^e2e\/|cypress\/e2e\/)/i.test(x)).slice(0, 12);
+  const testFiles = files.filter((x) => /(\/__tests__\/|\.test\.|\.spec\.|^e2e\/)/i.test(x)).slice(0, 12);
   const keyFiles = unique([
     "package.json",
     existsSync(path.join(workspaceRoot, "tsconfig.json")) ? "tsconfig.json" : "",
     existsSync(path.join(workspaceRoot, "vite.config.ts")) ? "vite.config.ts" : "",
-    existsSync(path.join(workspaceRoot, "cypress.config.ts")) ? "cypress.config.ts" : "",
-    existsSync(path.join(workspaceRoot, "cypress.config.cjs")) ? "cypress.config.cjs" : "",
     existsSync(path.join(workspaceRoot, "playwright.config.ts")) ? "playwright.config.ts" : "",
   ]);
 
@@ -249,13 +245,12 @@ export async function collectProjectProfile(args: {
     dependencies: dependencies.slice(0, 80),
     tooling: {
       hasTsConfig: existsSync(path.join(workspaceRoot, "tsconfig.json")),
-      hasCypressConfig: existsSync(path.join(workspaceRoot, "cypress.config.ts")) || existsSync(path.join(workspaceRoot, "cypress.config.cjs")),
       hasPlaywrightConfig: existsSync(path.join(workspaceRoot, "playwright.config.ts")) || existsSync(path.join(workspaceRoot, "playwright.config.js")),
       hasEslintConfig: existsSync(path.join(workspaceRoot, "eslint.config.js")) || existsSync(path.join(workspaceRoot, ".eslintrc")) || existsSync(path.join(workspaceRoot, ".eslintrc.js")),
     },
     sourceLayout: {
       hasSrcDir: existsSync(path.join(workspaceRoot, "src")),
-      hasE2EDir: existsSync(path.join(workspaceRoot, "e2e")) || existsSync(path.join(workspaceRoot, "cypress", "e2e")),
+      hasE2EDir: existsSync(path.join(workspaceRoot, "e2e")),
       sampleSourceFiles: sourceFiles,
       sampleTestFiles: testFiles,
       keyFiles,
@@ -405,7 +400,7 @@ export function buildBugBrief(args: {
 
   const blockerPatterns = unique(
     reproductionEvidence
-      .filter((item) => /(does not provide an export named|ts\d{4}|syntaxerror|typeerror|cypress|selector|baseurl|specpattern)/i.test(item))
+      .filter((item) => /(does not provide an export named|ts\d{4}|syntaxerror|typeerror|e2e|selector|baseurl|specpattern)/i.test(item))
       .slice(0, 10),
   );
   const suspectFiles = arrayFromUnknown(investigator.suspectFiles).slice(0, 16);
@@ -578,7 +573,7 @@ export function projectProfileFactLines(profile: ProjectProfile): string[] {
   return unique([
     `Project profile: manager=${profile.packageManager}, languages=${profile.detectedLanguages.join(", ") || "unknown"}, frameworks=${profile.detectedFrameworks.join(", ") || "unknown"}.`,
     `Scripts: lint=${profile.scriptSummary.lint.join(", ") || "[none]"} | typecheck=${profile.scriptSummary.typecheck.join(", ") || "[none]"} | e2e=${profile.scriptSummary.e2e.join(", ") || "[none]"}.`,
-    `Tooling: tsconfig=${profile.tooling.hasTsConfig ? "yes" : "no"}, cypressConfig=${profile.tooling.hasCypressConfig ? "yes" : "no"}, playwrightConfig=${profile.tooling.hasPlaywrightConfig ? "yes" : "no"}.`,
+    `Tooling: tsconfig=${profile.tooling.hasTsConfig ? "yes" : "no"}, playwrightConfig=${profile.tooling.hasPlaywrightConfig ? "yes" : "no"}.`,
   ]);
 }
 

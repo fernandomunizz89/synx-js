@@ -12,21 +12,11 @@ export interface QaFindingLike {
   recommendedAction: string;
 }
 
-const REL_PATH_HINT_PATTERN = /((?:src|app|apps|packages|services|libs|server|client|web|frontend|backend|e2e|cypress|tests?|specs?)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/g;
-const ABS_PATH_HINT_PATTERN = /\/((?:src|app|apps|packages|services|libs|server|client|web|frontend|backend|e2e|cypress|tests?|specs?)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/g;
+const REL_PATH_HINT_PATTERN = /((?:src|app|apps|packages|services|libs|server|client|web|frontend|backend|e2e|tests?|specs?)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/g;
+const ABS_PATH_HINT_PATTERN = /\/((?:src|app|apps|packages|services|libs|server|client|web|frontend|backend|e2e|tests?|specs?)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)/g;
 const DATA_CY_SELECTOR_PATTERN = /(?:\[data-cy\s*=\s*["']([^"']+)["']\]|data-cy\s*=\s*["']([^"']+)["'])/g;
 const MISSING_E2E_SPEC_PATTERN = /no spec files were found|can'?t run because no spec files were found|did not find e2e spec files/i;
-const CYPRESS_CONFIG_SIGNAL_PATTERN = /cypress\.config|configfile is invalid|invalid cypress config|specpattern|baseurl/i;
-
-const GENERIC_MAIN_FLOW_CYPRESS_SPEC = `/// <reference types="cypress" />
-
-describe("Main flow smoke test", () => {
-  it("loads the application shell", () => {
-    cy.visit("/");
-    cy.get("body").should("exist");
-  });
-});
-`;
+const E2E_CONFIG_SIGNAL_PATTERN = /playwright\.config|e2e config|configfile is invalid|specpattern|baseurl/i;
 
 function normalizePath(filePath: string): string {
   return filePath.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "");
@@ -39,7 +29,7 @@ function isJsxLikeFile(filePath: string): boolean {
 function isE2eSpecPath(filePath: string): boolean {
   const normalized = normalizePath(filePath).toLowerCase();
   return (
-    /^(?:cypress\/e2e|e2e|tests?\/e2e|specs?\/e2e)\//.test(normalized)
+    /^(?:e2e|tests?\/e2e|specs?\/e2e)\//.test(normalized)
     && /\.(?:cy|spec)\.[cm]?[jt]sx?$/.test(normalized)
   );
 }
@@ -65,7 +55,7 @@ function extractPathHints(text: string): string[] {
     out.push(normalizePath(match[1]));
   }
 
-  for (const configFile of ["cypress.config.ts", "cypress.config.cjs", "cypress.config.js", "cypress.config.mjs"]) {
+  for (const configFile of ["playwright.config.ts", "playwright.config.js", "playwright.config.mjs"]) {
     if (new RegExp(`\\b${configFile.replace(".", "\\.")}\\b`, "i").test(text)) {
       out.push(configFile);
     }
@@ -104,13 +94,13 @@ export function deriveQaFileHints(findings: QaFindingLike[]): string[] {
     hints.push(...extractPathHints(findingBlob(finding)));
   }
 
-  if (CYPRESS_CONFIG_SIGNAL_PATTERN.test(combined.toLowerCase())) {
-    hints.push("cypress.config.ts");
-    hints.push("cypress.config.cjs");
+  if (E2E_CONFIG_SIGNAL_PATTERN.test(combined.toLowerCase())) {
+    hints.push("playwright.config.ts");
+    hints.push("package.json");
   }
 
   if (shouldCreateMainFlowSpec(findings)) {
-    hints.push("e2e/main-flow.cy.ts");
+    hints.push("e2e/main-flow.spec.ts");
   }
 
   return unique(hints);
@@ -138,11 +128,6 @@ async function readBaseContent(
   const absolutePath = path.join(workspaceRoot, relativePath);
   if (!(await exists(absolutePath))) return null;
   return fs.readFile(absolutePath, "utf8").catch(() => null);
-}
-
-function ensureCypressTypesReference(content: string): string {
-  if (/^\s*\/\/\/\s*<reference\s+types=["']cypress["']\s*\/>/m.test(content)) return content;
-  return `/// <reference types="cypress" />\n\n${content}`;
 }
 
 function hasNativeDataCyAttribute(content: string, selector: string): boolean {
@@ -307,29 +292,8 @@ export async function synthesizeQaSelectorHotfixEdits(args: {
   }
 
   if (shouldCreateMainFlowSpec(args.findings) && !hasE2eSpecEdit(nextEdits)) {
-    nextEdits.push({
-      path: "e2e/main-flow.cy.ts",
-      action: "create",
-      content: GENERIC_MAIN_FLOW_CYPRESS_SPEC,
-    });
-    notes.push("Auto-remediation applied: created a minimal runnable Cypress E2E spec at e2e/main-flow.cy.ts.");
+    warnings.push("QA requested missing E2E specs, but SYNX no longer generates framework-specific E2E test files automatically.");
   }
-
-  nextEdits = nextEdits.map((edit) => {
-    if ((edit.action !== "replace" && edit.action !== "create") || typeof edit.content !== "string") {
-      return edit;
-    }
-    if (!isE2eSpecPath(edit.path) || !/\.tsx?$|\.ts$/i.test(edit.path)) {
-      return edit;
-    }
-    const withRef = ensureCypressTypesReference(edit.content);
-    if (withRef === edit.content) return edit;
-    notes.push(`Auto-remediation applied: ensured Cypress type reference header in ${edit.path}.`);
-    return {
-      ...edit,
-      content: withRef,
-    };
-  });
 
   return {
     edits: nextEdits,
