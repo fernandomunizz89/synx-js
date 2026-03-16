@@ -364,8 +364,75 @@ function isInputEmbeddedInSystemPrompt(systemPrompt: string, inputJson: string):
   return maybeEmbeddedSample.length > 32 && systemPrompt.includes(maybeEmbeddedSample);
 }
 
+function estimateTokensFromChars(chars: number): number {
+  return Math.ceil(Math.max(0, chars) / 4);
+}
+
+function resolveContextBudgetChars(): number {
+  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_CONTEXT_CHARS || "120000");
+  if (!Number.isFinite(raw)) return 120_000;
+  const normalized = Math.floor(raw);
+  if (normalized < 8000) return 120_000;
+  return Math.min(1_000_000, normalized);
+}
+
+function resolveInputPayloadBudgetChars(): number {
+  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_INPUT_CHARS || "90000");
+  if (!Number.isFinite(raw)) return 90_000;
+  const normalized = Math.floor(raw);
+  if (normalized < 2000) return 90_000;
+  return Math.min(500_000, normalized);
+}
+
+function truncateTextForBudget(value: string, maxChars: number, label: string): { text: string; truncated: boolean } {
+  if (value.length <= maxChars) return { text: value, truncated: false };
+  const marker = `\n\n[${label} truncated to ${maxChars} chars from ${value.length} chars]`;
+  const headLimit = Math.max(0, maxChars - marker.length);
+  return {
+    text: `${value.slice(0, headLimit)}${marker}`,
+    truncated: true,
+  };
+}
+
+function enforceContextCharBudget(args: {
+  systemPrompt: string;
+  userPrompt: string;
+}): { systemPrompt: string; userPrompt: string; truncated: boolean; contextBudgetChars: number } {
+  const contextBudgetChars = resolveContextBudgetChars();
+  let systemPrompt = args.systemPrompt;
+  let userPrompt = args.userPrompt;
+  let truncated = false;
+
+  const minSystemChars = 2000;
+  const minUserChars = 2000;
+  const totalChars = () => systemPrompt.length + userPrompt.length;
+  if (totalChars() <= contextBudgetChars) {
+    return { systemPrompt, userPrompt, truncated, contextBudgetChars };
+  }
+
+  const overflowAfterSystem = totalChars() - contextBudgetChars;
+  if (overflowAfterSystem > 0) {
+    const nextUserLimit = Math.max(minUserChars, userPrompt.length - overflowAfterSystem);
+    const userTrimmed = truncateTextForBudget(userPrompt, nextUserLimit, "user_prompt");
+    userPrompt = userTrimmed.text;
+    truncated = truncated || userTrimmed.truncated;
+  }
+
+  if (totalChars() > contextBudgetChars) {
+    const overflowAfterUser = totalChars() - contextBudgetChars;
+    const nextSystemLimit = Math.max(minSystemChars, systemPrompt.length - overflowAfterUser);
+    const systemTrimmed = truncateTextForBudget(systemPrompt, nextSystemLimit, "system_prompt");
+    systemPrompt = systemTrimmed.text;
+    truncated = truncated || systemTrimmed.truncated;
+  }
+
+  return { systemPrompt, userPrompt, truncated, contextBudgetChars };
+}
+
 function buildStatelessUserMessage(request: ProviderRequest): string {
-  const inputJson = JSON.stringify(request.input, null, 2);
+  const inputJsonRaw = JSON.stringify(request.input, null, 2);
+  const inputBudget = resolveInputPayloadBudgetChars();
+  const inputJson = truncateTextForBudget(inputJsonRaw, inputBudget, "input_json").text;
   const userParts = [
     "Return ONLY valid JSON.",
     `Expected shape: ${request.expectedJsonSchemaDescription}`,
@@ -377,13 +444,27 @@ function buildStatelessUserMessage(request: ProviderRequest): string {
     userParts.push("Input is already included in the system instructions.");
   }
 
+  if (inputJsonRaw.length > inputJson.length) {
+    userParts.push(
+      `Input payload was truncated for budget control: ${inputJsonRaw.length} chars (~${estimateTokensFromChars(inputJsonRaw.length)} tokens) -> ${inputJson.length} chars (~${estimateTokensFromChars(inputJson.length)} tokens).`,
+    );
+  }
+
   return userParts.join("\n\n");
 }
 
 function buildStatelessMessages(request: ProviderRequest): Array<{ role: "system" | "user"; content: string }> {
+  const userPrompt = buildStatelessUserMessage(request);
+  const budgeted = enforceContextCharBudget({
+    systemPrompt: request.systemPrompt,
+    userPrompt,
+  });
+  const finalUserPrompt = budgeted.truncated
+    ? `${budgeted.userPrompt}\n\nContext budget control applied: ${budgeted.contextBudgetChars} total chars (~${estimateTokensFromChars(budgeted.contextBudgetChars)} tokens estimate).`
+    : budgeted.userPrompt;
   return [
-    { role: "system", content: request.systemPrompt },
-    { role: "user", content: buildStatelessUserMessage(request) },
+    { role: "system", content: budgeted.systemPrompt },
+    { role: "user", content: finalUserPrompt },
   ];
 }
 
