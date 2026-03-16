@@ -49,6 +49,12 @@ describe("schema", () => {
     expect(parsed.currentAgent).toBe("");
     expect(parsed.nextAgent).toBe("");
     expect(parsed.history[0]?.agent).toBe("Human Review");
+
+    const parsedNormal = taskMetaSchema.parse({
+      ...parsed,
+      currentAgent: "Dispatcher",
+    });
+    expect(parsedNormal.currentAgent).toBe("Dispatcher");
   });
 
   it("validates builder output for create and replace_snippet edit actions", () => {
@@ -213,6 +219,41 @@ describe("schema", () => {
       testsToRun: [],
       risks: [],
       edits: [], // Must be min 1
+      nextAgent: "Reviewer",
+    })).toThrow();
+  });
+
+  it("rejects invalid create builder edit without content", () => {
+    expect(() => builderOutputSchema.parse({
+      implementationSummary: "Broken create",
+      filesChanged: ["src/feature.ts"],
+      changesMade: ["Attempted create"],
+      testsToRun: [],
+      risks: [],
+      edits: [
+        {
+          path: "src/feature.ts",
+          action: "create",
+        },
+      ],
+      nextAgent: "Reviewer",
+    })).toThrow();
+  });
+
+  it("rejects invalid replace_snippet builder edit without replace", () => {
+    expect(() => builderOutputSchema.parse({
+      implementationSummary: "Broken replace",
+      filesChanged: ["src/feature.ts"],
+      changesMade: ["Attempted replace"],
+      testsToRun: [],
+      risks: [],
+      edits: [
+        {
+          path: "src/feature.ts",
+          action: "replace_snippet",
+          find: "old snippet",
+        },
+      ],
       nextAgent: "Reviewer",
     })).toThrow();
   });
