@@ -1,6 +1,6 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { exists, moveFile, readJsonValidated, writeJson } from "../lib/fs.js";
+import { exists, moveFile, readJsonValidated, writeJson, writeText } from "../lib/fs.js";
 import { logAgentAudit, logDaemon, logQueueLatency, logTaskEvent, logTiming } from "../lib/logging.js";
 import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
@@ -235,7 +235,7 @@ export abstract class WorkerBase {
 
     await writeJson(path.join(taskPath, "done", args.doneFileName), envelope);
     await writeJson(path.join(taskPath, "views", args.viewFileName.replace(".md", ".json")), envelope);
-    await fs.writeFile(path.join(taskPath, "views", args.viewFileName), args.viewContent, "utf8");
+    await writeText(path.join(taskPath, "views", args.viewFileName), args.viewContent);
 
     const meta = await loadTaskMeta(args.taskId);
     meta.history.push({
