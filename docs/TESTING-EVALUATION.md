@@ -12,10 +12,10 @@ SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates aut
 
 **Current Testing Status (updated):** ✅ **Foundation Established**
 - Vitest + V8 coverage configured and active
-- 26 test files / 88 passing tests
+- 29 test files / 101 passing tests
 - CI workflow added with build + coverage gate
 - Coverage now reflects whole repository (`coverage.all = true`, `include = src/**/*.ts`)
-- **Risk Level:** MEDIUM - Core surfaces are covered, deep worker behavior still needs expansion
+- **Risk Level:** MEDIUM - Core surfaces are covered; deeper end-to-end worker chains still need expansion
 
 ### Status Real (2026-03-16)
 
@@ -24,7 +24,7 @@ SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates aut
 | Testes de `config.ts`, `task.ts`, `runtime.ts` | **Feito** |
 | Testes de `cypress-tools.ts` e `validation-checks.ts` | **Feito** |
 | Testes de comandos (`start/new/setup/status/doctor`) | **Feito** |
-| Testes de workers concretos | **Parcial** (cobertura de registro e comportamento base sem inbox) |
+| Testes de workers concretos | **Parcial avançado** (registro + `bug-investigator`, `builder`, `qa`) |
 | Testes de providers (`mock` + `openai-compatible` + `lmstudio`) | **Feito** |
 | Integração dos cenários críticos (task lifecycle, lock recovery, working recovery) | **Feito** |
 | CI com execução de testes e gate de cobertura | **Feito** |
@@ -32,12 +32,12 @@ SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates aut
 
 ### Métricas Atuais
 
-- `npm run test -- --run`: **26 files / 88 tests / 100% pass**
+- `npm run test -- --run`: **29 files / 101 tests / 100% pass**
 - `npm run test:coverage` (repo-wide):  
-  - Statements: **23.92%**
-  - Branches: **16.36%**
-  - Functions: **23.86%**
-  - Lines: **25.38%**
+  - Statements: **41.34%**
+  - Branches: **31.32%**
+  - Functions: **47.82%**
+  - Lines: **43.77%**
 - Gate atual configurado no Vitest:
   - Branches: `>= 15`
   - Functions: `>= 20`
