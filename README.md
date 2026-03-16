@@ -101,6 +101,22 @@ The main commands to interact with SYNX are highly human-friendly.
 
 *(For extensive day-to-day operation manuals and edge cases, see [docs/MANUAL.md](docs/MANUAL.md)).*
 
+## 🧪 Testing and Coverage
+
+This project uses `vitest` for fast and reliable unit testing. We maintain a minimum of 50% test coverage across Statements, Branches, Functions, and Lines. 
+
+To run the unit test suite locally:
+
+```bash
+npm run test
+```
+
+To generate and view the coverage report:
+
+```bash
+npm run test:coverage
+```
+
 ## 🧠 Architecture & Configuration
 
 SYNX operates via a sequential multi-agent model orchestrated completely within the CLI context:
