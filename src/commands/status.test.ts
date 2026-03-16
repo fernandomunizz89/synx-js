@@ -1,0 +1,119 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TaskMeta } from "../lib/types.js";
+
+const mocks = vi.hoisted(() => ({
+  ensureGlobalInitialized: vi.fn<() => Promise<void>>(),
+  ensureProjectInitialized: vi.fn<() => Promise<void>>(),
+  collectReadinessReport: vi.fn<() => Promise<{ ok: boolean; issues: Array<{ severity: "error" | "warning"; message: string }> }>>(),
+  printReadinessReport: vi.fn(),
+  allTaskIds: vi.fn<() => Promise<string[]>>(),
+  loadTaskMeta: vi.fn<(taskId: string) => Promise<TaskMeta>>(),
+  commandExample: vi.fn<(value: string) => string>(),
+}));
+
+vi.mock("../lib/bootstrap.js", () => ({
+  ensureGlobalInitialized: mocks.ensureGlobalInitialized,
+  ensureProjectInitialized: mocks.ensureProjectInitialized,
+}));
+
+vi.mock("../lib/readiness.js", () => ({
+  collectReadinessReport: mocks.collectReadinessReport,
+  printReadinessReport: mocks.printReadinessReport,
+}));
+
+vi.mock("../lib/task.js", () => ({
+  allTaskIds: mocks.allTaskIds,
+  loadTaskMeta: mocks.loadTaskMeta,
+}));
+
+vi.mock("../lib/cli-command.js", () => ({
+  commandExample: mocks.commandExample,
+}));
+
+import { statusCommand } from "./status.js";
+
+describe.sequential("commands/status", () => {
+  const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+  function makeMeta(overrides: Partial<TaskMeta>): TaskMeta {
+    return {
+      taskId: "task-default",
+      title: "Default",
+      type: "Feature",
+      project: "project",
+      status: "new",
+      currentStage: "submitted",
+      currentAgent: "",
+      nextAgent: "Dispatcher",
+      humanApprovalRequired: false,
+      createdAt: "2026-03-16T00:00:00.000Z",
+      updatedAt: "2026-03-16T00:00:00.000Z",
+      history: [],
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mocks.ensureGlobalInitialized.mockReset().mockResolvedValue(undefined);
+    mocks.ensureProjectInitialized.mockReset().mockResolvedValue(undefined);
+    mocks.collectReadinessReport.mockReset().mockResolvedValue({ ok: true, issues: [] });
+    mocks.printReadinessReport.mockReset();
+    mocks.commandExample.mockReset().mockImplementation((value: string) => `synx ${value}`);
+    mocks.allTaskIds.mockReset().mockResolvedValue(["task-1", "task-2", "task-3"]);
+    mocks.loadTaskMeta.mockReset().mockImplementation(async (taskId: string) => {
+      if (taskId === "task-1") {
+        return makeMeta({
+          taskId,
+          title: "Needs approval",
+          status: "waiting_human",
+          currentStage: "pr",
+          currentAgent: "PR Writer",
+          nextAgent: "",
+          humanApprovalRequired: true,
+          updatedAt: "2026-03-16T01:00:00.000Z",
+        });
+      }
+      if (taskId === "task-2") {
+        return makeMeta({
+          taskId,
+          title: "In progress",
+          status: "in_progress",
+          currentAgent: "Dispatcher",
+          updatedAt: "2026-03-16T00:30:00.000Z",
+        });
+      }
+      return makeMeta({
+        taskId,
+        title: "Done task",
+        status: "done",
+        currentAgent: "Human Review",
+        nextAgent: "",
+        updatedAt: "2026-03-15T23:00:00.000Z",
+      });
+    });
+    consoleSpy.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows focused task preferring waiting_human entries", async () => {
+    await statusCommand.parseAsync(["node", "synx"]);
+
+    const output = consoleSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Focused task");
+    expect(output).toContain("Needs approval");
+    expect(output).toContain("Showing the task waiting for your approval.");
+    expect(output).toContain("Next step: run `synx approve`");
+  });
+
+  it("shows all tasks when --all is provided", async () => {
+    await statusCommand.parseAsync(["node", "synx", "--all"]);
+    const output = consoleSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Tasks (all)");
+    expect(output).toContain("Needs approval");
+    expect(output).toContain("In progress");
+    expect(output).toContain("Done task");
+  });
+});
