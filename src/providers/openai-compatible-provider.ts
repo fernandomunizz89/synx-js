@@ -3,6 +3,7 @@ import type { LlmProvider } from "./provider.js";
 import { extractJsonFromText } from "../lib/utils.js";
 import { logProviderParseRetry, logProviderThrottle } from "../lib/logging.js";
 import { sleep } from "../lib/utils.js";
+import { envNumber, envOptionalNumber } from "../lib/env.js";
 
 interface ChatCompletionsResponse {
   choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
@@ -150,58 +151,73 @@ function resolveTemperature(request: ProviderRequest): number {
 }
 
 function resolveTimeoutMs(): number {
-  const timeoutMsRaw = Number(process.env.AI_AGENTS_PROVIDER_TIMEOUT_MS || "300000");
-  return Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? timeoutMsRaw : 300000;
+  return envNumber("AI_AGENTS_PROVIDER_TIMEOUT_MS", 300000, {
+    integer: true,
+    min: 1,
+    max: 1_800_000,
+  });
 }
 
 function resolveMaxTokens(): number | undefined {
-  const maxTokensRaw = Number(process.env.AI_AGENTS_OPENAI_MAX_TOKENS || "");
-  if (!Number.isFinite(maxTokensRaw) || maxTokensRaw <= 0) return undefined;
-  return Math.floor(maxTokensRaw);
+  return envOptionalNumber("AI_AGENTS_OPENAI_MAX_TOKENS", {
+    integer: true,
+    min: 1,
+    max: 200_000,
+  });
 }
 
 function resolveJsonParseRetries(): number {
-  const raw = Number(process.env.AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES || "");
-  if (Number.isFinite(raw) && raw >= 0) {
-    return Math.min(2, Math.floor(raw));
-  }
-  return 1;
+  return envNumber("AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES", 1, {
+    integer: true,
+    min: 0,
+    max: 2,
+  });
 }
 
 function resolveMaxRequestsPerMinute(): number {
-  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE || "");
-  if (!Number.isFinite(raw)) return 0;
-  const normalized = Math.floor(raw);
-  if (normalized <= 0) return 0;
-  return Math.min(5000, normalized);
+  return envNumber("AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE", 0, {
+    integer: true,
+    min: 0,
+    max: 5000,
+  });
 }
 
 function resolveRateLimitWindowMs(): number {
-  const raw = Number(process.env.AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS || "60000");
-  if (!Number.isFinite(raw)) return 60_000;
-  const normalized = Math.floor(raw);
-  if (normalized < 200) return 60_000;
-  return Math.min(600_000, normalized);
+  return envNumber("AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS", 60_000, {
+    integer: true,
+    min: 200,
+    max: 600_000,
+  });
 }
 
 function resolveMaxConcurrentRequestsPerModel(): number {
-  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_CONCURRENT_REQUESTS || "3");
-  if (!Number.isFinite(raw)) return 3;
-  const normalized = Math.floor(raw);
-  if (normalized <= 0) return 1;
-  return Math.min(30, normalized);
+  return envNumber("AI_AGENTS_PROVIDER_MAX_CONCURRENT_REQUESTS", 3, {
+    integer: true,
+    min: 1,
+    max: 30,
+  });
 }
 
 function resolveBackoffSettings(): ProviderBackoffSettings {
-  const maxRetriesRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES || "2");
-  const baseMsRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_BASE_MS || "500");
-  const maxMsRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_MAX_MS || "8000");
-  const jitterRatioRaw = Number(process.env.AI_AGENTS_PROVIDER_BACKOFF_JITTER_RATIO || "0.2");
-
-  const maxRetries = Number.isFinite(maxRetriesRaw) ? Math.min(6, Math.max(0, Math.floor(maxRetriesRaw))) : 2;
-  const baseMs = Number.isFinite(baseMsRaw) ? Math.min(30000, Math.max(50, Math.floor(baseMsRaw))) : 500;
-  const maxMsCandidate = Number.isFinite(maxMsRaw) ? Math.min(120000, Math.max(baseMs, Math.floor(maxMsRaw))) : 8000;
-  const jitterRatio = Number.isFinite(jitterRatioRaw) ? Math.min(1, Math.max(0, jitterRatioRaw)) : 0.2;
+  const maxRetries = envNumber("AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES", 2, {
+    integer: true,
+    min: 0,
+    max: 6,
+  });
+  const baseMs = envNumber("AI_AGENTS_PROVIDER_BACKOFF_BASE_MS", 500, {
+    integer: true,
+    min: 50,
+    max: 30_000,
+  });
+  const maxMsCandidate = envNumber("AI_AGENTS_PROVIDER_BACKOFF_MAX_MS", 8000, {
+    integer: true,
+    min: baseMs,
+    max: 120_000,
+  });
+  const jitterRatio = envNumber("AI_AGENTS_PROVIDER_BACKOFF_JITTER_RATIO", 0.2, {
+    min: 0,
+    max: 1,
+  });
 
   return {
     maxRetries,
@@ -369,19 +385,19 @@ function estimateTokensFromChars(chars: number): number {
 }
 
 function resolveContextBudgetChars(): number {
-  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_CONTEXT_CHARS || "120000");
-  if (!Number.isFinite(raw)) return 120_000;
-  const normalized = Math.floor(raw);
-  if (normalized < 8000) return 120_000;
-  return Math.min(1_000_000, normalized);
+  return envNumber("AI_AGENTS_PROVIDER_MAX_CONTEXT_CHARS", 120_000, {
+    integer: true,
+    min: 8_000,
+    max: 1_000_000,
+  });
 }
 
 function resolveInputPayloadBudgetChars(): number {
-  const raw = Number(process.env.AI_AGENTS_PROVIDER_MAX_INPUT_CHARS || "90000");
-  if (!Number.isFinite(raw)) return 90_000;
-  const normalized = Math.floor(raw);
-  if (normalized < 2000) return 90_000;
-  return Math.min(500_000, normalized);
+  return envNumber("AI_AGENTS_PROVIDER_MAX_INPUT_CHARS", 90_000, {
+    integer: true,
+    min: 2_000,
+    max: 500_000,
+  });
 }
 
 function truncateTextForBudget(value: string, maxChars: number, label: string): { text: string; truncated: boolean } {

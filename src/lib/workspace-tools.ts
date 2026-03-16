@@ -3,6 +3,7 @@ import { existsSync, promises as fs } from "node:fs";
 import { spawn } from "node:child_process";
 import { ensureDir, exists } from "./fs.js";
 import { nowIso } from "./utils.js";
+import { envBoolean, envNumber } from "./env.js";
 
 const IGNORED_DIRS = new Set([
   ".git",
@@ -208,16 +209,15 @@ function extractKeywords(text: string): string[] {
 }
 
 function isWorkspaceScanCacheDisabled(): boolean {
-  const raw = (process.env.AI_AGENTS_DISABLE_WORKSPACE_SCAN_CACHE || "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
+  return envBoolean("AI_AGENTS_DISABLE_WORKSPACE_SCAN_CACHE", false);
 }
 
 function resolveWorkspaceScanCacheTtlMs(): number {
-  const raw = Number(process.env.AI_AGENTS_WORKSPACE_SCAN_CACHE_TTL_MS || String(DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS));
-  if (!Number.isFinite(raw)) return DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS;
-  const normalized = Math.floor(raw);
-  if (normalized <= 0) return DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS;
-  return Math.min(120_000, normalized);
+  return envNumber("AI_AGENTS_WORKSPACE_SCAN_CACHE_TTL_MS", DEFAULT_WORKSPACE_SCAN_CACHE_TTL_MS, {
+    integer: true,
+    min: 1,
+    max: 120_000,
+  });
 }
 
 function buildWalkFilesCacheKey(root: string, maxScanFiles: number, maxFileSizeBytes: number): string {

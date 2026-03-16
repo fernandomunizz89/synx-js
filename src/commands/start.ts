@@ -15,30 +15,30 @@ import { collectReadinessReport, printReadinessReport } from "../lib/readiness.j
 import { createStartProgressRenderer } from "../lib/start-progress.js";
 import { exists, readJson } from "../lib/fs.js";
 import { runtimeDir } from "../lib/paths.js";
+import { envNumber } from "../lib/env.js";
 
 function resolvePollIntervalMs(): number {
-  const raw = Number(process.env.AI_AGENTS_POLL_INTERVAL_MS || "");
-  if (!Number.isFinite(raw)) return POLL_INTERVAL_MS;
-  const normalized = Math.floor(raw);
-  return normalized >= 200 ? normalized : POLL_INTERVAL_MS;
+  return envNumber("AI_AGENTS_POLL_INTERVAL_MS", POLL_INTERVAL_MS, {
+    integer: true,
+    min: 200,
+    max: 120_000,
+  });
 }
 
 function resolveMaxImmediateCycles(): number {
-  const raw = Number(process.env.AI_AGENTS_MAX_IMMEDIATE_CYCLES || "3");
-  if (!Number.isFinite(raw)) return 3;
-  const normalized = Math.floor(raw);
-  if (normalized < 0) return 0;
-  if (normalized > 20) return 20;
-  return normalized;
+  return envNumber("AI_AGENTS_MAX_IMMEDIATE_CYCLES", 3, {
+    integer: true,
+    min: 0,
+    max: 20,
+  });
 }
 
 function resolveTaskConcurrency(): number {
-  const raw = Number(process.env.AI_AGENTS_TASK_CONCURRENCY || "3");
-  if (!Number.isFinite(raw)) return 3;
-  const normalized = Math.floor(raw);
-  if (normalized < 1) return 1;
-  if (normalized > 20) return 20;
-  return normalized;
+  return envNumber("AI_AGENTS_TASK_CONCURRENCY", 3, {
+    integer: true,
+    min: 1,
+    max: 20,
+  });
 }
 
 interface LoopActionDecision {
