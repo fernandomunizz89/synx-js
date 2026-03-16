@@ -1,7 +1,7 @@
 # Runtime Improvements Checklist
 
 - [x] 1. Consolidate duplicated text/risk helpers into shared modules and replace local copies.
-- [ ] 2. Decompose `workspace-tools.ts` into focused modules with a compatibility barrel.
+- [x] 2. Decompose `workspace-tools.ts` into focused modules with a compatibility barrel.
 - [ ] 3. Ensure token/cost estimation module and provider integration are complete and documented.
 - [ ] 4. Add optional streaming mode in OpenAI-compatible provider (`AI_AGENTS_PROVIDER_STREAMING`).
 - [x] 5. Make stage view markdown write atomic in `WorkerBase.finishStage`.
