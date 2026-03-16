@@ -39,19 +39,13 @@ export function extractProviderErrorMeta(error: unknown): ProviderErrorMeta {
   if (!parsed.success) return { ...DEFAULT_PROVIDER_ERROR_META };
 
   return {
-    parseRetries: typeof parsed.data.parseRetries === "number" ? parsed.data.parseRetries : 0,
-    parseRetryAdditionalDurationMs: typeof parsed.data.parseRetryAdditionalDurationMs === "number"
-      ? parsed.data.parseRetryAdditionalDurationMs
-      : 0,
-    parseFailureReasons: Array.isArray(parsed.data.parseFailureReasons)
-      ? parsed.data.parseFailureReasons.slice(0, 3)
-      : [],
-    providerAttempts: typeof parsed.data.providerAttempts === "number" ? parsed.data.providerAttempts : 1,
-    providerBackoffRetries: typeof parsed.data.providerBackoffRetries === "number" ? parsed.data.providerBackoffRetries : 0,
-    providerBackoffWaitMs: typeof parsed.data.providerBackoffWaitMs === "number" ? parsed.data.providerBackoffWaitMs : 0,
-    providerRateLimitWaitMs: typeof parsed.data.providerRateLimitWaitMs === "number" ? parsed.data.providerRateLimitWaitMs : 0,
-    providerThrottleReasons: Array.isArray(parsed.data.providerThrottleReasons)
-      ? parsed.data.providerThrottleReasons.slice(0, 3)
-      : [],
+    parseRetries: parsed.data.parseRetries ?? DEFAULT_PROVIDER_ERROR_META.parseRetries,
+    parseRetryAdditionalDurationMs: parsed.data.parseRetryAdditionalDurationMs ?? DEFAULT_PROVIDER_ERROR_META.parseRetryAdditionalDurationMs,
+    parseFailureReasons: (parsed.data.parseFailureReasons ?? DEFAULT_PROVIDER_ERROR_META.parseFailureReasons).slice(0, 3),
+    providerAttempts: parsed.data.providerAttempts ?? DEFAULT_PROVIDER_ERROR_META.providerAttempts,
+    providerBackoffRetries: parsed.data.providerBackoffRetries ?? DEFAULT_PROVIDER_ERROR_META.providerBackoffRetries,
+    providerBackoffWaitMs: parsed.data.providerBackoffWaitMs ?? DEFAULT_PROVIDER_ERROR_META.providerBackoffWaitMs,
+    providerRateLimitWaitMs: parsed.data.providerRateLimitWaitMs ?? DEFAULT_PROVIDER_ERROR_META.providerRateLimitWaitMs,
+    providerThrottleReasons: (parsed.data.providerThrottleReasons ?? DEFAULT_PROVIDER_ERROR_META.providerThrottleReasons).slice(0, 3),
   };
 }

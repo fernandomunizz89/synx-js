@@ -6,6 +6,6 @@
 - [ ] 4. Add optional streaming mode in OpenAI-compatible provider (`AI_AGENTS_PROVIDER_STREAMING`).
 - [x] 5. Make stage view markdown write atomic in `WorkerBase.finishStage`.
 - [x] 6. Restore immediate-cycle budget guard for fast-path polling.
-- [ ] 7. Simplify `provider-error-meta.ts` defaults after successful Zod parse.
+- [x] 7. Simplify `provider-error-meta.ts` defaults after successful Zod parse.
 - [ ] 8. Harden concurrency cursor style in `start.ts` (`cursor++` pattern).
 - [ ] 9. Add `envRequired` and expose required env checks in doctor diagnostics.
