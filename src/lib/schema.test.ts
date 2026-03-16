@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   agentNameSchema,
+  bugFixerOutputSchema,
+  bugInvestigatorOutputSchema,
   builderOutputSchema,
+  plannerOutputSchema,
   qaOutputSchema,
   taskMetaSchema,
   taskTypeSchema,
@@ -141,5 +144,76 @@ describe("schema", () => {
     });
     expect(failParsed.qaHandoffContext?.returnedTo).toBe("Feature Builder");
     expect(failParsed.returnContext[0]?.issue).toBe("Timer logic broken");
+  });
+
+  it("validates planner output schema correctly", () => {
+    const valid = plannerOutputSchema.parse({
+      technicalContext: "Next.js app",
+      knownFacts: ["Uses React"],
+      unknowns: [],
+      assumptions: [],
+      requiresHumanInput: false,
+      conditionalPlan: ["Build it"],
+      edgeCases: [],
+      risks: [],
+      validationCriteria: ["Looks good"],
+      nextAgent: "Feature Builder",
+    });
+    expect(valid.nextAgent).toBe("Feature Builder");
+
+    expect(() => plannerOutputSchema.parse({
+      technicalContext: "Next.js app",
+      // Missing knownFacts
+      unknowns: [],
+      assumptions: [],
+      requiresHumanInput: false,
+      conditionalPlan: ["Build it"],
+      edgeCases: [],
+      risks: [],
+      validationCriteria: ["Looks good"],
+      nextAgent: "Feature Builder",
+    })).toThrow();
+  });
+
+  it("validates bug investigator output schema correctly", () => {
+    const defaultRisk = bugInvestigatorOutputSchema.parse({
+      symptomSummary: "Crash on load",
+      knownFacts: [],
+      likelyCauses: ["Null pointer"],
+      investigationSteps: ["Check logs"],
+      unknowns: [],
+      nextAgent: "Bug Fixer",
+    });
+    expect(defaultRisk.riskAssessment.buildRisk).toBe("unknown"); // Checks default applies
+    expect(defaultRisk.nextAgent).toBe("Bug Fixer");
+  });
+
+  it("validates bug fixer output schema correctly", () => {
+    const valid = bugFixerOutputSchema.parse({
+      implementationSummary: "Fixed null check",
+      filesChanged: ["src/app.ts"],
+      changesMade: ["Added if(var)"],
+      testsToRun: ["npm test"],
+      risks: [],
+      edits: [
+        {
+          path: "src/app.ts",
+          action: "replace",
+          content: "if(val) {}",
+        },
+      ],
+      nextAgent: "Reviewer",
+    });
+    expect(valid.edits[0].action).toBe("replace");
+
+    expect(() => bugFixerOutputSchema.parse({
+      implementationSummary: "Forgot edits array",
+      filesChanged: ["src/app.ts"],
+      changesMade: [],
+      testsToRun: [],
+      risks: [],
+      edits: [], // Must be min 1
+      nextAgent: "Reviewer",
+    })).toThrow();
   });
 });

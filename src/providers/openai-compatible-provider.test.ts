@@ -43,6 +43,7 @@ describe.sequential("providers/openai-compatible-provider", () => {
     process.env.AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES = "1";
     process.env.AI_AGENTS_PROVIDER_STREAMING = "0";
     vi.restoreAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
@@ -56,6 +57,7 @@ describe.sequential("providers/openai-compatible-provider", () => {
     else delete process.env.AI_AGENTS_PROVIDER_STREAMING;
 
     globalThis.fetch = originalFetch;
+    vi.useRealTimers();
   });
 
   it("throws when base URL is not configured", () => {
@@ -101,4 +103,94 @@ describe.sequential("providers/openai-compatible-provider", () => {
     expect(result.validationPassed).toBe(true);
     expect(result.parsed).toMatchObject({ retry: true });
   });
+
+  it("throws after exhausting json parse retries", async () => {
+    process.env.AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES = "2";
+    const fetchMock = vi.fn().mockResolvedValue(buildOkJsonResponse("not-json"));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+    });
+
+    const promise = provider.generateStructured(requestBase());
+    vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow(/Provider JSON parsing failed/);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("handles HTTP errors natively", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: { get: () => "5" },
+      text: async () => "Service Unavailable",
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+    });
+
+    const promise = provider.generateStructured(requestBase());
+    vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow(/Provider request failed with 503/);
+  });
+
+  it("handles malformed JSON response bodies gracefully", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ unexpected: true }), // No choices
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+    });
+
+    const promise = provider.generateStructured(requestBase());
+    vi.runAllTimersAsync();
+    await expect(promise).rejects.toThrow(/Provider JSON parsing failed/);
+  });
+
+  it("supports streaming chunks into full text", async () => {
+    process.env.AI_AGENTS_PROVIDER_STREAMING = "1";
+
+    const encoder = new TextEncoder();
+    const mockStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"{\\"next"}}]}\n\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Agent\\": \\"Bug "}}]}\n\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Investigator\\"}"}}]}\n\n'));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      body: { getReader: () => mockStream.getReader() },
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+    });
+
+    const result = await provider.generateStructured(requestBase());
+    expect(result.parsed).toMatchObject({ nextAgent: "Bug Investigator" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const callArgs = fetchMock.mock.calls[0][1];
+    expect(callArgs.body).toContain('"stream":true');
+  });
 });
+
