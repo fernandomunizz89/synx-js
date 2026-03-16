@@ -173,7 +173,7 @@ describe("post-edit-sanity", () => {
 
     const check = result.checks.find((c) => c.command.includes("npm run --if-present build"));
     expect(check?.status).toBe("failed");
-    expect(check?.qaConfigNotes.join("")).toContain("Hidden blocker signatures detected");
+    expect(check?.qaConfigNotes?.join("")).toContain("Hidden blocker signatures detected");
   });
 
   it("executes static relative-import and jsx-props heuristics", async () => {

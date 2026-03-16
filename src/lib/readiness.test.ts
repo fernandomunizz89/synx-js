@@ -3,7 +3,7 @@ import { collectReadinessReport, type ReadinessReport } from "./readiness.js";
 import { loadResolvedProjectConfig } from "./config.js";
 import { checkProviderHealth } from "./provider-health.js";
 import { exists } from "./fs.js";
-import type { ProjectConfig } from "./types.js";
+import type { ResolvedProjectConfig } from "./types.js";
 
 vi.mock("./config.js", () => ({
   loadResolvedProjectConfig: vi.fn(),
@@ -22,13 +22,17 @@ vi.mock("./human-messages.js", () => ({
 }));
 
 describe("readiness checks", () => {
-  const dummyConfig = {
+  const dummyConfig: ResolvedProjectConfig = {
+    projectName: "test-project",
+    language: "TypeScript",
+    framework: "Node",
+    tasksDir: ".ai-agents/tasks",
     humanReviewer: "yes",
     providers: {
-      dispatcher: { type: "openai", model: "gpt-4" },
-      planner: { type: "anthropic", model: "claude" },
+      dispatcher: { type: "openai-compatible", model: "gpt-4o", baseUrl: "https://api.openai.com/v1" },
+      planner: { type: "openai-compatible", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1" },
     },
-  } as unknown as ProjectConfig;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,10 +73,10 @@ describe("readiness checks", () => {
     vi.mocked(loadResolvedProjectConfig).mockResolvedValue({
       ...dummyConfig,
       providers: {
-        dispatcher: { type: "openai", model: "  " },
-        planner: { type: "anthropic", model: "  " },
+        dispatcher: { type: "openai-compatible", model: "  ", baseUrl: "https://api.openai.com/v1" },
+        planner: { type: "openai-compatible", model: "  ", baseUrl: "https://api.openai.com/v1" },
       },
-    } as any);
+    });
     vi.mocked(checkProviderHealth).mockResolvedValue({ reachable: true, modelFound: true, message: "" } as any);
 
     const report = await collectReadinessReport({ includeProviderChecks: true });
