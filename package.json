@@ -16,8 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint .",
-    "cypress:run": "cypress run --config-file cypress.config.ts"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@inquirer/prompts": "^7.10.1",
@@ -37,7 +36,6 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "@vitest/coverage-v8": "^4.1.0",
-    "cypress": "^15.12.0",
     "eslint": "^10.0.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
