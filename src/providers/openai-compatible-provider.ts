@@ -5,6 +5,11 @@ import { logProviderParseRetry, logProviderThrottle } from "../lib/logging.js";
 import { sleep } from "../lib/utils.js";
 import { envNumber, envOptionalNumber } from "../lib/env.js";
 import { isTaskCancelRequested } from "../lib/task-cancel.js";
+import {
+  buildTokenEstimateFromCounts,
+  estimateTokensFromChars,
+  estimateTokensFromMessages,
+} from "../lib/token-estimation.js";
 
 interface ChatCompletionsResponse {
   choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
@@ -423,35 +428,6 @@ function shortenText(value: string, maxChars: number): string {
 function isInputEmbeddedInSystemPrompt(systemPrompt: string, inputJson: string): boolean {
   const maybeEmbeddedSample = inputJson.slice(0, Math.min(240, inputJson.length));
   return maybeEmbeddedSample.length > 32 && systemPrompt.includes(maybeEmbeddedSample);
-}
-
-function estimateTokensFromChars(chars: number): number {
-  return Math.ceil(Math.max(0, chars) / 4);
-}
-
-function estimateTokensFromMessages(messages: Array<{ role: "system" | "user"; content: string }>): number {
-  return messages.reduce((sum, message) => sum + estimateTokensFromChars(message.content.length), 0);
-}
-
-function resolveInputCostPer1kTokensUsd(): number {
-  return envNumber("AI_AGENTS_PROVIDER_INPUT_COST_PER_1K_USD", 0, {
-    min: 0,
-    max: 1000,
-  });
-}
-
-function resolveOutputCostPer1kTokensUsd(): number {
-  return envNumber("AI_AGENTS_PROVIDER_OUTPUT_COST_PER_1K_USD", 0, {
-    min: 0,
-    max: 1000,
-  });
-}
-
-function estimateCostUsd(inputTokens: number, outputTokens: number): number {
-  const inputRate = resolveInputCostPer1kTokensUsd();
-  const outputRate = resolveOutputCostPer1kTokensUsd();
-  const cost = ((Math.max(0, inputTokens) / 1000) * inputRate) + ((Math.max(0, outputTokens) / 1000) * outputRate);
-  return Number(cost.toFixed(6));
 }
 
 function resolveContextBudgetChars(): number {
@@ -1017,6 +993,12 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           }).catch(() => undefined);
         }
 
+        const tokenEstimate = buildTokenEstimateFromCounts({
+          model: this.model,
+          inputTokens: estimatedInputTokens,
+          outputTokens: estimatedOutputTokens,
+        });
+
         return {
           rawText,
           parsed,
@@ -1028,10 +1010,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           providerBackoffRetries,
           providerBackoffWaitMs,
           providerRateLimitWaitMs,
-          estimatedInputTokens,
-          estimatedOutputTokens,
-          estimatedTotalTokens: estimatedInputTokens + estimatedOutputTokens,
-          estimatedCostUsd: estimateCostUsd(estimatedInputTokens, estimatedOutputTokens),
+          estimatedInputTokens: tokenEstimate.inputTokens,
+          estimatedOutputTokens: tokenEstimate.outputTokens,
+          estimatedTotalTokens: tokenEstimate.totalTokens,
+          estimatedCostUsd: tokenEstimate.estimatedCostUsd,
         };
       } catch (error) {
         const parseError = parseFailureReason(error);
