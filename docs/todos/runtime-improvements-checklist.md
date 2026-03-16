@@ -7,5 +7,5 @@
 - [x] 5. Make stage view markdown write atomic in `WorkerBase.finishStage`.
 - [x] 6. Restore immediate-cycle budget guard for fast-path polling.
 - [x] 7. Simplify `provider-error-meta.ts` defaults after successful Zod parse.
-- [ ] 8. Harden concurrency cursor style in `start.ts` (`cursor++` pattern).
+- [x] 8. Harden concurrency cursor style in `start.ts` (`cursor++` pattern).
 - [ ] 9. Add `envRequired` and expose required env checks in doctor diagnostics.

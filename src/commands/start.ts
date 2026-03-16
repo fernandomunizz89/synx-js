@@ -122,8 +122,7 @@ async function processTasksWithConcurrency(taskIds: string[], concurrency: numbe
 
   const runners = Array.from({ length: safeConcurrency }, async () => {
     while (true) {
-      const nextIndex = cursor;
-      cursor += 1;
+      const nextIndex = cursor++;
       if (nextIndex >= taskIds.length) return;
       const taskId = taskIds[nextIndex];
       outcomes[nextIndex] = await processTaskWithWorkers(taskId);
