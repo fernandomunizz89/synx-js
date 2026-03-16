@@ -1,12 +1,20 @@
 import boxen, { type Options as BoxenOptions } from "boxen";
 import gradient from "gradient-string";
+import stringWidth from "string-width";
+import stripAnsi from "strip-ansi";
+import wrapAnsi from "wrap-ansi";
 
 const CYAN = "#00ffff";
-const PURPLE = "#bc13fe";
-const GREEN = "#00ff8f";
-const RED = "#ff3b3b";
-const YELLOW = "#ffd166";
+const MAGENTA = "#ff00ff";
+const PURPLE_SOFT = "#c89bff";
+const GREEN = "#26ff8c";
+const RED = "#ff4d4d";
+const YELLOW = "#ffb347";
 const RESET = "\x1b[0m";
+
+function terminalWidth(): number {
+  return Math.max(56, process.stdout.columns || 120);
+}
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const normalized = hex.replace("#", "").trim();
@@ -24,6 +32,21 @@ function paintHex(hex: string, text: string): string {
   return `\x1b[38;2;${r};${g};${b}m${text}${RESET}`;
 }
 
+function centerAnsiLine(line: string, width: number): string {
+  const visible = stringWidth(stripAnsi(line));
+  const left = Math.max(0, Math.floor((width - visible) / 2));
+  return `${" ".repeat(left)}${line}`;
+}
+
+function wrapLines(lines: string[], width: number): string[] {
+  const wrapped: string[] = [];
+  for (const line of lines) {
+    const safe = wrapAnsi(line, Math.max(10, width), { hard: false, trim: false });
+    wrapped.push(...safe.split("\n"));
+  }
+  return wrapped;
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
@@ -38,8 +61,12 @@ export function synxCyan(text: string): string {
   return paintHex(CYAN, text);
 }
 
+export function synxMagenta(text: string): string {
+  return paintHex(MAGENTA, text);
+}
+
 export function synxPurple(text: string): string {
-  return paintHex(PURPLE, text);
+  return paintHex(PURPLE_SOFT, text);
 }
 
 export function synxSuccess(text: string): string {
@@ -76,37 +103,75 @@ export function formatSynxStatus(tone: SynxStatusTone): string {
 }
 
 export function synxControlFlowDiagram(): string {
-  return `${synxCyan("[SYNX]")} ${synxPurple("➔")} ${synxCyan("[Dispatcher]")} ${synxPurple("➔")} ${synxCyan("[Planner]")}`;
+  return `${synxCyan("[SYNX]")} ${synxMagenta("➜")} ${synxCyan("[Dispatcher]")} ${synxMagenta("➜")} ${synxCyan("[Planner]")}`;
 }
 
-export function renderSynxLogo(): string {
-  const wireframe = [
-    "╔═╗╦ ╦╔╗╔╔═╗",
-    "╚═╗╚╦╝║║║╚═╗",
-    "╚═╝ ╩ ╝╚╝╚═╝",
-    "[ SYNTHETIC AGENT ORCHESTRATOR v5.0 ]",
-  ].join("\n");
-  return gradient([CYAN, PURPLE]).multiline(wireframe);
+export type SynxLogoStyle = "auto" | "large" | "compact" | "micro";
+
+export function renderSynxLogo(width = terminalWidth(), style: SynxLogoStyle = "auto"): string {
+  const logoLarge = [
+    "███████╗██╗   ██╗███╗   ██╗██╗  ██╗",
+    "██╔════╝╚██╗ ██╔╝████╗  ██║╚██╗██╔╝",
+    "███████╗ ╚████╔╝ ██╔██╗ ██║ ╚███╔╝ ",
+    "╚════██║  ╚██╔╝  ██║╚██╗██║ ██╔██╗ ",
+    "███████║   ██║   ██║ ╚████║██╔╝ ██╗",
+    "╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝",
+  ];
+  const logoCompact = [
+    "███╗ ███╗",
+    "╚██║██╔╝",
+    " ████╔╝ ",
+    " ██╔██╗ ",
+    "██╔╝╚██╗",
+    "╚═╝  ╚═╝",
+  ];
+  const logoMicro = ["SYNX"];
+
+  const largestWidth = Math.max(...logoLarge.map((line) => stringWidth(line)));
+  const compactWidth = Math.max(...logoCompact.map((line) => stringWidth(line)));
+
+  const chosen = style === "large"
+    ? logoLarge
+    : style === "compact"
+      ? logoCompact
+      : style === "micro"
+        ? logoMicro
+        : width >= (largestWidth + 4)
+          ? logoLarge
+          : width >= (compactWidth + 4)
+            ? logoCompact
+            : logoMicro;
+
+  const gradientLogo = chosen.map((line) => gradient([CYAN, MAGENTA])(line));
+  const taglineText = width < 40 ? "[ SYNX v5.0 ]" : "[ SYNTHETIC AGENT ORCHESTRATOR v5.0 ]";
+  const tagline = synxPurple(taglineText);
+  return [...gradientLogo.map((line) => centerAnsiLine(line, width)), centerAnsiLine(tagline, width)].join("\n");
 }
 
-export function renderSynxCard(args: {
+export function renderSynxPanel(args: {
   title?: string;
   lines: string[];
   borderColor?: BoxenOptions["borderColor"];
-  dimBorder?: boolean;
+  width?: number;
 }): string {
-  const content = args.lines.join("\n");
-  const card = boxen(content, {
-    borderStyle: "double",
+  const fullWidth = Math.max(28, args.width || terminalWidth());
+  const innerWidth = Math.max(16, fullWidth - 4);
+  const wrapped = wrapLines(args.lines, innerWidth);
+  return boxen(wrapped.join("\n"), {
+    borderStyle: "single",
     title: args.title ? ` ${args.title} ` : undefined,
     titleAlignment: "left",
     borderColor: args.borderColor || "cyan",
     padding: { top: 0, right: 1, bottom: 0, left: 1 },
-    margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    margin: 0,
+    width: fullWidth,
   });
-  return args.dimBorder ? synxMuted(card) : card;
+}
+
+export function renderHeaderContextLine(message: string, atIso = new Date().toISOString()): string {
+  return synxMuted(formatSynxStreamLog(message, "SYNX", atIso));
 }
 
 export function themedPromptMessage(message: string): string {
-  return `${synxCyan("SYNX")} ${synxPurple("»")} ${message}`;
+  return `${synxCyan("SYNX")} ${synxMagenta("»")} ${message}`;
 }

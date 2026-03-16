@@ -18,12 +18,12 @@ import { runtimeDir } from "../lib/paths.js";
 import { envNumber } from "../lib/env.js";
 import {
   formatSynxStatus,
+  renderHeaderContextLine,
+  renderSynxPanel,
   formatSynxStreamLog,
-  renderSynxCard,
   renderSynxLogo,
   synxControlFlowDiagram,
   synxCritical,
-  synxMuted,
   synxSuccess,
   synxWaiting,
 } from "../lib/synx-ui.js";
@@ -136,32 +136,35 @@ export const startCommand = new Command("start")
   .action(async (options: { force?: boolean; progress?: boolean; dryRun?: boolean }) => {
     await ensureGlobalInitialized();
     await ensureProjectInitialized();
+    const progressCapable = options.progress !== false && Boolean(process.stdout.isTTY);
 
-    console.log(renderSynxLogo());
+    const headerContextLines: string[] = [renderHeaderContextLine("Bootstrapping SYNX runtime...")];
 
     if (options.dryRun) {
       process.env.AI_AGENTS_DRY_RUN = "1";
-      console.log(formatSynxStreamLog("Dry-run mode enabled. Workspace edits will be simulated only."));
+      headerContextLines.push(renderHeaderContextLine("Dry-run mode enabled. Workspace edits will be simulated only."));
     }
 
-    process.env.SYNX_STREAM_STDOUT = options.progress === false ? "1" : "0";
+    process.env.SYNX_STREAM_STDOUT = progressCapable ? "0" : "1";
 
     const daemonStatePath = path.join(runtimeDir(), "daemon-state.json");
     if (await exists(daemonStatePath)) {
       try {
         const currentState = await readJson<{ pid?: number; lastHeartbeatAt?: string }>(daemonStatePath);
         if (typeof currentState.pid === "number" && currentState.pid !== process.pid && processIsRunning(currentState.pid)) {
-          console.log(`\n${formatSynxStreamLog("Another engine appears to be running already.", "SYNX")}`);
-          console.log(`- Running PID: ${currentState.pid}`);
+          const runningMessage = formatSynxStreamLog("Another engine appears to be running already.", "SYNX");
+          headerContextLines.push(runningMessage);
+          headerContextLines.push(`- Running PID: ${currentState.pid}`);
           if (currentState.lastHeartbeatAt) {
-            console.log(`- Last heartbeat: ${currentState.lastHeartbeatAt}`);
+            headerContextLines.push(`- Last heartbeat: ${currentState.lastHeartbeatAt}`);
           }
           if (!options.force) {
             console.log(`Next step: stop the other process, then run \`${commandExample("start")}\`.`);
             console.log(`If you still want to start now, run \`${commandExample("start --force")}\`.`);
             return;
           }
-          console.log(formatSynxStreamLog("Continuing due to --force. Multiple engines may cause duplicated or inconsistent processing."));
+          const forceMessage = formatSynxStreamLog("Continuing due to --force. Multiple engines may cause duplicated or inconsistent processing.");
+          headerContextLines.push(forceMessage);
         }
       } catch {
         // Ignore malformed daemon state and continue startup.
@@ -193,40 +196,40 @@ export const startCommand = new Command("start")
       return synxWaiting(line);
     };
 
-    console.log(renderSynxCard({
-      title: "SYNX CONTROL PANEL",
-      lines: [
-        `Flow: ${synxControlFlowDiagram()}`,
-        reviewerLine,
-        `Dispatcher provider: ${providerTone(dispatcherLine)}`,
-        `Planner provider: ${providerTone(plannerLine)}`,
-        `Agent state palette: ${formatSynxStatus("processing")} | ${formatSynxStatus("success")} | ${formatSynxStatus("critical_error")} | ${formatSynxStatus("waiting_human")}`,
-      ],
-      borderColor: "cyan",
-    }));
+    const fixedControlPanelLines = [
+      `Flow: ${synxControlFlowDiagram()}`,
+      reviewerLine,
+      `Dispatcher provider: ${providerTone(dispatcherLine)}`,
+      `Planner provider: ${providerTone(plannerLine)}`,
+      `Agent state palette: ${formatSynxStatus("processing")} | ${formatSynxStatus("success")} | ${formatSynxStatus("critical_error")} | ${formatSynxStatus("waiting_human")}`,
+    ];
 
     const staleLocks = await clearStaleLocks();
     const recoveredWorking = await recoverWorkingFiles();
     const recoveredTasks = await recoverInterruptedTasks();
 
-    if (staleLocks.length) console.log(formatSynxStreamLog(`Cleared stale locks: ${staleLocks.length}`));
-    if (recoveredWorking.length) console.log(formatSynxStreamLog(`Recovered unfinished working files: ${recoveredWorking.length}`));
+    if (staleLocks.length) {
+      const message = formatSynxStreamLog(`Cleared stale locks: ${staleLocks.length}`);
+      if (progressCapable) headerContextLines.push(message);
+      else console.log(message);
+    }
+    if (recoveredWorking.length) {
+      const message = formatSynxStreamLog(`Recovered unfinished working files: ${recoveredWorking.length}`);
+      if (progressCapable) headerContextLines.push(message);
+      else console.log(message);
+    }
     if (recoveredTasks.length) {
-      console.log(
-        formatSynxStreamLog(
-          `Recovered interrupted tasks: ${recoveredTasks.filter((item) => item.action === "requeued").length}`,
-        ),
+      const message = formatSynxStreamLog(
+        `Recovered interrupted tasks: ${recoveredTasks.filter((item) => item.action === "requeued").length}`,
       );
+      if (progressCapable) headerContextLines.push(message);
+      else console.log(message);
     }
 
-    console.log(renderSynxCard({
-      title: "ENGINE",
-      lines: [
-        synxSuccess("SYNX engine started. Press Ctrl+C to stop."),
-        synxMuted(`Tip: in another terminal, run \`${commandExample("new")}\` and \`${commandExample("status")}\`.`),
-      ],
-      borderColor: "magenta",
-    }));
+    const enginePanelLines = [
+      synxSuccess("SYNX engine started. Press Ctrl+C to stop."),
+      `Tip: in another terminal, run \`${commandExample("new")}\` and \`${commandExample("status")}\`.`,
+    ];
     await logDaemon("SYNX engine started.");
     await writeDaemonState({
       pid: process.pid,
@@ -237,7 +240,28 @@ export const startCommand = new Command("start")
     });
 
     const engineStartedAtMs = Date.now();
-    const progress = createStartProgressRenderer({ enabled: options.progress !== false });
+    const progress = createStartProgressRenderer({ enabled: progressCapable });
+    const progressEnabled = progress.enabled;
+    if (progressEnabled) {
+      progress.setStaticFrame({
+        headerContextLines,
+        fixedControlPanelLines,
+        enginePanelLines,
+      });
+    } else {
+      console.log(renderSynxLogo());
+      for (const line of headerContextLines) console.log(line);
+      console.log(renderSynxPanel({
+        title: "SYNX CONTROL PANEL",
+        lines: fixedControlPanelLines,
+        borderColor: "cyan",
+      }));
+      console.log(renderSynxPanel({
+        title: "ENGINE",
+        lines: enginePanelLines,
+        borderColor: "magenta",
+      }));
+    }
     const pollIntervalMs = resolvePollIntervalMs();
     const maxImmediateCycles = resolveMaxImmediateCycles();
     const taskConcurrency = resolveTaskConcurrency();

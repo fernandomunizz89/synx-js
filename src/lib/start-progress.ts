@@ -1,18 +1,14 @@
+import cliSpinners from "cli-spinners";
+import { createLogUpdate } from "log-update";
 import type { TaskMeta } from "./types.js";
-import { formatSynxStatus, renderSynxCard, synxControlFlowDiagram, synxMuted } from "./synx-ui.js";
+import { formatSynxStatus, renderSynxLogo, renderSynxPanel, synxControlFlowDiagram, synxMuted, type SynxLogoStyle } from "./synx-ui.js";
 
-const SPINNER_FRAMES = ["|", "/", "-", "\\"];
 const BAR_WIDTH = 22;
 
 function formatDuration(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
+  const minutes = Math.floor(total / 60);
   const seconds = total % 60;
-
-  if (hours > 0) {
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
@@ -38,7 +34,7 @@ function stageLabel(stage: string): string {
     case "dispatcher":
       return "Dispatcher";
     case "planner":
-      return "Spec Planner";
+      return "Planner";
     case "bug-investigator":
       return "Bug Investigator";
     case "builder":
@@ -69,8 +65,8 @@ function progressForMeta(meta: TaskMeta): { done: number; total: number; ratio: 
     done = total;
     ratio = 1;
   } else if (meta.status === "in_progress") {
-    ratio = Math.min(0.99, (done + 0.45) / total);
-  } else if (meta.status === "failed") {
+    ratio = Math.min(0.99, (done + 0.4) / total);
+  } else if (meta.status === "failed" || meta.status === "blocked") {
     ratio = Math.min(1, (done + 0.2) / total);
   }
 
@@ -81,27 +77,19 @@ function progressBar(ratio: number): string {
   const bounded = Math.max(0, Math.min(1, ratio));
   const filled = Math.round(bounded * BAR_WIDTH);
   const empty = BAR_WIDTH - filled;
-  return `[${"#".repeat(filled)}${".".repeat(empty)}]`;
+  return `[${"█".repeat(filled)}${"·".repeat(empty)}]`;
 }
 
 function shortTaskId(taskId: string): string {
-  if (taskId.length <= 30) return taskId;
-  return `${taskId.slice(0, 16)}...${taskId.slice(-11)}`;
+  if (taskId.length <= 44) return taskId;
+  return `${taskId.slice(0, 24)}...${taskId.slice(-16)}`;
 }
 
-function statusTone(meta: TaskMeta): "processing" | "success" | "critical_error" | "waiting_human" {
+function taskTone(meta: TaskMeta): "processing" | "success" | "critical_error" | "waiting_human" {
   if (meta.status === "done") return "success";
   if (meta.status === "failed" || meta.status === "blocked") return "critical_error";
   if (meta.status === "waiting_human") return "waiting_human";
   return "processing";
-}
-
-function statusBorderColor(meta: TaskMeta): "cyan" | "green" | "red" | "yellow" {
-  const tone = statusTone(meta);
-  if (tone === "success") return "green";
-  if (tone === "critical_error") return "red";
-  if (tone === "waiting_human") return "yellow";
-  return "cyan";
 }
 
 export interface StartProgressSnapshot {
@@ -110,22 +98,69 @@ export interface StartProgressSnapshot {
   metas: TaskMeta[];
 }
 
+export interface StartProgressStaticFrame {
+  headerContextLines: string[];
+  fixedControlPanelLines: string[];
+  enginePanelLines: string[];
+}
+
 export interface StartProgressRenderer {
   readonly enabled: boolean;
+  setStaticFrame(frame: StartProgressStaticFrame): void;
   render(snapshot: StartProgressSnapshot): void;
   stop(): void;
 }
 
 class TtyStartProgressRenderer implements StartProgressRenderer {
   readonly enabled = true;
-  private linesRendered = 0;
   private tick = 0;
-  private cursorHidden = false;
+  private readonly log = createLogUpdate(process.stdout);
+  private readonly frames = cliSpinners.dots12.frames;
+  private lastSnapshot: StartProgressSnapshot | null = null;
+  private staticFrame: StartProgressStaticFrame = {
+    headerContextLines: [],
+    fixedControlPanelLines: [],
+    enginePanelLines: [],
+  };
+  private resizePending = false;
+  private needsFullClear = true;
+  private readonly handleResize = (): void => {
+    if (this.resizePending) return;
+    this.resizePending = true;
+    setTimeout(() => {
+      this.resizePending = false;
+      this.needsFullClear = true;
+      this.draw();
+    }, 24);
+  };
+
+  constructor() {
+    if (process.stdout.isTTY) {
+      process.stdout.on("resize", this.handleResize);
+    }
+  }
+
+  setStaticFrame(frame: StartProgressStaticFrame): void {
+    this.staticFrame = frame;
+    this.draw();
+  }
 
   render(snapshot: StartProgressSnapshot): void {
+    this.lastSnapshot = snapshot;
+    this.draw();
+  }
+
+  private draw(): void {
+    const snapshot = this.lastSnapshot || {
+      loop: 0,
+      engineStartedAtMs: Date.now(),
+      metas: [] as TaskMeta[],
+    };
     this.tick += 1;
-    const spinner = SPINNER_FRAMES[this.tick % SPINNER_FRAMES.length];
+    const spinner = this.frames[this.tick % this.frames.length];
     const now = Date.now();
+    const width = process.stdout.columns || 80;
+    const rows = process.stdout.rows || 24;
 
     const counts = {
       active: snapshot.metas.filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status)).length,
@@ -134,85 +169,113 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       done: snapshot.metas.filter((x) => x.status === "done").length,
     };
 
-    const headerCard = renderSynxCard({
+    const fixedControlPanel = renderSynxPanel({
       title: "SYNX CONTROL PANEL",
+      borderColor: "cyan",
+      width,
+      lines: this.staticFrame.fixedControlPanelLines,
+    });
+
+    const enginePanel = renderSynxPanel({
+      title: "ENGINE",
+      borderColor: "magenta",
+      width,
+      lines: this.staticFrame.enginePanelLines,
+    });
+
+    const liveControlPanel = renderSynxPanel({
+      title: "SYNX CONTROL PANEL",
+      borderColor: "cyan",
+      width,
       lines: [
         `${spinner} uptime ${formatDuration(now - snapshot.engineStartedAtMs)} | loop ${snapshot.loop}`,
         `Flow: ${synxControlFlowDiagram()}`,
         `Queues: active ${counts.active} | waiting ${counts.waitingHuman} | failed ${counts.failed} | done ${counts.done}`,
       ],
-      borderColor: "cyan",
     });
 
     const active = snapshot.metas
       .filter((x) => ["new", "in_progress", "waiting_agent"].includes(x.status))
-      .sort((a, b) => a.taskId.localeCompare(b.taskId));
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-    const fallbackFocus = snapshot.metas
-      .filter((x) => x.status === "waiting_human" || x.status === "done" || x.status === "failed")
-      .sort((a, b) => (new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()))
-      .slice(0, 1);
-
-    const focus = active.length ? active.slice(0, 4) : fallbackFocus;
-    const taskCards: string[] = [];
-    if (!focus.length) {
-      taskCards.push(renderSynxCard({
-        title: "TASK BUS",
-        lines: [synxMuted("No active tasks. Waiting for new work...")],
-        borderColor: "cyan",
-      }));
+    const taskBusLines: string[] = [];
+    const current = active[0];
+    if (!current) {
+      taskBusLines.push(synxMuted("No active tasks. Waiting for new work..."));
     } else {
-      for (const meta of focus) {
-        const progress = progressForMeta(meta);
-        const bar = progressBar(progress.ratio);
-        const elapsed = formatDuration(now - new Date(meta.createdAt).getTime());
-        const current = stageLabel(meta.currentStage);
-        const agent = meta.currentAgent || meta.nextAgent || "[none]";
-        taskCards.push(renderSynxCard({
-          title: `TASK ${shortTaskId(meta.taskId)}`,
-          lines: [
-            `State: ${formatSynxStatus(statusTone(meta))} | Type: ${meta.type}`,
-            `Stage: ${current} | Agent: ${agent}`,
-            `Progress: ${bar} ${progress.done}/${progress.total} | elapsed ${elapsed}`,
-            `Route: ${stageRoute(meta).map((stage) => `[${stageLabel(stage)}]`).join(" -> ")}`,
-          ],
-          borderColor: statusBorderColor(meta),
-        }));
-      }
-      if (active.length > 4) {
-        taskCards.push(synxMuted(`... and ${active.length - 4} more active task(s)`));
-      }
+      const progress = progressForMeta(current);
+      const currentStage = stageLabel(current.currentStage);
+      const currentAgent = current.currentAgent || current.nextAgent || "[none]";
+      taskBusLines.push(`Task: ${shortTaskId(current.taskId)} | Type: ${current.type}`);
+      taskBusLines.push(`State: ${formatSynxStatus(taskTone(current))} | Stage: ${currentStage} | Agent: ${currentAgent}`);
+      taskBusLines.push(`Progress: ${progressBar(progress.ratio)} ${progress.done}/${progress.total}`);
     }
 
-    const renderedText = [headerCard, ...taskCards].join("\n");
-    const renderedLines = renderedText.split("\n").length;
+    const taskBus = renderSynxPanel({
+      title: "TASK BUS",
+      borderColor: "cyan",
+      width,
+      lines: taskBusLines,
+    });
 
-    if (!this.cursorHidden) {
-      process.stdout.write("\x1b[?25l");
-      this.cursorHidden = true;
+    const composeFrame = (logoStyle: SynxLogoStyle, headerLines: string[]): string => {
+      const frameSections = [
+        renderSynxLogo(width, logoStyle),
+        ...headerLines,
+        fixedControlPanel,
+        enginePanel,
+        liveControlPanel,
+        taskBus,
+      ].filter((x) => Boolean(x && x.trim()));
+      return frameSections.join("\n");
+    };
+
+    let headerLines = this.staticFrame.headerContextLines.slice(0, 4);
+    let logoStyle: SynxLogoStyle = "auto";
+    let frame = composeFrame(logoStyle, headerLines);
+
+    const lineCount = (text: string): number => text.split("\n").length;
+    const maxLines = Math.max(10, rows - 1);
+    if (lineCount(frame) > maxLines) {
+      headerLines = headerLines.slice(-2);
+      logoStyle = rows < 22 ? "compact" : "auto";
+      frame = composeFrame(logoStyle, headerLines);
+    }
+    if (lineCount(frame) > maxLines) {
+      headerLines = headerLines.slice(-1);
+      logoStyle = "micro";
+      frame = composeFrame(logoStyle, headerLines);
+    }
+    if (lineCount(frame) > maxLines) {
+      frame = [
+        renderSynxLogo(width, "micro"),
+        ...headerLines.slice(-1),
+        liveControlPanel,
+        taskBus,
+      ].join("\n");
     }
 
-    if (this.linesRendered > 0) {
-      process.stdout.write(`\x1b[${this.linesRendered}A`);
+    if (this.needsFullClear) {
+      this.log.clear();
+      process.stdout.write("\x1b[2J\x1b[0;0H");
+      this.needsFullClear = false;
     }
-    process.stdout.write("\x1b[0J");
-    process.stdout.write(`${renderedText}\n`);
-    this.linesRendered = renderedLines;
+    this.log(frame);
   }
 
   stop(): void {
-    if (!this.linesRendered && !this.cursorHidden) return;
-    process.stdout.write("\x1b[0m");
-    if (this.cursorHidden) {
-      process.stdout.write("\x1b[?25h");
-      this.cursorHidden = false;
+    if (process.stdout.isTTY) {
+      process.stdout.off("resize", this.handleResize);
     }
-    this.linesRendered = 0;
+    this.log.done();
   }
 }
 
 class SilentStartProgressRenderer implements StartProgressRenderer {
   readonly enabled = false;
+  setStaticFrame(): void {
+    // no-op
+  }
   render(): void {
     // no-op
   }
