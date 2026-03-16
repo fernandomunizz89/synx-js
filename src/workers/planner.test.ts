@@ -56,7 +56,7 @@ vi.mock("../lib/project-handoff.js", async (importOriginal) => {
       detectedLanguages: ["TypeScript"],
       detectedFrameworks: [],
       scriptSummary: { lint: [], typecheck: [], check: [], test: [], e2e: [], build: [] },
-      tooling: { hasTsConfig: true, hasCypressConfig: false, hasPlaywrightConfig: false, hasEslintConfig: false },
+      tooling: { hasTsConfig: true, hasPlaywrightConfig: false, hasEslintConfig: false },
     }),
   };
 });

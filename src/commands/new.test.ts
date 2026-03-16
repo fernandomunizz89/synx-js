@@ -58,8 +58,8 @@ describe.sequential("commands/new", () => {
     mocks.commandExample.mockReset().mockImplementation((value: string) => `synx ${value}`);
     mocks.resolveTaskQaPreferences.mockReset().mockReturnValue({
       e2ePolicy: "required",
-      e2eFramework: "cypress",
-      objective: "Fazer os testes E2E do Cypress passarem.",
+      e2eFramework: "playwright",
+      objective: "Make Playwright E2E tests pass.",
     });
     consoleSpy.mockClear();
   });
@@ -82,7 +82,7 @@ describe.sequential("commands/new", () => {
       "--e2e",
       "required",
       "--e2e-framework",
-      "cypress",
+      "playwright",
       "--qa-objective",
       "Pass all main flows",
     ]);
@@ -100,8 +100,8 @@ describe.sequential("commands/new", () => {
       extraContext: {
         qaPreferences: {
           e2ePolicy: "required",
-          e2eFramework: "cypress",
-          objective: "Fazer os testes E2E do Cypress passarem.",
+          e2eFramework: "playwright",
+          objective: "Make Playwright E2E tests pass.",
         },
       },
     });

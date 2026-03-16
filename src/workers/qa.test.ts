@@ -67,15 +67,6 @@ vi.mock("../lib/code-quality-bootstrap.js", () => ({
   }),
 }));
 
-vi.mock("../lib/qa-cypress-bootstrap.js", () => ({
-  ensureQaCypressBootstrap: vi.fn().mockResolvedValue({
-    checks: [],
-    notes: [],
-    warnings: [],
-    changedFiles: [],
-  }),
-}));
-
 vi.mock("../lib/workspace-tools.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/workspace-tools.js")>();
   return {
@@ -90,7 +81,7 @@ vi.mock("../lib/workspace-tools.js", async (importOriginal) => {
       e2eScripts: [],
     }),
     getGitChangedFiles: vi.fn().mockResolvedValue(["src/index.ts"]),
-    runCypressSelectorPreflight: vi.fn().mockResolvedValue({ missingSelectors: [] }),
+    runE2ESelectorPreflight: vi.fn().mockResolvedValue({ missingSelectors: [] }),
     runProjectChecks: vi.fn().mockResolvedValue([{
       command: "mock e2e check",
       status: "passed",

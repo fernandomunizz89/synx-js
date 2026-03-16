@@ -16,26 +16,12 @@ const commandRunnerMocks = vi.hoisted(() => ({
   }>>(),
 }));
 
-const cypressMocks = vi.hoisted(() => ({
-  buildCypressQaOverrides: vi.fn<() => Promise<{ extraArgs: string[]; reportPath: string; qaConfigNotes: string[] }>>(),
-  readCypressReportDiagnostics: vi.fn<() => Promise<{ diagnostics: string[]; artifacts: string[] }>>(),
-}));
-
 vi.mock("./command-runner.js", () => ({
   readPackageScripts: commandRunnerMocks.readPackageScripts,
   selectPackageManager: commandRunnerMocks.selectPackageManager,
   buildScriptCommand: commandRunnerMocks.buildScriptCommand,
   runCommand: commandRunnerMocks.runCommand,
 }));
-
-vi.mock("./cypress-tools.js", async () => {
-  const actual = await vi.importActual<typeof import("./cypress-tools.js")>("./cypress-tools.js");
-  return {
-    ...actual,
-    buildCypressQaOverrides: cypressMocks.buildCypressQaOverrides,
-    readCypressReportDiagnostics: cypressMocks.readCypressReportDiagnostics,
-  };
-});
 
 import { detectTestCapabilities, runProjectChecks } from "./validation-checks.js";
 
@@ -48,8 +34,6 @@ describe.sequential("validation-checks", () => {
     commandRunnerMocks.selectPackageManager.mockReset();
     commandRunnerMocks.buildScriptCommand.mockReset();
     commandRunnerMocks.runCommand.mockReset();
-    cypressMocks.buildCypressQaOverrides.mockReset();
-    cypressMocks.readCypressReportDiagnostics.mockReset();
 
     commandRunnerMocks.selectPackageManager.mockReturnValue("npm");
     commandRunnerMocks.buildScriptCommand.mockImplementation((_, script, extraArgs = []) => ({
@@ -64,13 +48,12 @@ describe.sequential("validation-checks", () => {
 
   it("detects test capabilities from package scripts and spec files", async () => {
     await fs.mkdir(path.join(root, "e2e"), { recursive: true });
-    await fs.mkdir(path.join(root, "cypress", "e2e"), { recursive: true });
     await fs.writeFile(path.join(root, "e2e", "main-flow.cy.ts"), "describe('x', () => {})", "utf8");
-    await fs.writeFile(path.join(root, "cypress", "e2e", "timer.spec.ts"), "describe('y', () => {})", "utf8");
+    await fs.writeFile(path.join(root, "e2e", "timer.spec.ts"), "describe('y', () => {})", "utf8");
 
     commandRunnerMocks.readPackageScripts.mockResolvedValue({
       test: "vitest run",
-      "test:e2e": "cypress run",
+      "test:e2e": "playwright test",
     });
 
     const capabilities = await detectTestCapabilities(root);
@@ -79,22 +62,13 @@ describe.sequential("validation-checks", () => {
     expect(capabilities.hasE2ESpecFiles).toBe(true);
     expect(capabilities.unitScripts).toContain("test");
     expect(capabilities.e2eScripts).toContain("test:e2e");
-    expect(capabilities.e2eSpecFiles).toEqual(expect.arrayContaining(["e2e/main-flow.cy.ts", "cypress/e2e/timer.spec.ts"]));
+    expect(capabilities.e2eSpecFiles).toEqual(expect.arrayContaining(["e2e/main-flow.cy.ts", "e2e/timer.spec.ts"]));
   });
 
-  it("runs scripted checks and enriches cypress diagnostics", async () => {
+  it("runs scripted checks and returns diagnostics", async () => {
     commandRunnerMocks.readPackageScripts.mockResolvedValue({
       check: "tsc --noEmit",
-      "cypress:run": "cypress run",
-    });
-    cypressMocks.buildCypressQaOverrides.mockResolvedValue({
-      extraArgs: ["--reporter", "junit"],
-      reportPath: path.join(root, "qa-report.xml"),
-      qaConfigNotes: ["QA override enabled"],
-    });
-    cypressMocks.readCypressReportDiagnostics.mockResolvedValue({
-      diagnostics: ["Test \"main flow\": Timed out"],
-      artifacts: [".ai-agents/runtime/qa-cypress/report.xml"],
+      "playwright:test": "playwright test",
     });
 
     commandRunnerMocks.runCommand
@@ -110,7 +84,7 @@ describe.sequential("validation-checks", () => {
         timedOut: false,
         durationMs: 400,
         stdout: "",
-        stderr: "CypressError: Timed out retrying",
+        stderr: "Timeout while running e2e",
       });
 
     const results = await runProjectChecks({
@@ -125,11 +99,9 @@ describe.sequential("validation-checks", () => {
     });
     expect(results[1]).toMatchObject({
       status: "failed",
-      command: "npm run cypress:run --reporter junit",
+      command: "npm run playwright:test",
     });
-    expect(results[1]?.qaConfigNotes).toContain("QA override enabled");
-    expect(results[1]?.artifacts).toContain(".ai-agents/runtime/qa-cypress/report.xml");
-    expect(results[1]?.diagnostics).toEqual(expect.arrayContaining(["Test \"main flow\": Timed out"]));
+    expect(results[1]?.diagnostics?.join("\n")).toMatch(/e2e|timeout/i);
   });
 
   it("falls back to language-aware TypeScript checks when scripts are missing", async () => {
