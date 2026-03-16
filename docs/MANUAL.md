@@ -52,7 +52,7 @@ When running in an interactive terminal, `start` also shows a live progress pane
 - SYNX cyber logo + tagline
 - control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Planner]`
 - double-line cards for control/config/task states
-- integrated prompt below `TASK BUS`: `SYNX > ...`
+- `USER INPUT` card (boxed prompt with visible cursor indicator)
 - inline event stream card (clean runtime updates without terminal pollution)
 - automatic `HUMAN INPUT` card when a task reaches `waiting_human`
 - per-task status palette:
@@ -64,9 +64,11 @@ When running in an interactive terminal, `start` also shows a live progress pane
 You can operate SYNX from the same terminal while `start` is running:
 - type commands directly in the prompt (`new`, `status --all`, `approve`, `reprove --reason "..."`, `stop`)
 - use quick hotkeys:
+  - `?`: show available commands
   - `F1`: help
   - `F2`: preload new-task template in prompt
   - `F3`: pause/resume processing loop
+  - `F4`: toggle `CONSOLE` / `EVENT STREAM`
   - `F10`: request graceful stop
 
 When `HUMAN INPUT` mode is active, free-text replies are treated as reprove reasons for the waiting task unless you type an explicit command.
