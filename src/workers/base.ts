@@ -175,6 +175,10 @@ export abstract class WorkerBase {
     providerBackoffRetries?: number;
     providerBackoffWaitMs?: number;
     providerRateLimitWaitMs?: number;
+    estimatedInputTokens?: number;
+    estimatedOutputTokens?: number;
+    estimatedTotalTokens?: number;
+    estimatedCostUsd?: number;
   }): Promise<void> {
     const taskPath = taskDir(args.taskId);
     const endedAt = nowIso();
@@ -209,6 +213,10 @@ export abstract class WorkerBase {
       providerBackoffRetries: args.providerBackoffRetries,
       providerBackoffWaitMs: args.providerBackoffWaitMs,
       providerRateLimitWaitMs: args.providerRateLimitWaitMs,
+      estimatedInputTokens: args.estimatedInputTokens,
+      estimatedOutputTokens: args.estimatedOutputTokens,
+      estimatedTotalTokens: args.estimatedTotalTokens,
+      estimatedCostUsd: args.estimatedCostUsd,
     });
     meta.currentStage = args.stage;
     meta.currentAgent = this.agent;
@@ -233,6 +241,10 @@ export abstract class WorkerBase {
       providerBackoffRetries: args.providerBackoffRetries,
       providerBackoffWaitMs: args.providerBackoffWaitMs,
       providerRateLimitWaitMs: args.providerRateLimitWaitMs,
+      estimatedInputTokens: args.estimatedInputTokens,
+      estimatedOutputTokens: args.estimatedOutputTokens,
+      estimatedTotalTokens: args.estimatedTotalTokens,
+      estimatedCostUsd: args.estimatedCostUsd,
     });
     await logTaskEvent(taskPath, `${this.agent} finished ${args.stage} in ${durationMs}ms`);
     await logDaemon(`${this.agent} finished ${args.stage} for ${args.taskId} in ${durationMs}ms`);

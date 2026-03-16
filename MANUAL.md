@@ -251,6 +251,8 @@ Advanced tuning:
 - set `AI_AGENTS_PROVIDER_TIMEOUT_MS` to control provider timeout per call
 - set `AI_AGENTS_PROVIDER_DISCOVERY_TIMEOUT_MS` to control model discovery timeout checks
 - set `AI_AGENTS_OPENAI_MAX_TOKENS` to cap completion tokens for OpenAI-compatible providers
+- set `AI_AGENTS_PROVIDER_INPUT_COST_PER_1K_USD` to estimate input-token USD cost in metrics output (default `0`)
+- set `AI_AGENTS_PROVIDER_OUTPUT_COST_PER_1K_USD` to estimate output-token USD cost in metrics output (default `0`)
 - set `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE=<n>` to enforce local provider-call throughput cap (`0` disables, default `0`)
 - set `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS=<ms>` to tune the local limiter window (default `60000`, min `200`)
 - set `AI_AGENTS_PROVIDER_BACKOFF_MAX_RETRIES=<n>` for transient-provider retries (default `2`, max `6`)
@@ -269,7 +271,7 @@ Polling/queue audit logs:
 
 Provider throttle audit logs:
 - `.ai-agents/logs/provider-throttle.jsonl`: local limiter waits, backoff scheduling, retry attempts, recovery, and exhaustion events.
-- `.ai-agents/logs/stage-metrics.jsonl`: per-stage provider metrics now include `providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, and `providerRateLimitWaitMs`.
+- `.ai-agents/logs/stage-metrics.jsonl`: per-stage provider metrics now include `providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, `providerRateLimitWaitMs`, `estimatedInputTokens`, `estimatedOutputTokens`, `estimatedTotalTokens`, and `estimatedCostUsd`.
 - `.ai-agents/logs/provider-model-resolution.jsonl`: LM Studio model autodiscovery/selection/fallback events.
 
 LM Studio model id behavior:

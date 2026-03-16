@@ -318,6 +318,10 @@ function summarizeOutput(output: unknown): Record<string, unknown> {
     "providerBackoffRetries",
     "providerBackoffWaitMs",
     "providerRateLimitWaitMs",
+    "estimatedInputTokens",
+    "estimatedOutputTokens",
+    "estimatedTotalTokens",
+    "estimatedCostUsd",
   ];
   for (const field of numericFields) {
     if (typeof row[field] === "number" && Number.isFinite(row[field])) {

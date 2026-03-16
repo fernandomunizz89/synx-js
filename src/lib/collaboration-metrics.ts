@@ -72,6 +72,10 @@ interface TaskComputedMetrics {
   providerRateLimitWaitMs: number;
   implementerMs: number;
   fullBuildChecks: number;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedTotalTokens: number;
+  estimatedCostUsd: number;
   firstDiagnosisMs?: number;
   status: "success" | "failed" | "in_progress";
 }
@@ -99,6 +103,12 @@ export interface CollaborationMetricsReport {
     avgQueueLatencyMs: number;
     queueLatencyP95Ms: number;
     fullBuildChecksPerTask: number;
+    estimatedInputTokensTotal: number;
+    estimatedOutputTokensTotal: number;
+    estimatedTotalTokens: number;
+    avgEstimatedTokensPerTask: number;
+    estimatedCostUsdTotal: number;
+    avgEstimatedCostUsdPerTask: number;
   };
   stageSummary: StageSummaryRow[];
   failuresByCategory: Array<{ category: string; count: number }>;
@@ -411,6 +421,9 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
   let retryWaitMs = 0;
   let retryAdditionalMsFromWorkflow = 0;
   let fullBuildChecksTotal = 0;
+  let estimatedInputTokensTotal = 0;
+  let estimatedOutputTokensTotal = 0;
+  let estimatedCostUsdTotal = 0;
   const diagnosisDurations: number[] = [];
 
   for (const row of auditRows) {
@@ -448,6 +461,13 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
     const providerBackoffRetries = stages.reduce((sum, row) => sum + asNumber(row.providerBackoffRetries), 0);
     const providerBackoffWaitMs = stages.reduce((sum, row) => sum + asNumber(row.providerBackoffWaitMs), 0);
     const providerRateLimitWaitMs = stages.reduce((sum, row) => sum + asNumber(row.providerRateLimitWaitMs), 0);
+    const estimatedInputTokens = stages.reduce((sum, row) => sum + asNumber(row.estimatedInputTokens), 0);
+    const estimatedOutputTokens = stages.reduce((sum, row) => sum + asNumber(row.estimatedOutputTokens), 0);
+    const estimatedCostUsd = stages.reduce((sum, row) => sum + asNumber(row.estimatedCostUsd), 0);
+    const estimatedTotalTokens = estimatedInputTokens + estimatedOutputTokens;
+    estimatedInputTokensTotal += estimatedInputTokens;
+    estimatedOutputTokensTotal += estimatedOutputTokens;
+    estimatedCostUsdTotal += estimatedCostUsd;
     retryWaitMs += providerBackoffWaitMs + providerRateLimitWaitMs;
 
     let firstDiagnosisMs: number | undefined;
@@ -524,6 +544,10 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
       providerRateLimitWaitMs,
       implementerMs,
       fullBuildChecks,
+      estimatedInputTokens,
+      estimatedOutputTokens,
+      estimatedTotalTokens,
+      estimatedCostUsd,
       firstDiagnosisMs,
       status,
     });
@@ -584,6 +608,16 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
       avgQueueLatencyMs: avg(queueLatencies),
       queueLatencyP95Ms: percentile(queueLatencies, 0.95),
       fullBuildChecksPerTask: taskMetrics.length ? Number((fullBuildChecksTotal / taskMetrics.length).toFixed(2)) : 0,
+      estimatedInputTokensTotal,
+      estimatedOutputTokensTotal,
+      estimatedTotalTokens: estimatedInputTokensTotal + estimatedOutputTokensTotal,
+      avgEstimatedTokensPerTask: taskMetrics.length
+        ? Number((((estimatedInputTokensTotal + estimatedOutputTokensTotal) / taskMetrics.length).toFixed(2)))
+        : 0,
+      estimatedCostUsdTotal: Number(estimatedCostUsdTotal.toFixed(6)),
+      avgEstimatedCostUsdPerTask: taskMetrics.length
+        ? Number((estimatedCostUsdTotal / taskMetrics.length).toFixed(6))
+        : 0,
     },
     stageSummary,
     failuresByCategory,

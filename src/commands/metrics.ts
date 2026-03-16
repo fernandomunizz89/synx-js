@@ -55,6 +55,8 @@ export const metricsCommand = new Command("metrics")
     console.log(`- Avg retries/task: ${report.taskMetrics.avgRetriesPerTask} | handoffs/task: ${report.taskMetrics.avgHandoffsPerTask} | loops/task: ${report.taskMetrics.avgLoopsPerTask}`);
     console.log(`- QA return rate: ${pct(report.taskMetrics.qaReturnRate)} | full builds/task: ${report.taskMetrics.fullBuildChecksPerTask}`);
     console.log(`- Queue latency avg: ${report.taskMetrics.avgQueueLatencyMs}ms | p95: ${report.taskMetrics.queueLatencyP95Ms}ms`);
+    console.log(`- Estimated tokens: total=${report.taskMetrics.estimatedTotalTokens} (in=${report.taskMetrics.estimatedInputTokensTotal}, out=${report.taskMetrics.estimatedOutputTokensTotal}) | avg/task=${report.taskMetrics.avgEstimatedTokensPerTask}`);
+    console.log(`- Estimated cost (USD): total=${report.taskMetrics.estimatedCostUsdTotal.toFixed(6)} | avg/task=${report.taskMetrics.avgEstimatedCostUsdPerTask.toFixed(6)}`);
 
     console.log("\nCollaboration quality");
     console.log(`- Useful logs: ${report.collaboration.logsUseful} | informative logs: ${report.collaboration.logsInformative} | useful ratio: ${pct(report.collaboration.usefulLogRatio)}`);

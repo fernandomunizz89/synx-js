@@ -266,6 +266,8 @@ Troubleshooting quick checks:
 - `AI_AGENTS_PROVIDER_TIMEOUT_MS`: timeout per provider call (default: `300000` ms).
 - `AI_AGENTS_PROVIDER_DISCOVERY_TIMEOUT_MS`: timeout for provider model discovery checks (default: `10000` ms).
 - `AI_AGENTS_OPENAI_MAX_TOKENS`: optional completion token cap for OpenAI-compatible providers.
+- `AI_AGENTS_PROVIDER_INPUT_COST_PER_1K_USD`: optional input-token price used for local estimated cost metrics (default `0`).
+- `AI_AGENTS_PROVIDER_OUTPUT_COST_PER_1K_USD`: optional output-token price used for local estimated cost metrics (default `0`).
 - `AI_AGENTS_PROVIDER_JSON_PARSE_RETRIES`: extra retries for JSON-format parsing failures in the provider (default: `1`, max: `2`).
 - `AI_AGENTS_PROVIDER_MAX_REQUESTS_PER_MINUTE`: local per-process provider call cap (`0` disables; default `0`).
 - `AI_AGENTS_PROVIDER_RATE_LIMIT_WINDOW_MS`: local limiter window size in ms (default `60000`, min `200`).
@@ -293,7 +295,7 @@ Rate limiting/backoff notes:
 - Backoff applies only to transient provider errors (for example `429`, `408`, `5xx`, network timeout/fetch failures).
 - Permanent errors do not loop through backoff retries.
 - Structured throttle logs are written to `.ai-agents/logs/provider-throttle.jsonl`.
-- Stage timing now includes provider-call metrics (`providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, `providerRateLimitWaitMs`).
+- Stage timing now includes provider-call metrics (`providerAttempts`, `providerBackoffRetries`, `providerBackoffWaitMs`, `providerRateLimitWaitMs`) and estimated token/cost fields (`estimatedInputTokens`, `estimatedOutputTokens`, `estimatedTotalTokens`, `estimatedCostUsd`).
 
 ## Performance controls
 - `AI_AGENTS_DISABLE_CONFIG_CACHE=1`: disables in-memory cache for resolved global+local config.

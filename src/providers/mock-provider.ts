@@ -148,6 +148,10 @@ export class MockProvider implements LlmProvider {
       providerBackoffRetries: 0,
       providerBackoffWaitMs: 0,
       providerRateLimitWaitMs: 0,
+      estimatedInputTokens: 0,
+      estimatedOutputTokens: 0,
+      estimatedTotalTokens: 0,
+      estimatedCostUsd: 0,
     };
   }
 }

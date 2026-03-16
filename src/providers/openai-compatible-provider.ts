@@ -384,6 +384,31 @@ function estimateTokensFromChars(chars: number): number {
   return Math.ceil(Math.max(0, chars) / 4);
 }
 
+function estimateTokensFromMessages(messages: Array<{ role: "system" | "user"; content: string }>): number {
+  return messages.reduce((sum, message) => sum + estimateTokensFromChars(message.content.length), 0);
+}
+
+function resolveInputCostPer1kTokensUsd(): number {
+  return envNumber("AI_AGENTS_PROVIDER_INPUT_COST_PER_1K_USD", 0, {
+    min: 0,
+    max: 1000,
+  });
+}
+
+function resolveOutputCostPer1kTokensUsd(): number {
+  return envNumber("AI_AGENTS_PROVIDER_OUTPUT_COST_PER_1K_USD", 0, {
+    min: 0,
+    max: 1000,
+  });
+}
+
+function estimateCostUsd(inputTokens: number, outputTokens: number): number {
+  const inputRate = resolveInputCostPer1kTokensUsd();
+  const outputRate = resolveOutputCostPer1kTokensUsd();
+  const cost = ((Math.max(0, inputTokens) / 1000) * inputRate) + ((Math.max(0, outputTokens) / 1000) * outputRate);
+  return Number(cost.toFixed(6));
+}
+
 function resolveContextBudgetChars(): number {
   return envNumber("AI_AGENTS_PROVIDER_MAX_CONTEXT_CHARS", 120_000, {
     integer: true,
@@ -817,6 +842,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     let providerBackoffWaitMs = 0;
     let providerRateLimitWaitMs = 0;
     const providerThrottleReasons: string[] = [];
+    let estimatedInputTokens = 0;
+    let estimatedOutputTokens = 0;
 
     for (let attempt = 1; attempt <= parseAttemptsMax; attempt += 1) {
       const isRetry = attempt > 1;
@@ -829,6 +856,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           maxAttempts: parseAttemptsMax,
         })
         : buildStatelessMessages(request);
+      const estimatedInputTokensForCall = estimateTokensFromMessages(messages);
 
       if (isRetry) {
         await logProviderParseRetry({
@@ -895,6 +923,8 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       providerBackoffWaitMs += callOutcome.backoffWaitMs;
       providerRateLimitWaitMs += callOutcome.rateLimitWaitMs;
       if (callOutcome.backoffReasons.length) providerThrottleReasons.push(...callOutcome.backoffReasons);
+      estimatedInputTokens += estimatedInputTokensForCall * Math.max(1, callOutcome.attemptsUsed);
+      estimatedOutputTokens += estimateTokensFromChars(rawText.length);
       if (isRetry) {
         parseRetryAdditionalDurationMs += Date.now() - callStartedAt;
       }
@@ -932,6 +962,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           providerBackoffRetries,
           providerBackoffWaitMs,
           providerRateLimitWaitMs,
+          estimatedInputTokens,
+          estimatedOutputTokens,
+          estimatedTotalTokens: estimatedInputTokens + estimatedOutputTokens,
+          estimatedCostUsd: estimateCostUsd(estimatedInputTokens, estimatedOutputTokens),
         };
       } catch (error) {
         const parseError = parseFailureReason(error);

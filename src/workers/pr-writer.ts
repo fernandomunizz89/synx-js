@@ -74,6 +74,10 @@ Human Review
       providerBackoffRetries: result.providerBackoffRetries,
       providerBackoffWaitMs: result.providerBackoffWaitMs,
       providerRateLimitWaitMs: result.providerRateLimitWaitMs,
+      estimatedInputTokens: result.estimatedInputTokens,
+      estimatedOutputTokens: result.estimatedOutputTokens,
+      estimatedTotalTokens: result.estimatedTotalTokens,
+      estimatedCostUsd: result.estimatedCostUsd,
     });
 
     await finalizeForHumanReview(taskId);

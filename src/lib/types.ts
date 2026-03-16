@@ -112,6 +112,10 @@ export interface TaskMetaHistoryItem {
   providerBackoffRetries?: number;
   providerBackoffWaitMs?: number;
   providerRateLimitWaitMs?: number;
+  estimatedInputTokens?: number;
+  estimatedOutputTokens?: number;
+  estimatedTotalTokens?: number;
+  estimatedCostUsd?: number;
 }
 
 export interface TaskMeta {
@@ -145,6 +149,10 @@ export interface TimingEntry {
   providerBackoffRetries?: number;
   providerBackoffWaitMs?: number;
   providerRateLimitWaitMs?: number;
+  estimatedInputTokens?: number;
+  estimatedOutputTokens?: number;
+  estimatedTotalTokens?: number;
+  estimatedCostUsd?: number;
 }
 
 export interface ProviderRequest {
@@ -168,6 +176,10 @@ export interface ProviderResult {
   providerBackoffRetries: number;
   providerBackoffWaitMs: number;
   providerRateLimitWaitMs: number;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedTotalTokens: number;
+  estimatedCostUsd: number;
 }
 
 export interface DoctorCheck {

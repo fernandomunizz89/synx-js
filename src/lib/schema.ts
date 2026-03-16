@@ -102,6 +102,10 @@ export const taskMetaHistoryItemSchema = z.object({
   providerBackoffRetries: z.number().optional(),
   providerBackoffWaitMs: z.number().optional(),
   providerRateLimitWaitMs: z.number().optional(),
+  estimatedInputTokens: z.number().optional(),
+  estimatedOutputTokens: z.number().optional(),
+  estimatedTotalTokens: z.number().optional(),
+  estimatedCostUsd: z.number().optional(),
 });
 
 export const taskMetaSchema = z.object({
