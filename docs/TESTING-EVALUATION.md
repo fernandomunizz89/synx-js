@@ -22,7 +22,7 @@ SYNX is a **CLI orchestrator for multi-agent AI pipelines** that coordinates aut
 | Item solicitado | Status |
 |---|---|
 | Testes de `config.ts`, `task.ts`, `runtime.ts` | **Feito** |
-| Testes de `cypress-tools.ts` e `validation-checks.ts` | **Feito** |
+| Testes de `e2e-selector-tools.ts` e `validation-checks.ts` | **Feito** |
 | Testes de comandos (`start/new/setup/status/doctor`) | **Feito** |
 | Testes de workers concretos | **Feito** (`dispatcher`, `planner`, `bug-fixer`, `builder`, `qa`, `pr-writer`) |
 | Testes de providers (`mock` + `openai-compatible` + `lmstudio`) | **Feito** |
@@ -80,7 +80,7 @@ src/
 │   ├── provider-error-meta.ts # Provider error extraction
 │   ├── token-estimation.ts # Token/cost estimation
 │   ├── text-utils.ts       # Text utilities
-│   ├── cypress-tools.ts    # Cypress-specific utilities
+│   ├── e2e-selector-tools.ts    # E2E-specific utilities
 │   ├── command-runner.ts   # Shell command execution
 │   ├── workspace-scanner.ts # File scanning with limits
 │   ├── provider-health.ts  # Provider connectivity checks
@@ -119,13 +119,13 @@ src/
 | `lib/config.ts` | Config loading, merging, caching | Medium | fs, paths, schema |
 | `lib/task.ts` | Task CRUD, lifecycle, meta management | Medium | fs, paths, schema, utils |
 | `lib/runtime.ts` | Lock management, recovery, state machine | High | fs, paths, task, constants |
-| `lib/validation-checks.ts` | Project validation, test detection | High | command-runner, cypress-tools |
+| `lib/validation-checks.ts` | Project validation, test detection | High | command-runner, e2e-selector-tools |
 | `lib/quality-retry-policy.ts` | Adaptive retry logic, failure classification | Medium | text-utils |
 | `lib/workspace-editor.ts` | File edit application, path safety | High | fs, env, workspace-scanner |
 | `lib/model-output-recovery.ts` | LLM output normalization, edit recovery | Medium | None |
 | `lib/provider-error-meta.ts` | Provider error extraction | Low | zod |
 | `lib/token-estimation.ts` | Token/cost estimation | Low | env |
-| `lib/cypress-tools.ts` | Cypress XML parsing, selector preflight | Medium | fs, text-utils, workspace-scanner |
+| `lib/e2e-selector-tools.ts` | E2E XML parsing, selector preflight | Medium | fs, text-utils, workspace-scanner |
 | `lib/command-runner.ts` | Shell command execution with timeout | Medium | child_process |
 | `lib/workspace-scanner.ts` | File scanning with limits | Medium | fs, paths |
 | `lib/provider-health.ts` | Provider connectivity checks | Medium | provider factory |
@@ -1021,7 +1021,7 @@ describe('Quality Retry Policy', () => {
         { lines: ['TS2322: Type mismatch'], expected: 'typing' },
         { lines: ['Cannot find module'], expected: 'import-export' },
         { lines: ['Unexpected token'], expected: 'syntax' },
-        { lines: ['Cypress: Timed out'], expected: 'tests' },
+        { lines: ['E2E: Timed out'], expected: 'tests' },
       ];
 
       testCases.forEach(({ lines, expected }) => {
@@ -1203,32 +1203,32 @@ describe('Token Estimation', () => {
 
 ---
 
-#### 4.1.8 Cypress Tools (`lib/cypress-tools.ts`) 🔴
+#### 4.1.8 E2E Tools (`lib/e2e-selector-tools.ts`) 🔴
 
 ```typescript
-// src/lib/cypress-tools.test.ts
+// src/lib/e2e-selector-tools.test.ts
 import { describe, it, expect } from 'vitest';
 import { 
-  parseCypressJunitDiagnostics,
+  parseE2EJunitDiagnostics,
   collectSelectorsFromSpec,
   hasNativeDataCySelector,
-} from './cypress-tools';
+} from './e2e-selector-tools';
 
-describe('Cypress Tools', () => {
-  describe('parseCypressJunitDiagnostics', () => {
+describe('E2E Tools', () => {
+  describe('parseE2EJunitDiagnostics', () => {
     it('should parse JUnit XML failures', () => {
       const xml = `
         <testsuites>
           <testcase name="should login" classname="Login">
             <failure message="Expected true to be false">
               AssertionError: Expected true to be false
-              at Context.eval (cypress/e2e/login.cy.ts:10:5)
+              at Context.eval (e2e/login.cy.ts:10:5)
             </failure>
           </testcase>
         </testsuites>
       `;
 
-      const result = parseCypressJunitDiagnostics(xml);
+      const result = parseE2EJunitDiagnostics(xml);
       expect(result.length).toBeGreaterThan(0);
       expect(result[0]).toContain('should login');
       expect(result[0]).toContain('Expected true to be false');
@@ -1238,19 +1238,19 @@ describe('Cypress Tools', () => {
       const xml = `
         <testcase name="test">
           <failure>
-            Error at cypress/e2e/app.cy.ts:25:10
+            Error at e2e/app.cy.ts:25:10
           </failure>
         </testcase>
       `;
 
-      const result = parseCypressJunitDiagnostics(xml);
+      const result = parseE2EJunitDiagnostics(xml);
       expect(result).toContainEqual(
-        expect.stringContaining('cypress/e2e/app.cy.ts:25:10'),
+        expect.stringContaining('e2e/app.cy.ts:25:10'),
       );
     });
 
     it('should handle empty XML', () => {
-      expect(parseCypressJunitDiagnostics('')).toEqual([]);
+      expect(parseE2EJunitDiagnostics('')).toEqual([]);
     });
   });
 
@@ -1418,7 +1418,7 @@ describe('SYNX UI', () => {
 - [x] Implement workspace editor tests
 - [x] Implement quality retry policy tests
 - [x] Implement text/token utility tests
-- [x] Implement Cypress tools tests
+- [x] Implement E2E tools tests
 - [x] Implement validation-checks tests
 
 ### Week 3: Integration (MEDIUM Priority)
@@ -1461,7 +1461,7 @@ describe('SYNX UI', () => {
 7. **Retry Logic** - Strategy escalation, abort conditions
 8. **Config Merging** - Global + local + overrides
 9. **Provider Errors** - Rate limit, backoff, retry extraction
-10. **Cypress Integration** - XML parsing, selector detection
+10. **E2E Integration** - XML parsing, selector detection
 
 ### 8.2 Edge Cases
 

@@ -31,15 +31,14 @@ The CLI is ready for future iterations:
 
 ## 2026-03-15 optimization round (QA <-> implementation loop)
 ### Technical changes
-- Added deterministic Cypress config recovery:
-  - generates `cypress.config.cjs` fallback when needed
-  - rewires Cypress scripts to `--config-file cypress.config.cjs`
-  - normalizes `cypress.config.ts` back to lint-safe ESM when agents produce CommonJS in `.ts`
+- Removed E2E-framework coupling from SYNX runtime:
+  - removed framework-specific bootstrap/recovery modules
+  - removed framework-specific provider/check overrides
+  - keeps E2E validation generic via project scripts and `e2e/**` discovery
 - Added model output resilience for implementation agents:
   - malformed `replace_snippet` edits are recovered or safely dropped before schema parse
   - prevents full task failure from partial JSON edit payloads
 - Improved QA signal quality:
-  - Cypress diagnostics now capture config/runtime errors explicitly
   - selector preflight ignores scaffold `example/sample` specs when real specs exist
   - QA drops selector/config findings when unsupported by executed evidence
 - Added deterministic runtime/remediation guidance for repeated E2E value-stability failures:
@@ -47,7 +46,7 @@ The CLI is ready for future iterations:
   - source-level state/update patch guidance in the implicated runtime module before test-only edits
 
 ### Benchmark snapshot (same task title across runs)
-`QA handoff quality check: Cypress selectors and config mismatch`
+`QA handoff quality check: E2E selectors and config mismatch`
 
 | Task | Date (UTC) | Status | History items | QA returns | Wall time |
 | --- | --- | --- | --- | --- | --- |
