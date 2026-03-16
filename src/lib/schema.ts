@@ -27,8 +27,11 @@ const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System")])
   .transform<z.infer<typeof agentNameSchema>>((value) => (value === "System" ? "Human Review" : value));
 const taskMetaCurrentAgentSchema = z
-  .union([agentNameSchema, z.literal(""), z.literal("System")])
-  .transform<z.infer<typeof agentNameSchema> | "">((value) => (value === "System" ? "" : value));
+  .union([agentNameSchema, z.literal(""), z.literal("System"), z.literal("[none]")])
+  .transform<z.infer<typeof agentNameSchema> | "">((value) => {
+    if (value === "System" || value === "[none]") return "";
+    return value;
+  });
 export const e2ePolicySchema = z.enum(["auto", "required", "skip"]);
 export const e2eFrameworkSchema = z.enum(["auto", "cypress", "playwright", "other"]);
 

@@ -12,7 +12,7 @@ function normalizeTaskMetaHistoryAgent(agent: string): TaskMetaHistoryItem["agen
 }
 
 function normalizeTaskMetaAgent(agent: string): TaskMeta["currentAgent"] {
-  if (agent === "System") return "";
+  if (agent === "System" || agent === "[none]") return "";
   return agent as TaskMeta["currentAgent"];
 }
 
