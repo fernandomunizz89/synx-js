@@ -7,6 +7,8 @@ export const ARTIFACT_FILES = {
   bugBrief: "bug-brief.json",
   featureBrief: "feature-brief.json",
   symbolContract: "symbol-contract.json",
+  researchLog: "research-log.json",
+  researchContext: "research-context.json",
 } as const;
 
 function artifactPath(taskId: string, fileName: string): string {
@@ -26,4 +28,3 @@ export async function loadTaskArtifact<T>(taskId: string, fileName: string): Pro
     return null;
   }
 }
-

@@ -37,6 +37,7 @@ export const REQUIRED_PROMPT_FILES = [
   "bug-investigator.md",
   "bug-fixer.md",
   "feature-builder.md",
+  "researcher.md",
   "reviewer.md",
   "qa-validator.md",
   "pr-writer.md",

@@ -75,6 +75,9 @@ export async function ensureProjectInitialized(): Promise<void> {
   const builderPrompt = path.join(promptsDir(), "feature-builder.md");
   if (!(await exists(builderPrompt))) await writeText(builderPrompt, BUILDER_PROMPT.trim() + "\n");
 
+  const researcherPrompt = path.join(promptsDir(), "researcher.md");
+  if (!(await exists(researcherPrompt))) await writeText(researcherPrompt, RESEARCHER_PROMPT.trim() + "\n");
+
   const reviewerPrompt = path.join(promptsDir(), "reviewer.md");
   if (!(await exists(reviewerPrompt))) await writeText(reviewerPrompt, REVIEWER_PROMPT.trim() + "\n");
 
@@ -282,6 +285,37 @@ Return exactly:
     }
   ],
   "nextAgent": "Reviewer"
+}
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const RESEARCHER_PROMPT = `
+You are the Researcher agent in a software development pipeline.
+Return ONLY valid JSON. Do not include markdown, explanations, or code fences.
+
+You do not edit code.
+Your role is to synthesize external technical evidence into a concise recommendation
+for another implementation/planning agent.
+
+Rules:
+- Keep summary concise and technical.
+- Use only provided search evidence and the question context.
+- Prefer official docs and high-signal engineering sources.
+- Do not claim certainty when evidence is weak.
+- Set is_breaking_change true only when recommendation likely requires behavior/API/contract change.
+- Keep sources to most relevant references.
+
+Return exactly:
+{
+  "summary": "string",
+  "sources": [
+    { "title": "string", "url": "https://..." }
+  ],
+  "confidence_score": 0.0,
+  "recommended_action": "string",
+  "is_breaking_change": false
 }
 
 Input JSON:

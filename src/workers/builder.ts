@@ -10,6 +10,7 @@ import { normalizeBuilderLikeModelOutput } from "../lib/model-output-recovery.js
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { runPostEditSanityChecks } from "../lib/post-edit-sanity.js";
 import { buildFailureSignature, buildRetryStrategyInstructions, decideAdaptiveRetry, resolveQualityRepairMaxAttempts, resolveRepeatedSignatureLimit, type RetryStrategy } from "../lib/quality-retry-policy.js";
+import { formatResearchContextTag, requestResearchContext } from "../lib/orchestrator.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../lib/task-artifacts.js";
 import { exists, readJson } from "../lib/fs.js";
 import { taskDir } from "../lib/paths.js";
@@ -285,6 +286,77 @@ export class BuilderWorker extends WorkerBase {
       .filter((item) => item.occurrences >= 2)
       .map((item) => `${item.issue} (x${item.occurrences})`)
       .slice(0, 5);
+    const profileLanguages = Array.isArray((projectProfile as { detectedLanguages?: unknown })?.detectedLanguages)
+      ? ((projectProfile as { detectedLanguages: unknown[] }).detectedLanguages.filter((item): item is string => typeof item === "string"))
+      : [];
+    const profileFrameworks = Array.isArray((projectProfile as { detectedFrameworks?: unknown })?.detectedFrameworks)
+      ? ((projectProfile as { detectedFrameworks: unknown[] }).detectedFrameworks.filter((item): item is string => typeof item === "string"))
+      : [];
+    const researchDecision = await requestResearchContext({
+      taskId,
+      stage: "builder",
+      requesterAgent: this.agent,
+      taskType: baseInput.task.typeHint,
+      previousStage: baseInput.previousStage,
+      errorContext: unique([
+        baseInput.task.rawRequest,
+        ...qaFailures.slice(0, 4),
+        ...latestQaFindings.slice(0, 3).map((item) => `${item.issue} | expected=${item.expectedResult} | received=${item.receivedResult}`),
+      ]).join(" | "),
+      targetTechnology: unique([
+        ...profileLanguages,
+        ...profileFrameworks,
+        config.language || "",
+        config.framework || "",
+      ]).filter(Boolean).join(", "),
+      specificQuestion: repeatedIssues[0]
+        ? `How should we resolve this recurring QA failure: ${repeatedIssues[0]}?`
+        : `What is the safest implementation path for: ${baseInput.task.title}?`,
+      repeatedIssues,
+    });
+    if (researchDecision.status === "abort_to_human") {
+      const escalationOutput = {
+        decision: "research_loop_detected",
+        reason: researchDecision.abortReason || "Research anti-loop guard triggered.",
+        triggerReasons: researchDecision.triggerReasons,
+        researchContext: researchDecision.context,
+      };
+      const escalationView = `# HANDOFF
+
+## Agent
+Feature Builder
+
+## Decision
+Escalated to human review before implementation because Researcher loop guard was triggered.
+
+## Reason
+${researchDecision.abortReason || "Research recommendation repeated while the same QA issue persisted."}
+
+## Trigger Reasons
+${researchDecision.triggerReasons.length ? researchDecision.triggerReasons.map((item) => `- ${item}`).join("\n") : "- [none]"}
+
+## Research Context
+${researchDecision.context ? formatResearchContextTag(researchDecision.context).split("\n").map((line) => `- ${line}`).join("\n") : "- [none]"}
+
+## Next
+Human Review
+`;
+
+      await this.finishStage({
+        taskId,
+        stage: "builder",
+        doneFileName: DONE_FILE_NAMES.builder,
+        viewFileName: "04-implementation.md",
+        viewContent: escalationView,
+        output: escalationOutput,
+        humanApprovalRequired: true,
+        startedAt,
+      });
+      return;
+    }
+    const researchContextTag = researchDecision.context
+      ? `[RESEARCH_CONTEXT]:\n${formatResearchContextTag(researchDecision.context)}`
+      : "";
     const previousSkippedSnippetPaths = await loadPreviousSkippedSnippetPaths(taskId);
     const mustChangeStrategy = (qaHandoffContext?.attempt ?? 0) >= 2 || repeatedIssues.length > 0;
     const requiresE2eMainFlow = qaPreferences.e2eRequired;
@@ -355,6 +427,7 @@ export class BuilderWorker extends WorkerBase {
         featureBrief,
         symbolContracts,
       },
+      researchContext: researchDecision.context,
       executionContract: {
         mustProduceRealEdits: true,
         allowedActions: ["create", "replace", "replace_snippet", "delete"],
@@ -461,7 +534,7 @@ Return exactly this JSON shape:
       taskTypeHint: baseInput.task.typeHint,
       qaAttempt: qaHandoffContext?.attempt ?? 0,
     });
-    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}`;
     const result = await provider.generateStructured({
       agent: "Feature Builder",
       taskId,
@@ -753,7 +826,7 @@ Return exactly this JSON shape:
           abandonCriteria: retryDecision.abandonCriteria,
         },
       };
-      const repairPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(repairInput, null, 2))}\n\n${roleContract}\n\n${strictContract}\n\nQUALITY GATE REMEDIATION:\n- Current attempt: ${qualityRepairAttempts}/${maxQualityRepairAttempts}.\n- Fix every blocking failure from qualityGate.blockingFailures before handover.\n- Keep edits scoped to qualityGate.scopeFiles when possible.\n- Do not create unrelated behavior changes.\n- If diagnostics mention TS6198 or no-unused-vars, remove or rename unused bindings so lint/typecheck passes.\n- If diagnostics mention TS2322 / IntrinsicAttributes, align props with existing component contracts instead of widening APIs blindly.\n- Return valid JSON with concrete edits only.\n\n${retryInstructions}`;
+      const repairPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(repairInput, null, 2))}\n\n${roleContract}\n\n${strictContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}\n\nQUALITY GATE REMEDIATION:\n- Current attempt: ${qualityRepairAttempts}/${maxQualityRepairAttempts}.\n- Fix every blocking failure from qualityGate.blockingFailures before handover.\n- Keep edits scoped to qualityGate.scopeFiles when possible.\n- Do not create unrelated behavior changes.\n- If diagnostics mention TS6198 or no-unused-vars, remove or rename unused bindings so lint/typecheck passes.\n- If diagnostics mention TS2322 / IntrinsicAttributes, align props with existing component contracts instead of widening APIs blindly.\n- Return valid JSON with concrete edits only.\n\n${retryInstructions}`;
       const retryStartedAt = Date.now();
       const repairResult = await provider.generateStructured({
         agent: "Feature Builder",
@@ -1019,6 +1092,15 @@ ${qualityBootstrap.warnings.length ? qualityBootstrap.warnings.map((x) => `- WAR
 
 ## QA Context Received (Latest Return)
 ${formatQaFindingsForView(latestQaFindings)}
+
+## Research Context
+${researchDecision.context
+    ? `- Trigger reasons: ${researchDecision.triggerReasons.join(", ") || "[none]"}
+- Reused context: ${researchDecision.reusedContext ? "yes" : "no"}
+- Summary: ${researchDecision.context.summary}
+- Recommended action: ${researchDecision.context.recommendedAction}
+- Confidence: ${researchDecision.context.confidenceScore.toFixed(2)}
+${researchDecision.context.sources.length ? researchDecision.context.sources.slice(0, 4).map((item) => `- Source: ${item.title} (${item.url})`).join("\n") : "- Source: [none]"}` : "- [none]"}
 
 ## Upstream Symbol Contracts
 ${Array.isArray(symbolContracts) && symbolContracts.length
