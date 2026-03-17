@@ -212,7 +212,67 @@ describe("provider-health", () => {
       const result = await checkProviderHealth(config);
       expect(result.reachable).toBe(true);
       expect(result.modelFound).toBe(true);
+      expect(result.modelFound).toBe(true);
       expect(result.message).toContain("auto-discovery selected model: auto-selected");
     });
+
+    it("should handle lmstudio fallback when target is auto and auto-discovery is disabled", async () => {
+        vi.spyOn(lmstudio, "resolveLmStudioRuntimeSettings").mockReturnValue({
+         configuredModel: "AUTO",
+         fallbackModel: "fallback-model",
+         autoDiscoverModel: false,
+         baseUrlRoot: "http://localhost:1234",
+         baseUrlApi: "http://localhost:1234/v1",
+         apiKey: "any",
+         baseUrlEnv: "",
+         apiKeyEnv: "",
+       });
+ 
+       // Mock findDiscoveredModelMatch to return the fallback
+       vi.spyOn(modelSupport, "findDiscoveredModelMatch").mockReturnValue({
+         exact: true,
+         matchedModel: "fallback-model",
+       });
+ 
+       const mockFetch = vi.fn().mockResolvedValue({
+         ok: true,
+         json: () => Promise.resolve({ data: [{ id: "fallback-model" }] }),
+       });
+       vi.stubGlobal("fetch", mockFetch);
+ 
+       const config = { type: "lmstudio" as const, model: "AUTO" };
+       const result = await checkProviderHealth(config);
+       expect(result.reachable).toBe(true);
+       expect(result.modelFound).toBe(true);
+       expect(result.message).toContain("fallback model is loaded: fallback-model");
+     });
+
+     it("should handle lmstudio failure when auto-discovery disabled and no fallback matches", async () => {
+        vi.spyOn(lmstudio, "resolveLmStudioRuntimeSettings").mockReturnValue({
+         configuredModel: "AUTO",
+         fallbackModel: "non-existent",
+         autoDiscoverModel: false,
+         baseUrlRoot: "http://localhost:1234",
+         baseUrlApi: "http://localhost:1234/v1",
+         apiKey: "any",
+         baseUrlEnv: "",
+         apiKeyEnv: "",
+       });
+ 
+       // Mock findDiscoveredModelMatch to return no match
+       vi.spyOn(modelSupport, "findDiscoveredModelMatch").mockReturnValue(null);
+ 
+       const mockFetch = vi.fn().mockResolvedValue({
+         ok: true,
+         json: () => Promise.resolve({ data: [{ id: "some-other-model" }] }),
+       });
+       vi.stubGlobal("fetch", mockFetch);
+ 
+       const config = { type: "lmstudio" as const, model: "AUTO" };
+       const result = await checkProviderHealth(config);
+       expect(result.reachable).toBe(true);
+       expect(result.modelFound).toBe(false);
+       expect(result.message).toContain("no fixed loaded model could be resolved");
+     });
   });
 });

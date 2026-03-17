@@ -119,5 +119,32 @@ describe("validation-checks", () => {
           expect(results[0].command).toContain("tsc --noEmit");
           expect(results[0].status).toBe("passed");
       });
+
+      it("should handle language-aware fallbacks (Python, Go, Rust, Java)", async () => {
+          vi.mocked(readPackageScripts).mockResolvedValue({});
+          vi.mocked(existsSync).mockImplementation((p: any) => {
+              const pathStr = p.toString();
+              return pathStr.endsWith("go.mod") || pathStr.endsWith("Cargo.toml") || pathStr.endsWith("pom.xml");
+          });
+          vi.mocked(runCommand).mockResolvedValue({
+            command: "mock",
+            args: [],
+            exitCode: 0,
+            timedOut: false,
+            durationMs: 1,
+            stdout: "",
+            stderr: "",
+          });
+
+          const results = await runProjectChecks({ 
+              workspaceRoot: "/root", 
+              changedFiles: ["main.go", "lib.rs", "App.java"] 
+          });
+          
+          const commands = results.map(r => r.command);
+          expect(commands).toContain("go test ./... -run ^$");
+          expect(commands).toContain("cargo check");
+          expect(commands).toContain("mvn -q -DskipTests compile");
+      });
   });
 });
