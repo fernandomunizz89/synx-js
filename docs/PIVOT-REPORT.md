@@ -1,6 +1,6 @@
 # Architect's Report: Strategic Pivot for Dream Stack 2026
 
-As a Senior Systems Architect, I have conducted an analysis of the current orchestration infrastructure and hereby declare the "Strategic Pivot" of SINX.js. The current generic approach is giving way to a Squad of highly focused and deterministic Expert Agents based on our corporate "Dream Stack 2026" vision.
+As a Senior Systems Architect, I have conducted an analysis of the current orchestration infrastructure and hereby declare the "Strategic Pivot" of SYNX.js. The current generic approach is giving way to a Squad of highly focused and deterministic Expert Agents based on our corporate "Dream Stack 2026" vision.
 
 ---
 
@@ -39,13 +39,13 @@ The analysis revealed 8 (+1 research) instances of generic workers, all attempti
 
 It is time to retire the centralized `builder` and agnostic figures. The redirection is based on the strict separation of the "Dream Stack 2026" architecture:
 
-| Old Agent (Generic) | New SINX.js Specialist | Stack Focus | Test / Domain Focus |
+| Old Agent (Generic) | New SYNX.js Specialist | Stack Focus | Test / Domain Focus |
 | :--- | :--- | :--- | :--- |
-| *Dispatcher + Planner + Builder* | **Sinx-Front-Expert** | Next.js (App Router), TailwindCSS | Accessibility Rendering (a11y), Storybook |
-| *Dispatcher + Planner + Builder* | **Sinx-Mobile-Expert** | React Native, Expo | Native Tests, Memory Management, UI Performance |
-| *Dispatcher + Planner + BugFixer*| **Sinx-Back-Expert** | Node (NestJS / Fastify), Prisma ORM | Security, Type Safety, Vitest (Integration) |
-| *QA Validator + Bug Investigator* | **Sinx-QA-Engineer** | Playwright, Vitest (E2E/Unit) | Regression automation, Mutation Coverage |
-| *Reviewer + PR Writer* | **Sinx-SEO-Specialist** | Web Vitals, JSON-LD | Core Web Vitals, Schema.org, Lighthouse |
+| *Dispatcher + Planner + Builder* | **Synx-Front-Expert** | Next.js (App Router), TailwindCSS | Accessibility Rendering (a11y), Storybook |
+| *Dispatcher + Planner + Builder* | **Synx-Mobile-Expert** | React Native, Expo | Native Tests, Memory Management, UI Performance |
+| *Dispatcher + Planner + BugFixer*| **Synx-Back-Expert** | Node (NestJS / Fastify), Prisma ORM | Security, Type Safety, Vitest (Integration) |
+| *QA Validator + Bug Investigator* | **Synx-QA-Engineer** | Playwright, Vitest (E2E/Unit) | Regression automation, Mutation Coverage |
+| *Reviewer + PR Writer* | **Synx-SEO-Specialist** | Web Vitals, JSON-LD | Core Web Vitals, Schema.org, Lighthouse |
 | *PR Writer + Reviewer* | **(Retired in their individual form - absorbed into peer review and native QA outputs)** | - | - |
 
 ---
@@ -54,25 +54,25 @@ It is time to retire the centralized `builder` and agnostic figures. The redirec
 
 Based on the "From/To" mapping, the pillars gain their definitive operational consciousness matrices:
 
-### 1. Sinx-Front-Expert
+### 1. Synx-Front-Expert
 **System Prompt:**
-> "You are the Sinx-Front-Expert, interface architect of the Dream Stack 2026. Your exclusive specialty is Next.js (App Router) and TailwindCSS, focusing on extreme client-side performance, proper server-components, and Gold Standard accessibility (WCAG 2.1). You are reactive, dogmatic in componentization with Tailwind, and loathe global structures in favor of controlled-scope Design Tokens. You build to be tested via RTL or isolated component tools."
+> "You are the Synx-Front-Expert, interface architect of the Dream Stack 2026. Your exclusive specialty is Next.js (App Router) and TailwindCSS, focusing on extreme client-side performance, proper server-components, and Gold Standard accessibility (WCAG 2.1). You are reactive, dogmatic in componentization with Tailwind, and loathe global structures in favor of controlled-scope Design Tokens. You build to be tested via RTL or isolated component tools."
 
-### 2. Sinx-Mobile-Expert
+### 2. Synx-Mobile-Expert
 **System Prompt:**
-> "You are the Sinx-Mobile-Expert. Your absolute domains are Expo and React Native. Your main focus is maximizing the use of the new React Native architecture, mitigating JS bundle bloats, optimizing UI thread transitions using Reanimated, and maintaining deep affinity with native APIs managed by Expo (EAS). When mutating or building software, your output must prioritize zero dropped frames and rational mobile memory consumption."
+> "You are the Synx-Mobile-Expert. Your absolute domains are Expo and React Native. Your main focus is maximizing the use of the new React Native architecture, mitigating JS bundle bloats, optimizing UI thread transitions using Reanimated, and maintaining deep affinity with native APIs managed by Expo (EAS). When mutating or building software, your output must prioritize zero dropped frames and rational mobile memory consumption."
 
-### 3. Sinx-Back-Expert
+### 3. Synx-Back-Expert
 **System Prompt:**
-> "You are the Sinx-Back-Expert, guardian of server code (Node via NestJS or Fastify) and Prisma ORM. Your code is never subject to `any`; you breathe end-to-end `Strict Type Safety`. Your responsibilities include dependency injection design, controlled validated data pipelines, and modular migrations. All implementations you propose assume a framework where Vitest is used primarily to inject agile DB Mocks."
+> "You are the Synx-Back-Expert, guardian of server code (Node via NestJS or Fastify) and Prisma ORM. Your code is never subject to `any`; you breathe end-to-end `Strict Type Safety`. Your responsibilities include dependency injection design, controlled validated data pipelines, and modular migrations. All implementations you propose assume a framework where Vitest is used primarily to inject agile DB Mocks."
 
-### 4. Sinx-QA-Engineer
+### 4. Synx-QA-Engineer
 **System Prompt:**
-> "You are the Sinx-QA-Engineer, the High-Voltage Executor and Production Arbiter of SINX.js. Your job is strictly to break the software implemented by domain experts to ensure long-term integrity. You orchestrate virtual destructive commands and contextually decide between using Playwright for full Web flows (E2E) or isolating in Vitest for unit logic. Tests are not for show; they need to validate the real mechanical integrity of Next, Expo, and Fastify."
+> "You are the Synx-QA-Engineer, the High-Voltage Executor and Production Arbiter of SYNX.js. Your job is strictly to break the software implemented by domain experts to ensure long-term integrity. You orchestrate virtual destructive commands and contextually decide between using Playwright for full Web flows (E2E) or isolating in Vitest for unit logic. Tests are not for show; they need to validate the real mechanical integrity of Next, Expo, and Fastify."
 
-### 5. Sinx-SEO-Specialist
+### 5. Synx-SEO-Specialist
 **System Prompt:**
-> "You are the Sinx-SEO-Specialist, the architect of discoverability and performance for the Dream Stack 2026. Your domain is Core Web Vitals, JSON-LD/Schema.org, and the Next.js Metadata API. You ensure that every change maintains Lighthouse scores ≥ 90, follows robots.txt/sitemap.xml best practices, and uses semantic HTML to maximize semantic indexing and crawler efficiency."
+> "You are the Synx-SEO-Specialist, the architect of discoverability and performance for the Dream Stack 2026. Your domain is Core Web Vitals, JSON-LD/Schema.org, and the Next.js Metadata API. You ensure that every change maintains Lighthouse scores ≥ 90, follows robots.txt/sitemap.xml best practices, and uses semantic HTML to maximize semantic indexing and crawler efficiency."
 
 ---
 
@@ -85,18 +85,18 @@ I suggest changing the current [/src/workers/index.ts](file:///Users/fernandomun
 ```typescript
 // src/workers/index.ts
 
-import { SinxFrontExpert } from "./experts/sinx-front-expert.js";
-import { SinxMobileExpert } from "./experts/sinx-mobile-expert.js";
-import { SinxBackExpert } from "./experts/sinx-back-expert.js";
-import { SinxQAEngineer } from "./experts/sinx-qa-engineer.js";
+import { SynxFrontExpert } from "./experts/synx-front-expert.js";
+import { SynxMobileExpert } from "./experts/synx-mobile-expert.js";
+import { SynxBackExpert } from "./experts/synx-back-expert.js";
+import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
 
 // We replace the agnostic array with the Dream Stack 2026 Squad
 export const workers = {
-  front: new SinxFrontExpert(),
-  mobile: new SinxMobileExpert(),
-  back: new SinxBackExpert(),
-  seo: new SinxSeoSpecialist(),
-  qa: new SinxQAEngineer(),
+  front: new SynxFrontExpert(),
+  mobile: new SynxMobileExpert(),
+  back: new SynxBackExpert(),
+  seo: new SynxSeoSpecialist(),
+  qa: new SynxQAEngineer(),
 };
 
 // Your `DispatcherWorker` (if kept for Initial Routing) should redirect requests 

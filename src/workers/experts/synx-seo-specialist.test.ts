@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
-import { SinxMobileExpert } from "./sinx-mobile-expert.js";
+import { SynxSeoSpecialist } from "./synx-seo-specialist.js";
 import { createTask, loadTaskMeta } from "../../lib/task.js";
 import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../../lib/constants.js";
 import { writeJson } from "../../lib/fs.js";
@@ -17,10 +17,10 @@ vi.mock("../../providers/factory.js", () => ({
   createProvider: vi.fn().mockReturnValue({
     generateStructured: vi.fn().mockResolvedValue({
       parsed: {
-        implementationSummary: "Added haptic feedback to button",
-        filesChanged: ["src/components/HapticButton.tsx"],
+        implementationSummary: "Added JSON-LD to homepage",
+        filesChanged: ["app/page.tsx"],
         impactedFiles: [],
-        changesMade: ["Created HapticButton.tsx"],
+        changesMade: ["Added Organization JSON-LD"],
         unitTestsAdded: [],
         testsToRun: [],
         technicalRisks: [],
@@ -40,12 +40,12 @@ vi.mock("../../providers/factory.js", () => ({
         risks: [],
         edits: [
           {
-            path: "src/components/HapticButton.tsx",
+            path: "app/page.tsx",
             action: "create",
-            content: "export const HapticButton = () => null;",
+            content: "export default function Page() { return <main />; }",
           },
         ],
-        nextAgent: "Sinx QA Engineer",
+        nextAgent: "Synx QA Engineer",
       },
       provider: "mock",
       model: "static-mock",
@@ -59,7 +59,7 @@ vi.mock("../../lib/config.js", () => ({
   loadResolvedProjectConfig: vi.fn().mockResolvedValue({
     projectName: "test-app",
     language: "typescript",
-    framework: "expo",
+    framework: "nextjs",
     humanReviewer: "User",
     tasksDir: ".ai-agents/tasks",
     providers: {
@@ -88,12 +88,13 @@ vi.mock("../../lib/workspace-tools.js", async (importOriginal) => {
   return {
     ...actual,
     detectTestCapabilities: vi.fn().mockResolvedValue({ hasPackageJson: true, hasE2EDir: false, hasE2EScript: false, hasE2ESpecFiles: false, hasUnitTestScript: false, hasUnitTestFiles: false, e2eScripts: [] }),
-    // First call: empty — second call: has the file
+    // First call (gitChangedBefore): empty — second call (gitChangedFiles): has the file
+    // This ensures effectiveChanged = ["app/page.tsx"] and the no-changes guard doesn't throw.
     getGitChangedFiles: vi.fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValue(["src/components/HapticButton.tsx"]),
+      .mockResolvedValueOnce([])                    // gitChangedBefore
+      .mockResolvedValue(["app/page.tsx"]),         // gitChangedFiles + subsequent calls
     buildWorkspaceContextSnapshot: vi.fn().mockResolvedValue({ files: [], summary: "mock workspace" }),
-    applyWorkspaceEdits: vi.fn().mockResolvedValue({ changedFiles: ["src/components/HapticButton.tsx"], warnings: [], skippedEdits: [] }),
+    applyWorkspaceEdits: vi.fn().mockResolvedValue({ changedFiles: ["app/page.tsx"], warnings: [], skippedEdits: [] }),
   };
 });
 
@@ -109,16 +110,16 @@ vi.mock("../../lib/qa-remediation.js", async (importOriginal) => {
 
 const originalCwd = process.cwd();
 
-describe.sequential("workers/experts/sinx-mobile-expert", () => {
+describe.sequential("workers/experts/synx-seo-specialist", () => {
   let root = "";
   let repoRoot = "";
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-mobile-expert-test-"));
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-seo-specialist-test-"));
     repoRoot = path.join(root, "repo");
     await fs.mkdir(path.join(repoRoot, ".ai-agents", "tasks"), { recursive: true });
     await fs.mkdir(path.join(repoRoot, ".ai-agents", "runtime", "locks"), { recursive: true });
-    await fs.writeFile(path.join(repoRoot, "package.json"), JSON.stringify({ name: "sinx-mobile-test" }, null, 2), "utf8");
+    await fs.writeFile(path.join(repoRoot, "package.json"), JSON.stringify({ name: "synx-seo-test" }, null, 2), "utf8");
     process.chdir(repoRoot);
   });
 
@@ -128,32 +129,33 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("processes a mobile feature task and routes to Sinx QA Engineer", async () => {
+  it("processes an SEO task and routes to Synx QA Engineer", async () => {
     const task = await createTask({
-      title: "Add haptic feedback",
+      title: "Add JSON-LD to homepage",
       typeHint: "Feature",
       project: "test-app",
-      rawRequest: "Add haptic feedback to the main CTA button using Expo Haptics",
+      rawRequest: "Add Organization JSON-LD structured data to the homepage",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
+      // inputRef removed: it's optional and new-task.json is not a StageEnvelope
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Sinx QA Engineer");
+    expect(meta.nextAgent).toBe("Synx QA Engineer");
   });
 
   it("escalates to human review when the research loop guard triggers", async () => {
@@ -167,23 +169,23 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
     });
 
     const task = await createTask({
-      title: "Complex RN animation",
-      typeHint: "Feature",
+      title: "Full CWV audit",
+      typeHint: "Refactor",
       project: "test-app",
-      rawRequest: "Add Reanimated shared element transition",
+      rawRequest: "Fix LCP regression on product listing pages",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -195,44 +197,43 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
     const { DONE_FILE_NAMES } = await import("../../lib/constants.js");
     const { ARTIFACT_FILES } = await import("../../lib/task-artifacts.js");
     const { applyWorkspaceEdits, getGitChangedFiles } = await import("../../lib/workspace-tools.js");
-    const { runPostEditSanityChecks } = await import("../../lib/post-edit-sanity.js");
     const { createProvider } = await import("../../providers/factory.js");
 
     vi.mocked(getGitChangedFiles)
       .mockResolvedValueOnce([])
-      .mockResolvedValue(["src/components/HapticButton.tsx"]);
+      .mockResolvedValue(["src/pages/index.html"]);
 
     vi.mocked(createProvider).mockReturnValueOnce({
       generateStructured: vi.fn().mockResolvedValue({
         parsed: {
-          implementationSummary: "Fixing mobile a11y",
-          filesChanged: ["src/components/HapticButton.tsx"],
+          implementationSummary: "Fixing SEO findings",
+          filesChanged: ["src/pages/index.html"],
           impactedFiles: [],
-          changesMade: ["Added accessibilityLabel"],
+          changesMade: ["Added meta description"],
           unitTestsAdded: [],
-          testsToRun: ["npm test"],
-          technicalRisks: ["Touch target size"],
+          testsToRun: [],
+          technicalRisks: ["Canonical URL mismatch"],
           riskAssessment: { buildRisk: "low", syntaxRisk: "low", logicRisk: "low" },
           reviewFocus: [],
           manualValidationNeeded: [],
           residualRisks: [],
-          verificationMode: "executed_checks",
+          verificationMode: "static_review",
           risks: ["Risk A"],
-          edits: [{ path: "src/components/HapticButton.tsx", action: "replace_snippet", find: "TouchableOpacity", replace: 'TouchableOpacity accessibilityLabel="test"' }],
-          nextAgent: "Sinx QA Engineer",
+          edits: [{ path: "src/pages/index.html", action: "replace_snippet", find: "<head>", replace: '<head><meta name="description" content="test">' }],
+          nextAgent: "Synx QA Engineer",
         },
       }),
     } as any);
 
     vi.mocked(applyWorkspaceEdits).mockResolvedValueOnce({
-      appliedFiles: ["src/components/HapticButton.tsx"],
-      changedFiles: ["src/components/HapticButton.tsx"],
+      appliedFiles: ["src/pages/index.html"],
+      changedFiles: ["src/pages/index.html"],
       warnings: ["Warning A"],
       skippedEdits: ["Skip A"],
     });
 
     const task = await createTask({
-      title: "Fix mobile findings",
+      title: "Fix SEO findings",
       typeHint: "Feature",
       project: "test-app",
       rawRequest: "Fix the items found by QA",
@@ -241,47 +242,46 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
 
     await fs.mkdir(path.join(task.taskPath, "artifacts"), { recursive: true });
     await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.projectProfile), { profile: "test" });
-    await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.featureBrief), { brief: "test" });
 
-    const qaDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxQaEngineer);
+    const qaDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxQaEngineer);
     await writeJson(qaDonePath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "done",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
       output: {
         verdict: "fail",
-        failures: ["Button lacks label"],
+        failures: ["Missing meta"],
         qaHandoffContext: {
           attempt: 1,
           maxRetries: 3,
-          returnedTo: "Sinx Mobile Expert",
-          summary: "A11y fail",
+          returnedTo: "Synx SEO Specialist",
+          summary: "SEO fail",
           latestFindings: [
             {
-              issue: "Button lacks label",
-              expectedResult: "Label exists",
-              receivedResult: "No label",
-              evidence: ["Snapshot"],
-              recommendedAction: "Add label",
+              issue: "Missing meta description",
+              expectedResult: "Meta exists",
+              receivedResult: "No meta",
+              evidence: ["HTML"],
+              recommendedAction: "Add meta",
             },
           ],
         },
       },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
-      inputRef: `done/${DONE_FILE_NAMES.sinxQaEngineer}`,
+      agent: "Synx SEO Specialist",
+      inputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -334,21 +334,21 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
       },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
-    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxMobileExpert);
+    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxSeoSpecialist);
     const done = await fs.readFile(donePath, "utf8").then(JSON.parse);
     const output = done.output;
 
@@ -371,20 +371,19 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
     expect(processed).toBe(false);
   });
-
   it("covers research abort branch", async () => {
     const { requestResearchContext } = await import("../../lib/orchestrator.js");
     vi.mocked(requestResearchContext).mockResolvedValueOnce({
@@ -401,22 +400,21 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
       rawRequest: "Check abort",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true); // Agent finishes the handoff successfully
-    const meta = await loadTaskMeta(task.taskId);
-    expect(meta.humanApprovalRequired).toBe(true);
+    const metaAfter = await loadTaskMeta(task.taskId);
+    expect(metaAfter.humanApprovalRequired).toBe(true);
   });
 
   it("covers deep branches (missing context, recovery notes, warnings)", async () => {
@@ -425,17 +423,17 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
     const { createProvider } = await import("../../providers/factory.js");
 
     vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "provided",
+      status: "provided", // Using valid status
       context: "Context with notes",
       triggerReasons: [],
       reusedContext: true, // Note branch 1
     } as any);
 
-    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["src/app.tsx"]);
+    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["app/layout.tsx"]);
 
     vi.mocked(applyWorkspaceEdits).mockResolvedValueOnce({
-      appliedFiles: ["src/app.tsx"],
-      changedFiles: ["src/app.tsx"],
+      appliedFiles: ["app/layout.tsx"],
+      changedFiles: ["app/layout.tsx"],
       warnings: ["Applied warning"], // Warning branch
       skippedEdits: ["Skip 1"],
     });
@@ -444,14 +442,14 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
       generateStructured: vi.fn().mockResolvedValue({
         parsed: {
           implementationSummary: "summary",
-          edits: [{ path: "src/app.tsx", action: "create", content: "data" }],
+          edits: [{ path: "app/layout.tsx", action: "create", content: "data" }],
           risks: ["Legacy risk"],
           changesMade: ["Legacy change"],
           testsToRun: ["npm run test"],
-          impactedFiles: ["src/app.tsx"],
+          impactedFiles: ["app/layout.tsx"],
           technicalRisks: [],
-          filesChanged: ["src/app.tsx"],
-          nextAgent: "Sinx QA Engineer",
+          filesChanged: ["app/layout.tsx"],
+          nextAgent: "Synx QA Engineer",
         },
       }),
     } as any);
@@ -465,16 +463,16 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -484,11 +482,11 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
     const { requestResearchContext } = await import("../../lib/orchestrator.js");
     const { getGitChangedFiles } = await import("../../lib/workspace-tools.js");
 
-    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["src/app.tsx"]);
+    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["app/layout.tsx"]);
 
     vi.mocked(requestResearchContext).mockResolvedValueOnce({
       status: "provided",
-      context: "User likes dark mode",
+      context: "Keywords: AI, agents",
       reusedContext: false,
       triggerReasons: []
     } as any);
@@ -497,20 +495,20 @@ describe.sequential("workers/experts/sinx-mobile-expert", () => {
       title: "Research test",
       typeHint: "Feature",
       project: "test-app",
-      rawRequest: "Add toggle",
+      rawRequest: "Add meta",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxMobileExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-mobile-expert",
+      stage: "synx-seo-specialist",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Mobile Expert",
+      agent: "Synx SEO Specialist",
     });
 
-    const expert = new SinxMobileExpert();
+    const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
     expect(processed).toBe(true);
   });

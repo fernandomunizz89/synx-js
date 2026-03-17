@@ -10,7 +10,6 @@ import { deriveQaRootCauseFocus } from "../../lib/root-cause-intelligence.js";
 import { runPostEditSanityChecks } from "../../lib/post-edit-sanity.js";
 import { formatResearchContextTag, requestResearchContext } from "../../lib/orchestrator.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../../lib/task-artifacts.js";
-import { taskDir } from "../../lib/paths.js";
 import { builderOutputSchema } from "../../lib/schema.js";
 import type { StageEnvelope } from "../../lib/types.js";
 import { createProvider } from "../../providers/factory.js";
@@ -20,21 +19,21 @@ import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilit
 import { WorkerBase } from "../base.js";
 
 /**
- * Sinx Front Expert – Dream Stack 2026
+ * Synx Back Expert – Dream Stack 2026
  *
- * Domain specialist for Next.js (App Router) + TailwindCSS interfaces.
- * Enforces Gold-Standard WCAG 2.1 accessibility, scoped Design Tokens,
- * and component-level testability via RTL.
+ * Server-side guardian for Node.js via NestJS or Fastify + Prisma ORM.
+ * Enforces strict TypeScript end-to-end, dependency injection patterns,
+ * validated data pipelines, and Vitest-based integration tests with DB mocks.
  */
-export class SinxFrontExpert extends WorkerBase {
-  readonly agent = "Sinx Front Expert" as const;
-  readonly requestFileName = STAGE_FILE_NAMES.sinxFrontExpert;
-  readonly workingFileName = "04-sinx-front-expert.working.json";
+export class SynxBackExpert extends WorkerBase {
+  readonly agent = "Synx Back Expert" as const;
+  readonly requestFileName = STAGE_FILE_NAMES.synxBackExpert;
+  readonly workingFileName = "04-synx-back-expert.working.json";
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
-    const prompt = await loadPromptFile("sinx-front-expert.md");
+    const prompt = await loadPromptFile("synx-back-expert.md");
     const provider = createProvider(config.providers.planner);
     const workspaceRoot = process.cwd();
     const baseInput = await this.buildAgentInput(taskId, request);
@@ -55,20 +54,17 @@ export class SinxFrontExpert extends WorkerBase {
         recommendedAction: trimText(item.recommendedAction, 220),
       }));
     const qaFileHints = deriveQaFileHints([...latestQaFindings]);
-    const rootCauseFocus = deriveQaRootCauseFocus({
-      qaFailures: [],
-      findings: latestQaFindings,
-    });
+    const rootCauseFocus = deriveQaRootCauseFocus({ qaFailures: [], findings: latestQaFindings });
 
     const researchDecision = await requestResearchContext({
       taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-back-expert",
       requesterAgent: this.agent,
       taskType: baseInput.task.typeHint,
       previousStage: baseInput.previousStage,
       errorContext: baseInput.task.rawRequest,
-      targetTechnology: "Next.js App Router TailwindCSS",
-      specificQuestion: `What is the safest Next.js App Router implementation for: ${baseInput.task.title}?`,
+      targetTechnology: "NestJS Fastify Prisma ORM TypeScript Vitest",
+      specificQuestion: `What is the safest Node.js/NestJS/Fastify implementation for: ${baseInput.task.title}?`,
       repeatedIssues: [],
     });
 
@@ -79,12 +75,12 @@ export class SinxFrontExpert extends WorkerBase {
         triggerReasons: researchDecision.triggerReasons,
         researchContext: researchDecision.context,
       };
-      const escalationView = `# HANDOFF\n\n## Agent\nSinx Front Expert\n\n## Decision\nEscalated to human review – Researcher loop guard triggered.\n\n## Reason\n${researchDecision.abortReason || "Research repeated while uncertainty persisted."}\n\n## Next\nHuman Review\n`;
+      const escalationView = `# HANDOFF\n\n## Agent\nSynx Back Expert\n\n## Decision\nEscalated to human review – Researcher loop guard triggered.\n\n## Reason\n${researchDecision.abortReason || "Research repeated while uncertainty persisted."}\n\n## Next\nHuman Review\n`;
       await this.finishStage({
         taskId,
-        stage: "sinx-front-expert",
-        doneFileName: DONE_FILE_NAMES.sinxFrontExpert,
-        viewFileName: "04-sinx-front-expert.md",
+        stage: "synx-back-expert",
+        doneFileName: DONE_FILE_NAMES.synxBackExpert,
+        viewFileName: "04-synx-back-expert.md",
         viewContent: escalationView,
         output: escalationOutput,
         humanApprovalRequired: true,
@@ -108,19 +104,20 @@ export class SinxFrontExpert extends WorkerBase {
       limits: { maxContextFiles: 10, maxTotalContextChars: 22_000, maxFileContextChars: 4_200, maxScanFiles: 1_100 },
     });
 
-    const frontendContract = `
-SINX FRONT EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
-- Stack: Next.js App Router ONLY. No Pages Router patterns.
-- Styling: TailwindCSS with scoped Design Tokens. Zero global CSS unless explicitly justified.
-- Accessibility: WCAG 2.1 AA minimum. Every interactive element must be keyboard navigable and screen-reader friendly.
-- Server Components: default to RSC; use "use client" only with explicit rationale.
-- Testability: structure components so they are isolatable via RTL or equivalent.
-- Performance: avoid unnecessary re-renders, use next/image, next/font and correct metadata.
-- Output format: same builder JSON shape with "nextAgent": "Sinx QA Engineer".
+    const backendContract = `
+SYNX BACK EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
+- Stack: Node.js via NestJS or Fastify. Prisma ORM for all DB access. TypeScript strict mode.
+- Type Safety: ZERO use of \`any\`. All inputs/outputs must be fully typed with Zod or class-validator.
+- DI: design all services and modules for dependency injection. No singletons outside DI containers.
+- Data Pipelines: validate at the boundary (DTOs/schemas), transform internally, never trust raw input.
+- Security: sanitize inputs, avoid SQL injection vectors, enforce RBAC/guards at route level.
+- DB Migrations: modular Prisma migrations, no raw SQL unless justified and escaped.
+- Testing: Vitest integration tests with agile Prisma/DB mock injection (no real DB in unit tests).
+- Output format: same builder JSON shape with "nextAgent": "Synx QA Engineer".
 `;
 
-    const roleContract = buildAgentRoleContract("Sinx Front Expert", {
-      stage: "sinx-front-expert",
+    const roleContract = buildAgentRoleContract("Synx Back Expert", {
+      stage: "synx-back-expert",
       taskTypeHint: baseInput.task.typeHint,
       qaAttempt: qaHandoffContext?.attempt ?? 0,
     });
@@ -132,17 +129,17 @@ SINX FRONT EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
       researchContext: researchDecision.context,
     };
 
-    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${frontendContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}`;
+    const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${backendContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}`;
 
     const result = await provider.generateStructured({
-      agent: "Sinx Front Expert",
+      agent: "Synx Back Expert",
       taskId,
       stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "implementationSummary": "string", "filesChanged": ["string"], "impactedFiles": ["string"], "changesMade": ["string"], "unitTestsAdded": ["string"], "testsToRun": ["string"], "technicalRisks": ["string"], "riskAssessment": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "typingRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "integrationRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "reviewFocus": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "verificationMode": "static_review | executed_checks | mixed", "risks": ["string"], "edits": [{ "path": "string", "action": "create | replace | replace_snippet | delete", "content": "string", "find": "string", "replace": "string" }], "nextAgent": "Sinx QA Engineer" }',
+        '{ "implementationSummary": "string", "filesChanged": ["string"], "impactedFiles": ["string"], "changesMade": ["string"], "unitTestsAdded": ["string"], "testsToRun": ["string"], "technicalRisks": ["string"], "riskAssessment": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "typingRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "integrationRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "reviewFocus": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "verificationMode": "static_review | executed_checks | mixed", "risks": ["string"], "edits": [{ "path": "string", "action": "create | replace | replace_snippet | delete", "content": "string", "find": "string", "replace": "string" }], "nextAgent": "Synx QA Engineer" }',
     });
 
     const normalizedModelOutput = normalizeBuilderLikeModelOutput(result.parsed);
@@ -158,7 +155,7 @@ SINX FRONT EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
     const effectiveChanged = unique([...applied.changedFiles, ...gitChangedFiles.filter((f) => !gitChangedBefore.includes(f))]);
 
     if (!effectiveChanged.length && !gitChangedFiles.length) {
-      throw new Error("Sinx Front Expert completed but no code changes were detected.");
+      throw new Error("Synx Back Expert completed but no code changes were detected.");
     }
 
     output.filesChanged = effectiveChanged.length ? effectiveChanged : gitChangedFiles;
@@ -194,19 +191,19 @@ SINX FRONT EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
 
     output.technicalRisks = uniqueNormalized([...output.technicalRisks, ...output.risks]).slice(0, 16);
 
-    const view = `# HANDOFF\n\n## Agent\nSinx Front Expert (Dream Stack 2026)\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSinx QA Engineer\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx Back Expert (Dream Stack 2026)\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
 
     await this.finishStage({
       taskId,
-      stage: "sinx-front-expert",
-      doneFileName: DONE_FILE_NAMES.sinxFrontExpert,
-      viewFileName: "04-sinx-front-expert.md",
+      stage: "synx-back-expert",
+      doneFileName: DONE_FILE_NAMES.synxBackExpert,
+      viewFileName: "04-synx-back-expert.md",
       viewContent: view,
       output,
-      nextAgent: "Sinx QA Engineer",
-      nextStage: "sinx-qa-engineer",
-      nextRequestFileName: STAGE_FILE_NAMES.sinxQaEngineer,
-      nextInputRef: `done/${DONE_FILE_NAMES.sinxFrontExpert}`,
+      nextAgent: "Synx QA Engineer",
+      nextStage: "synx-qa-engineer",
+      nextRequestFileName: STAGE_FILE_NAMES.synxQaEngineer,
+      nextInputRef: `done/${DONE_FILE_NAMES.synxBackExpert}`,
       startedAt,
       provider: result.provider,
       model: result.model,

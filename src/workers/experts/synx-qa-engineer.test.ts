@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
-import { SinxQAEngineer } from "./sinx-qa-engineer.js";
+import { SynxQAEngineer } from "./synx-qa-engineer.js";
 import { createTask, loadTaskMeta } from "../../lib/task.js";
 import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../../lib/constants.js";
 import { writeJson } from "../../lib/fs.js";
@@ -105,7 +105,7 @@ vi.mock("../../lib/validation-checks.js", async (importOriginal) => {
 
 const originalCwd = process.cwd();
 
-describe.sequential("workers/experts/sinx-qa-engineer", () => {
+describe.sequential("workers/experts/synx-qa-engineer", () => {
   let root = "";
   let repoRoot = "";
 
@@ -116,7 +116,7 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
     await fs.mkdir(path.join(repoRoot, ".ai-agents", "runtime", "locks"), { recursive: true });
     await fs.writeFile(
       path.join(repoRoot, "package.json"),
-      JSON.stringify({ name: "sinx-qa-test", scripts: { test: "vitest run" } }, null, 2),
+      JSON.stringify({ name: "synx-qa-test", scripts: { test: "vitest run" } }, null, 2),
       "utf8",
     );
     process.chdir(repoRoot);
@@ -137,16 +137,16 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -156,7 +156,7 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
     expect(meta.nextAgent).toBe("PR Writer");
   });
 
-  it("routes QA failure back to Sinx Front Expert when it was the previous stage", async () => {
+  it("routes QA failure back to Synx Front Expert when it was the previous stage", async () => {
     // Override provider to return a failing QA verdict
     const { createProvider } = await import("../../providers/factory.js");
     vi.mocked(createProvider).mockReturnValueOnce({
@@ -192,7 +192,7 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
               recommendedAction: "Fix Toggle component rendering",
             },
           ],
-          nextAgent: "Sinx Front Expert",
+          nextAgent: "Synx Front Expert",
         },
         provider: "mock",
         model: "static-mock",
@@ -209,29 +209,29 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    // Simulate that Sinx Front Expert was the previous stage
-    const frontDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxFrontExpert);
+    // Simulate that Synx Front Expert was the previous stage
+    const frontDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxFrontExpert);
     await writeJson(frontDonePath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-front-expert",
       status: "done",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
+      agent: "Synx Front Expert",
       output: {
         implementationSummary: "Added toggle",
         filesChanged: ["src/components/Toggle.tsx"],
         edits: [],
-        nextAgent: "Sinx QA Engineer",
+        nextAgent: "Synx QA Engineer",
       },
     });
 
-    // Inject a history entry so `previousExpert` resolves to "Sinx Front Expert"
+    // Inject a history entry so `previousExpert` resolves to "Synx Front Expert"
     const metaPath = path.join(task.taskPath, "meta.json");
     const rawMeta = JSON.parse(await fs.readFile(metaPath, "utf8"));
     rawMeta.history = [
       {
-        agent: "Sinx Front Expert",
-        stage: "sinx-front-expert",
+        agent: "Synx Front Expert",
+        stage: "synx-front-expert",
         status: "done",
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
@@ -241,27 +241,27 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
     ];
     await fs.writeFile(metaPath, JSON.stringify(rawMeta, null, 2), "utf8");
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
-      inputRef: `done/${DONE_FILE_NAMES.sinxFrontExpert}`,
+      agent: "Synx QA Engineer",
+      inputRef: `done/${DONE_FILE_NAMES.synxFrontExpert}`,
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Sinx Front Expert");
+    expect(meta.nextAgent).toBe("Synx Front Expert");
   });
 
-  it("routes QA failure back to Sinx Back Expert when it was the previous stage", async () => {
+  it("routes QA failure back to Synx Back Expert when it was the previous stage", async () => {
     const { createProvider } = await import("../../providers/factory.js");
     vi.mocked(createProvider).mockReturnValueOnce({
       generateStructured: vi.fn().mockResolvedValue({
@@ -296,7 +296,7 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
               recommendedAction: "Fix Prisma query in findAll",
             },
           ],
-          nextAgent: "Sinx Back Expert",
+          nextAgent: "Synx Back Expert",
         },
         provider: "mock",
         model: "static-mock",
@@ -313,24 +313,24 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const backDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxBackExpert);
+    const backDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxBackExpert);
     await writeJson(backDonePath, {
       taskId: task.taskId,
-      stage: "sinx-back-expert",
+      stage: "synx-back-expert",
       status: "done",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Back Expert",
-      output: { implementationSummary: "Added users service", filesChanged: [], edits: [], nextAgent: "Sinx QA Engineer" },
+      agent: "Synx Back Expert",
+      output: { implementationSummary: "Added users service", filesChanged: [], edits: [], nextAgent: "Synx QA Engineer" },
     });
 
-    // Inject a history entry so `previousExpert` resolves to "Sinx Back Expert"
+    // Inject a history entry so `previousExpert` resolves to "Synx Back Expert"
     // (the QA worker scans taskMeta.history, which createTask doesn't populate)
     const metaPath = path.join(task.taskPath, "meta.json");
     const rawMeta = JSON.parse(await fs.readFile(metaPath, "utf8"));
     rawMeta.history = [
       {
-        agent: "Sinx Back Expert",
-        stage: "sinx-back-expert",
+        agent: "Synx Back Expert",
+        stage: "synx-back-expert",
         status: "done",
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
@@ -340,24 +340,24 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
     ];
     await fs.writeFile(metaPath, JSON.stringify(rawMeta, null, 2), "utf8");
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
-      inputRef: `done/${DONE_FILE_NAMES.sinxBackExpert}`,
+      agent: "Synx QA Engineer",
+      inputRef: `done/${DONE_FILE_NAMES.synxBackExpert}`,
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Sinx Back Expert");
+    expect(meta.nextAgent).toBe("Synx Back Expert");
   });
 
   it("loads existing return history from artifacts", async () => {
@@ -371,14 +371,14 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
 
     const historyDir = path.join(task.taskPath, "artifacts");
     await fs.mkdir(historyDir, { recursive: true });
-    await writeJson(path.join(historyDir, "sinx-qa-return-context-history.json"), {
+    await writeJson(path.join(historyDir, "synx-qa-return-context-history.json"), {
       taskId: task.taskId,
       updatedAt: new Date().toISOString(),
       entries: [
         {
           attempt: 1,
           returnedAt: new Date().toISOString(),
-          returnedTo: "Sinx Front Expert",
+          returnedTo: "Synx Front Expert",
           summary: "Old issue",
           failures: [],
           findings: [],
@@ -386,16 +386,16 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       ],
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -412,19 +412,19 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
 
     const historyDir = path.join(task.taskPath, "artifacts");
     await fs.mkdir(historyDir, { recursive: true });
-    // Write invalid JSON to trigger the catch block in loadSinxQaReturnHistory
-    await fs.writeFile(path.join(historyDir, "sinx-qa-return-context-history.json"), "invalid { json", "utf8");
+    // Write invalid JSON to trigger the catch block in loadSynxQaReturnHistory
+    await fs.writeFile(path.join(historyDir, "synx-qa-return-context-history.json"), "invalid { json", "utf8");
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -478,17 +478,17 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
       inputRef: `done/${DONE_FILE_NAMES.builder}`,
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -503,16 +503,16 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
@@ -546,16 +546,16 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
     ];
     await writeJson(path.join(task.taskPath, "meta.json"), meta);
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
     expect(processed).toBe(true);
   });
@@ -615,21 +615,21 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
-    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxQaEngineer);
+    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxQaEngineer);
     const done = await fs.readFile(donePath, "utf8").then(JSON.parse);
     const output = done.output;
 
@@ -668,16 +668,16 @@ describe.sequential("workers/experts/sinx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxQaEngineer);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
     });
 
-    const qa = new SinxQAEngineer();
+    const qa = new SynxQAEngineer();
     const processed = await qa.tryProcess(task.taskId);
     expect(processed).toBe(true);
 

@@ -24,11 +24,11 @@ export const agentNameSchema = z.enum([
   "PR Writer",
   "Human Review",
   // Dream Stack 2026 – Expert Squad
-  "Sinx Front Expert",
-  "Sinx Mobile Expert",
-  "Sinx Back Expert",
-  "Sinx QA Engineer",
-  "Sinx SEO Specialist",
+  "Synx Front Expert",
+  "Synx Mobile Expert",
+  "Synx Back Expert",
+  "Synx QA Engineer",
+  "Synx SEO Specialist",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System")])
@@ -153,21 +153,21 @@ export const dispatcherOutputSchema = z.object({
   // When nextAgent === "Spec Planner", targetExpert tells the planner
   // which domain expert to hand off to after decomposing the task.
   targetExpert: z.union([
-    z.literal("Sinx Front Expert"),
-    z.literal("Sinx Mobile Expert"),
-    z.literal("Sinx Back Expert"),
-    z.literal("Sinx SEO Specialist"),
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
     z.literal("Feature Builder"),
   ]).optional(),
   nextAgent: z.union([
     z.literal("Bug Investigator"),
     z.literal("Spec Planner"),
     // Dream Stack 2026 – Expert Squad routing
-    z.literal("Sinx Front Expert"),
-    z.literal("Sinx Mobile Expert"),
-    z.literal("Sinx Back Expert"),
-    z.literal("Sinx QA Engineer"),
-    z.literal("Sinx SEO Specialist"),
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx QA Engineer"),
+    z.literal("Synx SEO Specialist"),
   ]),
 });
 
@@ -185,10 +185,10 @@ export const plannerOutputSchema = z.object({
   // Dream Stack 2026 – Planner routes to the specific expert identified by Dispatcher
   nextAgent: z.union([
     z.literal("Feature Builder"),
-    z.literal("Sinx Front Expert"),
-    z.literal("Sinx Mobile Expert"),
-    z.literal("Sinx Back Expert"),
-    z.literal("Sinx SEO Specialist"),
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
   ]),
 });
 
@@ -372,10 +372,10 @@ export const qaReturnHistoryEntrySchema = z.object({
     z.literal("Feature Builder"),
     z.literal("Bug Fixer"),
     // Dream Stack 2026 – Expert Squad
-    z.literal("Sinx Front Expert"),
-    z.literal("Sinx Mobile Expert"),
-    z.literal("Sinx Back Expert"),
-    z.literal("Sinx SEO Specialist"),
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
   ]),
   summary: z.string(),
   failures: z.array(z.string()).optional().default([]),
@@ -396,10 +396,10 @@ export const qaHandoffContextSchema = z.object({
     z.literal("Feature Builder"),
     z.literal("Bug Fixer"),
     // Dream Stack 2026 – Expert Squad
-    z.literal("Sinx Front Expert"),
-    z.literal("Sinx Mobile Expert"),
-    z.literal("Sinx Back Expert"),
-    z.literal("Sinx SEO Specialist"),
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
   ]),
   summary: z.string(),
   latestFindings: z.array(qaReturnContextItemSchema).optional().default([]),
@@ -436,9 +436,9 @@ export const qaOutputSchema = z.object({
     z.literal("Feature Builder"),
     z.literal("Bug Fixer"),
     // Dream Stack 2026 – Expert Squad return routing
-    z.literal("Sinx Front Expert"),
-    z.literal("Sinx Mobile Expert"),
-    z.literal("Sinx Back Expert"),
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
     z.literal("Human Review"),
   ]),
 });

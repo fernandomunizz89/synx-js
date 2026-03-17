@@ -146,10 +146,10 @@ Human Review
 
     // Dream Stack 2026 – resolve target expert routing
     const expertStageMap: Record<string, { stage: string; fileName: string }> = {
-      "Sinx Front Expert":   { stage: "sinx-front-expert",   fileName: STAGE_FILE_NAMES.sinxFrontExpert },
-      "Sinx Mobile Expert":  { stage: "sinx-mobile-expert",  fileName: STAGE_FILE_NAMES.sinxMobileExpert },
-      "Sinx Back Expert":    { stage: "sinx-back-expert",    fileName: STAGE_FILE_NAMES.sinxBackExpert },
-      "Sinx SEO Specialist": { stage: "sinx-seo-specialist", fileName: STAGE_FILE_NAMES.sinxSeoSpecialist },
+      "Synx Front Expert":   { stage: "synx-front-expert",   fileName: STAGE_FILE_NAMES.synxFrontExpert },
+      "Synx Mobile Expert":  { stage: "synx-mobile-expert",  fileName: STAGE_FILE_NAMES.synxMobileExpert },
+      "Synx Back Expert":    { stage: "synx-back-expert",    fileName: STAGE_FILE_NAMES.synxBackExpert },
+      "Synx SEO Specialist": { stage: "synx-seo-specialist", fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
       "Feature Builder":     { stage: "builder",             fileName: STAGE_FILE_NAMES.builder },
     };
     const resolvedNext = expertStageMap[output.nextAgent] ?? expertStageMap["Feature Builder"];

@@ -10,19 +10,19 @@ Replaced the generic 8-worker orchestration chain with a specialized **Expert Sq
 
 ```
 Dispatcher
-  ├── Simple tasks     ──► Expert ──► Sinx QA Engineer ──► Human Review
-  └── Complex tasks    ──► Spec Planner (targetExpert hint) ──► Expert ──► Sinx QA Engineer
+  ├── Simple tasks     ──► Expert ──► Synx QA Engineer ──► Human Review
+  └── Complex tasks    ──► Spec Planner (targetExpert hint) ──► Expert ──► Synx QA Engineer
 ```
 
 **Expert Squad:**
 
 | Agent | Temperature | Domain |
 |---|---|---|
-| `Sinx Front Expert` | 0.05 | Next.js App Router · TailwindCSS · WCAG 2.1 |
-| `Sinx Mobile Expert` | 0.05 | Expo · React Native · Reanimated · EAS |
-| `Sinx Back Expert` | 0.05 | NestJS/Fastify · Prisma ORM · Strict TypeScript |
-| `Sinx SEO Specialist` | 0.10 | Core Web Vitals · JSON-LD · Next.js Metadata API |
-| `Sinx QA Engineer` | 0.05 | Playwright E2E · Vitest unit |
+| `Synx Front Expert` | 0.05 | Next.js App Router · TailwindCSS · WCAG 2.1 |
+| `Synx Mobile Expert` | 0.05 | Expo · React Native · Reanimated · EAS |
+| `Synx Back Expert` | 0.05 | NestJS/Fastify · Prisma ORM · Strict TypeScript |
+| `Synx SEO Specialist` | 0.10 | Core Web Vitals · JSON-LD · Next.js Metadata API |
+| `Synx QA Engineer` | 0.05 | Playwright E2E · Vitest unit |
 
 ### Conditional Planning
 
@@ -46,7 +46,7 @@ The `targetExpert` hint is injected into the Spec Planner's system prompt as a `
 | `src/workers/dispatcher.ts` | Routing table covers all experts; LLM hint includes `targetExpert` |
 | `src/workers/planner.ts` | Reads `targetExpert` from Dispatcher output; routes to correct expert via `expertStageMap` |
 | `src/providers/openai-compatible-provider.ts` | `AGENT_DEFAULT_TEMPERATURES` includes all 5 experts |
-| `.ai-agents/prompts/sinx-*.md` | Prompt stubs for all 5 experts |
+| `.ai-agents/prompts/synx-*.md` | Prompt stubs for all 5 experts |
 
 ---
 
@@ -109,8 +109,8 @@ Standardized the test infrastructure and stabilized mocks across all 5 expert ag
 
 - **Total Experts Coverage**: 82.5% Branch / 99.4% Stmts / 100% Lines.
 - **Individual Branch Coverage**:
-  - `Sinx-Back-Expert`: 83.33%
-  - `Sinx-Mobile-Expert`: 83.33%
-  - `Sinx-SEO-Specialist`: 83.33%
-  - `Sinx-Front-Expert`: 81.25%
-  - `Sinx-QA-Engineer`: 81.69%
+  - `Synx-Back-Expert`: 83.33%
+  - `Synx-Mobile-Expert`: 83.33%
+  - `Synx-SEO-Specialist`: 83.33%
+  - `Synx-Front-Expert`: 81.25%
+  - `Synx-QA-Engineer`: 81.69%

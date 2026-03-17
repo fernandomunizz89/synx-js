@@ -4,10 +4,10 @@ export type QaRemediationAgent =
   | "Feature Builder"
   | "Bug Fixer"
   // Dream Stack 2026 – Expert Squad return routing
-  | "Sinx Front Expert"
-  | "Sinx Mobile Expert"
-  | "Sinx Back Expert"
-  | "Sinx SEO Specialist";
+  | "Synx Front Expert"
+  | "Synx Mobile Expert"
+  | "Synx Back Expert"
+  | "Synx SEO Specialist";
 
 export interface QaReturnContextItem {
   issue: string;
@@ -72,10 +72,10 @@ function isQaRemediationAgent(value: string): value is QaRemediationAgent {
   return (
     value === "Feature Builder" ||
     value === "Bug Fixer" ||
-    value === "Sinx Front Expert" ||
-    value === "Sinx Mobile Expert" ||
-    value === "Sinx Back Expert" ||
-    value === "Sinx SEO Specialist"
+    value === "Synx Front Expert" ||
+    value === "Synx Mobile Expert" ||
+    value === "Synx Back Expert" ||
+    value === "Synx SEO Specialist"
   );
 }
 

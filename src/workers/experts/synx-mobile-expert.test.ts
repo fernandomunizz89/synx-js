@@ -2,21 +2,25 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
-import { SinxFrontExpert } from "./sinx-front-expert.js";
+import { SynxMobileExpert } from "./synx-mobile-expert.js";
 import { createTask, loadTaskMeta } from "../../lib/task.js";
 import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../../lib/constants.js";
 import { writeJson } from "../../lib/fs.js";
 
-// ─── Shared mocks ─────────────────────────────────────────────────────────────
+vi.mock("../../lib/runtime.js", () => ({
+  acquireLock: vi.fn().mockResolvedValue(true),
+  releaseLock: vi.fn().mockResolvedValue(undefined),
+  isTaskCancelRequested: vi.fn().mockResolvedValue(false),
+}));
 
 vi.mock("../../providers/factory.js", () => ({
   createProvider: vi.fn().mockReturnValue({
     generateStructured: vi.fn().mockResolvedValue({
       parsed: {
-        implementationSummary: "Added dark mode toggle",
-        filesChanged: ["src/components/Toggle.tsx"],
+        implementationSummary: "Added haptic feedback to button",
+        filesChanged: ["src/components/HapticButton.tsx"],
         impactedFiles: [],
-        changesMade: ["Created Toggle.tsx"],
+        changesMade: ["Created HapticButton.tsx"],
         unitTestsAdded: [],
         testsToRun: [],
         technicalRisks: [],
@@ -36,12 +40,12 @@ vi.mock("../../providers/factory.js", () => ({
         risks: [],
         edits: [
           {
-            path: "src/components/Toggle.tsx",
+            path: "src/components/HapticButton.tsx",
             action: "create",
-            content: "export const Toggle = () => <button>Toggle</button>;",
+            content: "export const HapticButton = () => null;",
           },
         ],
-        nextAgent: "Sinx QA Engineer",
+        nextAgent: "Synx QA Engineer",
       },
       provider: "mock",
       model: "static-mock",
@@ -55,7 +59,7 @@ vi.mock("../../lib/config.js", () => ({
   loadResolvedProjectConfig: vi.fn().mockResolvedValue({
     projectName: "test-app",
     language: "typescript",
-    framework: "nextjs",
+    framework: "expo",
     humanReviewer: "User",
     tasksDir: ".ai-agents/tasks",
     providers: {
@@ -71,50 +75,25 @@ vi.mock("../../lib/post-edit-sanity.js", () => ({
     checks: [],
     blockingFailureSummaries: [],
     outOfScopeFailureSummaries: [],
-    metrics: {
-      cheapChecksExecuted: 0,
-      heavyChecksExecuted: 0,
-      heavyChecksSkipped: 0,
-      fullBuildChecksExecuted: 0,
-      earlyInScopeFailures: false,
-    },
+    metrics: { cheapChecksExecuted: 0, heavyChecksExecuted: 0, heavyChecksSkipped: 0, fullBuildChecksExecuted: 0, earlyInScopeFailures: false },
   }),
 }));
 
 vi.mock("../../lib/code-quality-bootstrap.js", () => ({
-  ensureCodeQualityBootstrap: vi.fn().mockResolvedValue({
-    notes: [],
-    warnings: [],
-    changedFiles: [],
-  }),
+  ensureCodeQualityBootstrap: vi.fn().mockResolvedValue({ notes: [], warnings: [], changedFiles: [] }),
 }));
 
 vi.mock("../../lib/workspace-tools.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/workspace-tools.js")>();
   return {
     ...actual,
-    detectTestCapabilities: vi.fn().mockResolvedValue({
-      hasPackageJson: true,
-      hasE2EDir: false,
-      hasE2EScript: false,
-      hasE2ESpecFiles: false,
-      hasUnitTestScript: false,
-      hasUnitTestFiles: false,
-      e2eScripts: [],
-    }),
-    // First call (gitChangedBefore): empty — second call (gitChangedFiles): has the file
+    detectTestCapabilities: vi.fn().mockResolvedValue({ hasPackageJson: true, hasE2EDir: false, hasE2EScript: false, hasE2ESpecFiles: false, hasUnitTestScript: false, hasUnitTestFiles: false, e2eScripts: [] }),
+    // First call: empty — second call: has the file
     getGitChangedFiles: vi.fn()
       .mockResolvedValueOnce([])
-      .mockResolvedValue(["src/components/Toggle.tsx"]),
-    buildWorkspaceContextSnapshot: vi.fn().mockResolvedValue({
-      files: [],
-      summary: "mock workspace",
-    }),
-    applyWorkspaceEdits: vi.fn().mockResolvedValue({
-      changedFiles: ["src/components/Toggle.tsx"],
-      warnings: [],
-      skippedEdits: [],
-    }),
+      .mockResolvedValue(["src/components/HapticButton.tsx"]),
+    buildWorkspaceContextSnapshot: vi.fn().mockResolvedValue({ files: [], summary: "mock workspace" }),
+    applyWorkspaceEdits: vi.fn().mockResolvedValue({ changedFiles: ["src/components/HapticButton.tsx"], warnings: [], skippedEdits: [] }),
   };
 });
 
@@ -125,34 +104,21 @@ vi.mock("../../lib/orchestrator.js", () => ({
 
 vi.mock("../../lib/qa-remediation.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/qa-remediation.js")>();
-  return {
-    ...actual,
-    synthesizeQaSelectorHotfixEdits: vi.fn().mockResolvedValue({
-      edits: [],
-      notes: [],
-      warnings: [],
-    }),
-  };
+  return { ...actual, synthesizeQaSelectorHotfixEdits: vi.fn().mockResolvedValue({ edits: [], notes: [], warnings: [] }) };
 });
-
-// ─── Test setup ───────────────────────────────────────────────────────────────
 
 const originalCwd = process.cwd();
 
-describe.sequential("workers/experts/sinx-front-expert", () => {
+describe.sequential("workers/experts/synx-mobile-expert", () => {
   let root = "";
   let repoRoot = "";
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-front-expert-test-"));
+    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-mobile-expert-test-"));
     repoRoot = path.join(root, "repo");
     await fs.mkdir(path.join(repoRoot, ".ai-agents", "tasks"), { recursive: true });
     await fs.mkdir(path.join(repoRoot, ".ai-agents", "runtime", "locks"), { recursive: true });
-    await fs.writeFile(
-      path.join(repoRoot, "package.json"),
-      JSON.stringify({ name: "sinx-front-expert-test" }, null, 2),
-      "utf8",
-    );
+    await fs.writeFile(path.join(repoRoot, "package.json"), JSON.stringify({ name: "synx-mobile-test" }, null, 2), "utf8");
     process.chdir(repoRoot);
   });
 
@@ -162,32 +128,32 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("processes a feature task and routes to Sinx QA Engineer", async () => {
+  it("processes a mobile feature task and routes to Synx QA Engineer", async () => {
     const task = await createTask({
-      title: "Add dark mode toggle",
+      title: "Add haptic feedback",
       typeHint: "Feature",
       project: "test-app",
-      rawRequest: "Add a dark mode toggle button using Next.js App Router",
+      rawRequest: "Add haptic feedback to the main CTA button using Expo Haptics",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxFrontExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-mobile-expert",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
+      agent: "Synx Mobile Expert",
     });
 
-    const expert = new SinxFrontExpert();
+    const expert = new SynxMobileExpert();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Sinx QA Engineer");
+    expect(meta.nextAgent).toBe("Synx QA Engineer");
   });
 
   it("escalates to human review when the research loop guard triggers", async () => {
@@ -195,33 +161,32 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
     vi.mocked(requestResearchContext).mockResolvedValueOnce({
       status: "abort_to_human",
       context: null,
-      abortReason: "Research recommendation repeated.",
+      abortReason: "Research repeated.",
       triggerReasons: ["repeated_recommendation"],
       reusedContext: false,
     });
 
     const task = await createTask({
-      title: "Complex Next.js refactor",
-      typeHint: "Refactor",
+      title: "Complex RN animation",
+      typeHint: "Feature",
       project: "test-app",
-      rawRequest: "Refactor layout to RSC",
+      rawRequest: "Add Reanimated shared element transition",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxFrontExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-mobile-expert",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
+      agent: "Synx Mobile Expert",
     });
 
-    const expert = new SinxFrontExpert();
+    const expert = new SynxMobileExpert();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
-
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.humanApprovalRequired).toBe(true);
   });
@@ -229,53 +194,45 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
   it("processes a QA remediation task", async () => {
     const { DONE_FILE_NAMES } = await import("../../lib/constants.js");
     const { ARTIFACT_FILES } = await import("../../lib/task-artifacts.js");
-    const { applyWorkspaceEdits } = await import("../../lib/workspace-tools.js");
+    const { applyWorkspaceEdits, getGitChangedFiles } = await import("../../lib/workspace-tools.js");
     const { runPostEditSanityChecks } = await import("../../lib/post-edit-sanity.js");
-    const { getGitChangedFiles } = await import("../../lib/workspace-tools.js");
     const { createProvider } = await import("../../providers/factory.js");
 
     vi.mocked(getGitChangedFiles)
       .mockResolvedValueOnce([])
-      .mockResolvedValue(["src/components/Button.tsx"]);
+      .mockResolvedValue(["src/components/HapticButton.tsx"]);
 
     vi.mocked(createProvider).mockReturnValueOnce({
       generateStructured: vi.fn().mockResolvedValue({
         parsed: {
-          implementationSummary: "Fixing a11y",
-          filesChanged: ["src/components/Button.tsx"],
+          implementationSummary: "Fixing mobile a11y",
+          filesChanged: ["src/components/HapticButton.tsx"],
           impactedFiles: [],
-          changesMade: ["Added aria-label"],
+          changesMade: ["Added accessibilityLabel"],
           unitTestsAdded: [],
-          testsToRun: ["npm test", "npx playwright test"],
-          technicalRisks: ["A11y regression"],
+          testsToRun: ["npm test"],
+          technicalRisks: ["Touch target size"],
           riskAssessment: { buildRisk: "low", syntaxRisk: "low", logicRisk: "low" },
           reviewFocus: [],
           manualValidationNeeded: [],
           residualRisks: [],
           verificationMode: "executed_checks",
           risks: ["Risk A"],
-          edits: [{ path: "src/components/Button.tsx", action: "replace_snippet", find: "button", replace: 'button aria-label="test"' }],
-          nextAgent: "Sinx QA Engineer",
+          edits: [{ path: "src/components/HapticButton.tsx", action: "replace_snippet", find: "TouchableOpacity", replace: 'TouchableOpacity accessibilityLabel="test"' }],
+          nextAgent: "Synx QA Engineer",
         },
       }),
     } as any);
 
     vi.mocked(applyWorkspaceEdits).mockResolvedValueOnce({
-      appliedFiles: ["src/components/Button.tsx"],
-      changedFiles: ["src/components/Button.tsx"],
+      appliedFiles: ["src/components/HapticButton.tsx"],
+      changedFiles: ["src/components/HapticButton.tsx"],
       warnings: ["Warning A"],
       skippedEdits: ["Skip A"],
     });
 
-    vi.mocked(runPostEditSanityChecks).mockResolvedValueOnce({
-      success: false,
-      blockingFailureSummaries: ["Sanity fail A"],
-      results: [],
-    } as any);
-
-
     const task = await createTask({
-      title: "Fix accessibility findings",
+      title: "Fix mobile findings",
       typeHint: "Feature",
       project: "test-app",
       rawRequest: "Fix the items found by QA",
@@ -285,65 +242,49 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
     await fs.mkdir(path.join(task.taskPath, "artifacts"), { recursive: true });
     await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.projectProfile), { profile: "test" });
     await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.featureBrief), { brief: "test" });
-    await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.symbolContract), { symbols: [] });
 
-    const qaDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxQaEngineer);
+    const qaDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxQaEngineer);
     await writeJson(qaDonePath, {
       taskId: task.taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       status: "done",
       createdAt: new Date().toISOString(),
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
       output: {
         verdict: "fail",
-        failures: ["Button lacks aria-label"],
+        failures: ["Button lacks label"],
         qaHandoffContext: {
           attempt: 1,
           maxRetries: 3,
-          returnedTo: "Sinx Front Expert",
+          returnedTo: "Synx Mobile Expert",
           summary: "A11y fail",
           latestFindings: [
             {
-              issue: "Button lacks aria-label",
-              expectedResult: "Aria-label exists",
-              receivedResult: "No aria-label",
-              evidence: ["HTML snapshot"],
-              recommendedAction: "Add aria-label",
+              issue: "Button lacks label",
+              expectedResult: "Label exists",
+              receivedResult: "No label",
+              evidence: ["Snapshot"],
+              recommendedAction: "Add label",
             },
           ],
         },
       },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxFrontExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-mobile-expert",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
-      inputRef: `done/${DONE_FILE_NAMES.sinxQaEngineer}`,
+      agent: "Synx Mobile Expert",
+      inputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
     });
 
-    const expert = new SinxFrontExpert();
-    let processed = false;
-    try {
-      processed = await expert.tryProcess(task.taskId);
-    } catch (e) {
-      console.error("EXPERT THREW:", e);
-      throw e;
-    }
-
-    if (!processed) {
-      const auditLogPath = path.join(task.taskPath, "logs", "agent-audit.log");
-      const audit = await fs.readFile(auditLogPath, "utf8").catch(() => "no audit block");
-      console.error("AUDIT LOG FOR FAILURE:\n", audit);
-    }
+    const expert = new SynxMobileExpert();
+    const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
-
-    const meta = await loadTaskMeta(task.taskId);
-    expect(meta.status).toBe("waiting_agent");
   });
 
   it("exercises conditional logic branches", async () => {
@@ -352,28 +293,24 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
     const { synthesizeQaSelectorHotfixEdits } = await import("../../lib/qa-remediation.js");
     const { getGitChangedFiles, detectTestCapabilities } = await import("../../lib/workspace-tools.js");
 
-    // 1. Trigger bootstrap notes/warnings
     vi.mocked(ensureCodeQualityBootstrap).mockResolvedValueOnce({
       notes: ["Bootstrap note"],
       warnings: ["Bootstrap warning"],
       changedFiles: [],
     });
 
-    // 2. Trigger sanity failures
     vi.mocked(runPostEditSanityChecks).mockResolvedValueOnce({
       success: false,
       blockingFailureSummaries: ["Critical sanity fail"],
       results: [],
     } as any);
 
-    // 3. Trigger selector hotfix notes/warnings
     vi.mocked(synthesizeQaSelectorHotfixEdits).mockResolvedValueOnce({
       edits: [],
       notes: ["Hotfix note"],
       warnings: ["Hotfix warning"],
     });
 
-    // 4. Trigger E2E auto-injection branch (preferences require E2E but command missing)
     vi.mocked(detectTestCapabilities).mockResolvedValueOnce({
       hasPackageJson: true,
       hasE2EDir: true,
@@ -381,7 +318,7 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
       hasE2ESpecFiles: true,
       hasUnitTestScript: false,
       hasUnitTestFiles: false,
-      e2eScripts: ["test:e2e"], // command is 'npm run test:e2e'
+      e2eScripts: ["test:e2e"],
     } as any);
 
     const task = await createTask({
@@ -397,30 +334,27 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
       },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxFrontExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-mobile-expert",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
+      agent: "Synx Mobile Expert",
     });
 
-    const expert = new SinxFrontExpert();
+    const expert = new SynxMobileExpert();
     const processed = await expert.tryProcess(task.taskId);
 
     expect(processed).toBe(true);
 
-    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.sinxFrontExpert);
+    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxMobileExpert);
     const done = await fs.readFile(donePath, "utf8").then(JSON.parse);
     const output = done.output;
 
-    // Verify branches were hit
     expect(output.changesMade).toContain("Bootstrap note");
-    expect(output.changesMade).toContain("Hotfix note");
     expect(output.risks).toContain("Bootstrap warning");
     expect(output.risks).toContain("Quality gate: Critical sanity fail");
-    expect(output.risks).toContain("Hotfix warning");
     expect(output.testsToRun).toContain("npm run --if-present test:e2e");
   });
 
@@ -437,29 +371,124 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxFrontExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-mobile-expert",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
+      agent: "Synx Mobile Expert",
     });
 
-    const expert = new SinxFrontExpert();
+    const expert = new SynxMobileExpert();
     const processed = await expert.tryProcess(task.taskId);
     expect(processed).toBe(false);
+  });
+
+  it("covers research abort branch", async () => {
+    const { requestResearchContext } = await import("../../lib/orchestrator.js");
+    vi.mocked(requestResearchContext).mockResolvedValueOnce({
+      status: "abort_to_human",
+      context: null,
+      triggerReasons: ["uncertainty"],
+      reusedContext: false,
+    });
+
+    const task = await createTask({
+      title: "Abort test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Check abort",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-mobile-expert",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx Mobile Expert",
+    });
+
+    const expert = new SynxMobileExpert();
+    const processed = await expert.tryProcess(task.taskId);
+
+    expect(processed).toBe(true); // Agent finishes the handoff successfully
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.humanApprovalRequired).toBe(true);
+  });
+
+  it("covers deep branches (missing context, recovery notes, warnings)", async () => {
+    const { requestResearchContext } = await import("../../lib/orchestrator.js");
+    const { applyWorkspaceEdits, getGitChangedFiles } = await import("../../lib/workspace-tools.js");
+    const { createProvider } = await import("../../providers/factory.js");
+
+    vi.mocked(requestResearchContext).mockResolvedValueOnce({
+      status: "provided",
+      context: "Context with notes",
+      triggerReasons: [],
+      reusedContext: true, // Note branch 1
+    } as any);
+
+    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["src/app.tsx"]);
+
+    vi.mocked(applyWorkspaceEdits).mockResolvedValueOnce({
+      appliedFiles: ["src/app.tsx"],
+      changedFiles: ["src/app.tsx"],
+      warnings: ["Applied warning"], // Warning branch
+      skippedEdits: ["Skip 1"],
+    });
+
+    vi.mocked(createProvider).mockReturnValueOnce({
+      generateStructured: vi.fn().mockResolvedValue({
+        parsed: {
+          implementationSummary: "summary",
+          edits: [{ path: "src/app.tsx", action: "create", content: "data" }],
+          risks: ["Legacy risk"],
+          changesMade: ["Legacy change"],
+          testsToRun: ["npm run test"],
+          impactedFiles: ["src/app.tsx"],
+          technicalRisks: [],
+          filesChanged: ["src/app.tsx"],
+          nextAgent: "Synx QA Engineer",
+        },
+      }),
+    } as any);
+
+    // Branch: extraContext.relatedFiles is missing
+    const task = await createTask({
+      title: "Deep branch test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Check branches",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-mobile-expert",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx Mobile Expert",
+    });
+
+    const expert = new SynxMobileExpert();
+    const processed = await expert.tryProcess(task.taskId);
+
+    expect(processed).toBe(true);
   });
 
   it("includes research context tag when available", async () => {
     const { requestResearchContext } = await import("../../lib/orchestrator.js");
     const { getGitChangedFiles } = await import("../../lib/workspace-tools.js");
 
-    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["src/components/Toggle.tsx"]);
+    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["src/app.tsx"]);
 
     vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "success",
-      context: "User likes blue buttons",
+      status: "provided",
+      context: "User likes dark mode",
       reusedContext: false,
       triggerReasons: []
     } as any);
@@ -468,22 +497,21 @@ describe.sequential("workers/experts/sinx-front-expert", () => {
       title: "Research test",
       typeHint: "Feature",
       project: "test-app",
-      rawRequest: "Add button",
+      rawRequest: "Add toggle",
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.sinxFrontExpert);
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxMobileExpert);
     await writeJson(inboxPath, {
       taskId: task.taskId,
-      stage: "sinx-front-expert",
+      stage: "synx-mobile-expert",
       status: "request",
       createdAt: new Date().toISOString(),
-      agent: "Sinx Front Expert",
+      agent: "Synx Mobile Expert",
     });
 
-    const expert = new SinxFrontExpert();
+    const expert = new SynxMobileExpert();
     const processed = await expert.tryProcess(task.taskId);
     expect(processed).toBe(true);
   });
 });
-

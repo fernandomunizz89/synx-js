@@ -114,16 +114,16 @@ Supported task types:
 - `Mixed`
 
 Routing summary:
-- **Bug tasks:** `Dispatcher → Bug Investigator → Bug Fixer → Sinx QA Engineer → Human Review`
-- **Simple/clear tasks:** `Dispatcher → Expert → Sinx QA Engineer → Human Review`
-- **Complex/ambiguous tasks:** `Dispatcher → Spec Planner (targetExpert hint) → Expert → Sinx QA Engineer → Human Review`
+- **Bug tasks:** `Dispatcher → Bug Investigator → Bug Fixer → Synx QA Engineer → Human Review`
+- **Simple/clear tasks:** `Dispatcher → Expert → Synx QA Engineer → Human Review`
+- **Complex/ambiguous tasks:** `Dispatcher → Spec Planner (targetExpert hint) → Expert → Synx QA Engineer → Human Review`
 
 Expert Squad:
-- `Sinx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
-- `Sinx Mobile Expert` – Expo, React Native, Reanimated, EAS
-- `Sinx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
-- `Sinx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API, Lighthouse ≥ 90
-- `Sinx QA Engineer` – Playwright E2E + Vitest unit; auto-routes failures to originating expert
+- `Synx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
+- `Synx Mobile Expert` – Expo, React Native, Reanimated, EAS
+- `Synx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
+- `Synx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API, Lighthouse ≥ 90
+- `Synx QA Engineer` – Playwright E2E + Vitest unit; auto-routes failures to originating expert
 
 QA failure behavior:
 - QA failure context is cumulative across retries
@@ -417,11 +417,11 @@ Agent defaults:
 - `QA Validator`: `0.05`
 - `PR Writer`: `0.3`
 - `Human Review`: `0.1`
-- `Sinx Front Expert`: `0.05`
-- `Sinx Mobile Expert`: `0.05`
-- `Sinx Back Expert`: `0.05`
-- `Sinx QA Engineer`: `0.05`
-- `Sinx SEO Specialist`: `0.10`
+- `Synx Front Expert`: `0.05`
+- `Synx Mobile Expert`: `0.05`
+- `Synx Back Expert`: `0.05`
+- `Synx QA Engineer`: `0.05`
+- `Synx SEO Specialist`: `0.10`
 
 Task-type defaults:
 - `Feature`: `0.1`

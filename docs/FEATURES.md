@@ -21,11 +21,11 @@
 
 - **Dispatcher:** triages tasks and routes directly to the correct domain expert (or to Spec Planner for complex tasks with `targetExpert` hint).
 - **Conditional Planning:** Spec Planner is invoked only when the Dispatcher flags a task as complex/multi-step; it decomposes the task and routes to the expert identified by `targetExpert`.
-- **Sinx Front Expert:** Next.js App Router, TailwindCSS, WCAG 2.1, RSC patterns, React Testing Library.
-- **Sinx Mobile Expert:** Expo, React Native, Reanimated (UI-thread), EAS managed workflow, Jest/RNTL.
-- **Sinx Back Expert:** NestJS/Fastify, Prisma ORM, strict TypeScript, Vitest integration tests with mock injection.
-- **Sinx SEO Specialist:** Core Web Vitals (LCP/INP/CLS), JSON-LD Schema.org, Next.js Metadata API (`generateMetadata`), Lighthouse ≥ 90/90/90/95, robots.txt / sitemap.xml audits.
-- **Sinx QA Engineer:** Playwright (E2E) + Vitest (unit); produces structured verdicts with `issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction` per finding; auto-routes failures back to the originating expert.
+- **Synx Front Expert:** Next.js App Router, TailwindCSS, WCAG 2.1, RSC patterns, React Testing Library.
+- **Synx Mobile Expert:** Expo, React Native, Reanimated (UI-thread), EAS managed workflow, Jest/RNTL.
+- **Synx Back Expert:** NestJS/Fastify, Prisma ORM, strict TypeScript, Vitest integration tests with mock injection.
+- **Synx SEO Specialist:** Core Web Vitals (LCP/INP/CLS), JSON-LD Schema.org, Next.js Metadata API (`generateMetadata`), Lighthouse ≥ 90/90/90/95, robots.txt / sitemap.xml audits.
+- **Synx QA Engineer:** Playwright (E2E) + Vitest (unit); produces structured verdicts with `issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction` per finding; auto-routes failures back to the originating expert.
 
 ## QA & Quality Gates
 

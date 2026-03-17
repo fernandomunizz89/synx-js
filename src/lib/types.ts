@@ -21,11 +21,11 @@ export type AgentName =
   | "PR Writer"
   | "Human Review"
   // Dream Stack 2026 – Specialized Expert Squad
-  | "Sinx Front Expert"
-  | "Sinx Mobile Expert"
-  | "Sinx Back Expert"
-  | "Sinx QA Engineer"
-  | "Sinx SEO Specialist";
+  | "Synx Front Expert"
+  | "Synx Mobile Expert"
+  | "Synx Back Expert"
+  | "Synx QA Engineer"
+  | "Synx SEO Specialist";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio";
 export type E2EPolicy = "auto" | "required" | "skip";

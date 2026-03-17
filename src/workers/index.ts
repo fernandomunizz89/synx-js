@@ -4,20 +4,20 @@
 // Legacy workers are preserved on disk but are no longer registered here.
 
 import { DispatcherWorker } from "./dispatcher.js";
-import { SinxFrontExpert } from "./experts/sinx-front-expert.js";
-import { SinxMobileExpert } from "./experts/sinx-mobile-expert.js";
-import { SinxBackExpert } from "./experts/sinx-back-expert.js";
-import { SinxQAEngineer } from "./experts/sinx-qa-engineer.js";
-import { SinxSeoSpecialist } from "./experts/sinx-seo-specialist.js";
+import { SynxFrontExpert } from "./experts/synx-front-expert.js";
+import { SynxMobileExpert } from "./experts/synx-mobile-expert.js";
+import { SynxBackExpert } from "./experts/synx-back-expert.js";
+import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
+import { SynxSeoSpecialist } from "./experts/synx-seo-specialist.js";
 
 /** Domain-keyed squad map (Dispatcher → Expert → QA loop). */
 export const workers = {
   dispatcher: new DispatcherWorker(),
-  front: new SinxFrontExpert(),
-  mobile: new SinxMobileExpert(),
-  back: new SinxBackExpert(),
-  qa: new SinxQAEngineer(),
-  seo: new SinxSeoSpecialist(),
+  front: new SynxFrontExpert(),
+  mobile: new SynxMobileExpert(),
+  back: new SynxBackExpert(),
+  qa: new SynxQAEngineer(),
+  seo: new SynxSeoSpecialist(),
 };
 
 /** Flat list used by the daemon polling loop (start command). */

@@ -24,11 +24,11 @@ describe.sequential("workers/index", () => {
   it("registers the Dream Stack 2026 squad in expected orchestration order", () => {
     expect(workerList.map((worker) => worker.agent)).toEqual([
       "Dispatcher",
-      "Sinx Front Expert",
-      "Sinx Mobile Expert",
-      "Sinx Back Expert",
-      "Sinx QA Engineer",
-      "Sinx SEO Specialist",
+      "Synx Front Expert",
+      "Synx Mobile Expert",
+      "Synx Back Expert",
+      "Synx QA Engineer",
+      "Synx SEO Specialist",
     ]);
   });
 

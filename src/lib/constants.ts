@@ -19,11 +19,11 @@ export const STAGE_FILE_NAMES = {
   qa: "06-qa.request.json",
   pr: "07-pr.request.json",
   // Dream Stack 2026 – Expert Squad
-  sinxFrontExpert: "04-sinx-front-expert.request.json",
-  sinxMobileExpert: "04-sinx-mobile-expert.request.json",
-  sinxBackExpert: "04-sinx-back-expert.request.json",
-  sinxQaEngineer: "06-sinx-qa-engineer.request.json",
-  sinxSeoSpecialist: "04-sinx-seo-specialist.request.json",
+  synxFrontExpert: "04-synx-front-expert.request.json",
+  synxMobileExpert: "04-synx-mobile-expert.request.json",
+  synxBackExpert: "04-synx-back-expert.request.json",
+  synxQaEngineer: "06-synx-qa-engineer.request.json",
+  synxSeoSpecialist: "04-synx-seo-specialist.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -36,11 +36,11 @@ export const DONE_FILE_NAMES = {
   qa: "06-qa.done.json",
   pr: "07-pr.done.json",
   // Dream Stack 2026 – Expert Squad
-  sinxFrontExpert: "04-sinx-front-expert.done.json",
-  sinxMobileExpert: "04-sinx-mobile-expert.done.json",
-  sinxBackExpert: "04-sinx-back-expert.done.json",
-  sinxQaEngineer: "06-sinx-qa-engineer.done.json",
-  sinxSeoSpecialist: "04-sinx-seo-specialist.done.json",
+  synxFrontExpert: "04-synx-front-expert.done.json",
+  synxMobileExpert: "04-synx-mobile-expert.done.json",
+  synxBackExpert: "04-synx-back-expert.done.json",
+  synxQaEngineer: "06-synx-qa-engineer.done.json",
+  synxSeoSpecialist: "04-synx-seo-specialist.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [
@@ -54,9 +54,9 @@ export const REQUIRED_PROMPT_FILES = [
   "qa-validator.md",
   "pr-writer.md",
   // Dream Stack 2026 – Expert Squad
-  "sinx-front-expert.md",
-  "sinx-mobile-expert.md",
-  "sinx-back-expert.md",
-  "sinx-qa-engineer.md",
-  "sinx-seo-specialist.md",
+  "synx-front-expert.md",
+  "synx-mobile-expert.md",
+  "synx-back-expert.md",
+  "synx-qa-engineer.md",
+  "synx-seo-specialist.md",
 ] as const;

@@ -18,11 +18,11 @@ SYNX is a CLI orchestrator for a multi-agent AI pipeline. It manages autonomous 
 The engine runs a specialized squad of domain experts. The Dispatcher triages each task and routes it — either directly to the right expert (simple/clear tasks) or through the Spec Planner first (complex/ambiguous tasks).
 
 Expert Squad:
-- `Sinx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
-- `Sinx Mobile Expert` – Expo, React Native, Reanimated, EAS
-- `Sinx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
-- `Sinx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API
-- `Sinx QA Engineer` – Playwright E2E + Vitest; auto-routes failures back to the originating expert
+- `Synx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
+- `Synx Mobile Expert` – Expo, React Native, Reanimated, EAS
+- `Synx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
+- `Synx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API
+- `Synx QA Engineer` – Playwright E2E + Vitest; auto-routes failures back to the originating expert
 
 **Conditional Planning:**
 The Dispatcher sets `nextAgent: "Spec Planner"` with a `targetExpert` hint for complex tasks. The Spec Planner decomposes the task and routes directly to the correct expert.
@@ -171,11 +171,11 @@ Bug tasks:
 
 | Agent | Domain |
 |---|---|
-| `Sinx Front Expert` | Next.js App Router · TailwindCSS · WCAG 2.1 · RSC patterns |
-| `Sinx Mobile Expert` | Expo · React Native · Reanimated · EAS managed workflow |
-| `Sinx Back Expert` | NestJS / Fastify · Prisma ORM · Strict TypeScript · Vitest integration |
-| `Sinx SEO Specialist` | Core Web Vitals · JSON-LD / Schema.org · Next.js Metadata API · Lighthouse ≥ 90 |
-| `Sinx QA Engineer` | Playwright E2E · Vitest unit · auto-routes failures to originating expert |
+| `Synx Front Expert` | Next.js App Router · TailwindCSS · WCAG 2.1 · RSC patterns |
+| `Synx Mobile Expert` | Expo · React Native · Reanimated · EAS managed workflow |
+| `Synx Back Expert` | NestJS / Fastify · Prisma ORM · Strict TypeScript · Vitest integration |
+| `Synx SEO Specialist` | Core Web Vitals · JSON-LD / Schema.org · Next.js Metadata API · Lighthouse ≥ 90 |
+| `Synx QA Engineer` | Playwright E2E · Vitest unit · auto-routes failures to originating expert |
 
 ### QA Failure Loop
 

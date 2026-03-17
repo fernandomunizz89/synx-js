@@ -30,12 +30,12 @@ import { detectTestCapabilities, getGitChangedFiles } from "../../lib/workspace-
 import { runProjectChecks } from "../../lib/validation-checks.js";
 import { WorkerBase } from "../base.js";
 
-function sinxQaReturnHistoryPath(taskId: string): string {
-  return path.join(taskDir(taskId), "artifacts", "sinx-qa-return-context-history.json");
+function synxQaReturnHistoryPath(taskId: string): string {
+  return path.join(taskDir(taskId), "artifacts", "synx-qa-return-context-history.json");
 }
 
-async function loadSinxQaReturnHistory(taskId: string): Promise<QaReturnHistoryEntry[]> {
-  const historyPath = sinxQaReturnHistoryPath(taskId);
+async function loadSynxQaReturnHistory(taskId: string): Promise<QaReturnHistoryEntry[]> {
+  const historyPath = synxQaReturnHistoryPath(taskId);
   if (!(await exists(historyPath))) return [];
   try {
     const payload = await readJson<{ entries?: unknown }>(historyPath);
@@ -45,8 +45,8 @@ async function loadSinxQaReturnHistory(taskId: string): Promise<QaReturnHistoryE
   }
 }
 
-async function saveSinxQaReturnHistory(taskId: string, entries: QaReturnHistoryEntry[]): Promise<void> {
-  await writeJson(sinxQaReturnHistoryPath(taskId), {
+async function saveSynxQaReturnHistory(taskId: string, entries: QaReturnHistoryEntry[]): Promise<void> {
+  await writeJson(synxQaReturnHistoryPath(taskId), {
     taskId,
     updatedAt: nowIso(),
     entries,
@@ -55,43 +55,43 @@ async function saveSinxQaReturnHistory(taskId: string, entries: QaReturnHistoryE
 
 function isExpertAgent(name: string): name is QaRemediationAgent {
   return (
-    name === "Sinx Front Expert"
-    || name === "Sinx Mobile Expert"
-    || name === "Sinx Back Expert"
-    || name === "Sinx SEO Specialist"
+    name === "Synx Front Expert"
+    || name === "Synx Mobile Expert"
+    || name === "Synx Back Expert"
+    || name === "Synx SEO Specialist"
     || name === "Feature Builder"
     || name === "Bug Fixer"
   );
 }
 
 /**
- * Sinx QA Engineer – Dream Stack 2026
+ * Synx QA Engineer – Dream Stack 2026
  *
  * High-Voltage Execution Arbiter for the expert squad.
  * Validates software produced by domain experts. Chooses contextually
  * between Playwright (full Web E2E) and Vitest (unit isolation).
  * Routes failures back to the originating domain expert automatically.
  */
-export class SinxQAEngineer extends WorkerBase {
-  readonly agent = "Sinx QA Engineer" as const;
-  readonly requestFileName = STAGE_FILE_NAMES.sinxQaEngineer;
-  readonly workingFileName = "06-sinx-qa-engineer.working.json";
+export class SynxQAEngineer extends WorkerBase {
+  readonly agent = "Synx QA Engineer" as const;
+  readonly requestFileName = STAGE_FILE_NAMES.synxQaEngineer;
+  readonly workingFileName = "06-synx-qa-engineer.working.json";
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
-    const prompt = await loadPromptFile("sinx-qa-engineer.md");
+    const prompt = await loadPromptFile("synx-qa-engineer.md");
     const provider = createProvider(config.providers.planner);
     const workspaceRoot = process.cwd();
     const baseInput = await this.buildAgentInput(taskId, request);
     const qaPreferences = resolveTaskQaPreferences(baseInput.task);
     await ensureCodeQualityBootstrap({ workspaceRoot });
     const testCapabilities = await detectTestCapabilities(workspaceRoot);
-    const returnHistory = await loadSinxQaReturnHistory(taskId);
+    const returnHistory = await loadSynxQaReturnHistory(taskId);
 
     await this.note({
       taskId,
-      stage: "sinx-qa-engineer",
+      stage: "synx-qa-engineer",
       message: "execution_context",
       details: { testCapabilities, returnHistoryCount: returnHistory.length, qaPreferences },
     });
@@ -121,7 +121,7 @@ export class SinxQAEngineer extends WorkerBase {
     const taskMeta = await loadTaskMeta(taskId);
     const previousExpert: QaRemediationAgent | "Human Review" = (() => {
       const history = taskMeta.history ?? [];
-      const expertNames = ["Sinx Front Expert", "Sinx Mobile Expert", "Sinx Back Expert", "Sinx SEO Specialist"] as const;
+      const expertNames = ["Synx Front Expert", "Synx Mobile Expert", "Synx Back Expert", "Synx SEO Specialist"] as const;
       for (let i = history.length - 1; i >= 0; i--) {
         const agentName = history[i].agent as string;
         if (expertNames.some((n) => n === agentName) && isExpertAgent(agentName)) {
@@ -131,20 +131,20 @@ export class SinxQAEngineer extends WorkerBase {
       return "Human Review";
     })();
 
-    const roleContract = buildAgentRoleContract("Sinx QA Engineer", {
-      stage: "sinx-qa-engineer",
+    const roleContract = buildAgentRoleContract("Synx QA Engineer", {
+      stage: "synx-qa-engineer",
       taskTypeHint: baseInput.task.typeHint,
     });
 
     const qaContract = `
-SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
+SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
 - Mission: validate ALL behavior against acceptance criteria. You are the last quality gate.
 - Strategy: choose Playwright for full Web E2E; Vitest for isolated logic units. Never mix coverage signals.
 - Destructive Mindset: probe edge cases, race conditions, missing guards, and type boundaries.
 - Evidence: every finding must include: returnContext[] with issue, expectedResult, receivedResult, evidence[], recommendedAction.
 - Verdict: "pass" only if ALL acceptance criteria + automated checks pass.
 - Stack: validate mechanical integrity of Next.js, Expo/React Native, Fastify/NestJS.
-- nextAgent must be one of: "PR Writer" | "Feature Builder" | "Bug Fixer" | "Sinx Front Expert" | "Sinx Mobile Expert" | "Sinx Back Expert" | "Human Review".
+- nextAgent must be one of: "PR Writer" | "Feature Builder" | "Bug Fixer" | "Synx Front Expert" | "Synx Mobile Expert" | "Synx Back Expert" | "Human Review".
   Use the expert that built the failing feature. Use "PR Writer" on pass.
 `;
 
@@ -172,14 +172,14 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${qaContract}`;
 
     const result = await provider.generateStructured({
-      agent: "Sinx QA Engineer",
+      agent: "Synx QA Engineer",
       taskId,
       stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer | Sinx Front Expert | Sinx Mobile Expert | Sinx Back Expert | Human Review" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer | Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Human Review" }',
     });
 
     const output = qaOutputSchema.parse(result.parsed);
@@ -222,7 +222,7 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
         failures: output.failures,
         findings: mergedReturnContext,
       };
-      await saveSinxQaReturnHistory(taskId, [...returnHistory, newEntry]);
+      await saveSynxQaReturnHistory(taskId, [...returnHistory, newEntry]);
     }
 
     const rootCauseFocus = deriveQaRootCauseFocus({
@@ -231,10 +231,10 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
     });
 
     const expertStageMap: Record<string, { stage: string; fileName: string }> = {
-      "Sinx Front Expert":    { stage: "sinx-front-expert",    fileName: STAGE_FILE_NAMES.sinxFrontExpert },
-      "Sinx Mobile Expert":   { stage: "sinx-mobile-expert",   fileName: STAGE_FILE_NAMES.sinxMobileExpert },
-      "Sinx Back Expert":     { stage: "sinx-back-expert",     fileName: STAGE_FILE_NAMES.sinxBackExpert },
-      "Sinx SEO Specialist":  { stage: "sinx-seo-specialist",  fileName: STAGE_FILE_NAMES.sinxSeoSpecialist },
+      "Synx Front Expert":    { stage: "synx-front-expert",    fileName: STAGE_FILE_NAMES.synxFrontExpert },
+      "Synx Mobile Expert":   { stage: "synx-mobile-expert",   fileName: STAGE_FILE_NAMES.synxMobileExpert },
+      "Synx Back Expert":     { stage: "synx-back-expert",     fileName: STAGE_FILE_NAMES.synxBackExpert },
+      "Synx SEO Specialist":  { stage: "synx-seo-specialist",  fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
       "Feature Builder":      { stage: "builder",              fileName: STAGE_FILE_NAMES.builder },
       "Bug Fixer":            { stage: "bug-fixer",            fileName: STAGE_FILE_NAMES.bugFixer },
     };
@@ -243,7 +243,7 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
       .map((f, i) => `${i + 1}. ${f.issue}\n   Expected: ${f.expectedResult}\n   Received: ${f.receivedResult}\n   Action: ${f.recommendedAction}`)
       .join("\n") || "- [none]";
 
-    const view = `# HANDOFF\n\n## Agent\nSinx QA Engineer (Dream Stack 2026)\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${verdict === "pass" ? "Human Review (PR Writer)" : String(previousExpert)}\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer (Dream Stack 2026)\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${verdict === "pass" ? "Human Review (PR Writer)" : String(previousExpert)}\n`;
 
     const effectiveNextAgent: AgentName = verdict === "pass"
       ? "PR Writer"
@@ -255,9 +255,9 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
 
     await this.finishStage({
       taskId,
-      stage: "sinx-qa-engineer",
-      doneFileName: DONE_FILE_NAMES.sinxQaEngineer,
-      viewFileName: "06-sinx-qa-engineer.md",
+      stage: "synx-qa-engineer",
+      doneFileName: DONE_FILE_NAMES.synxQaEngineer,
+      viewFileName: "06-synx-qa-engineer.md",
       viewContent: view,
       output: {
         ...output,
@@ -267,7 +267,7 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
       nextAgent: effectiveNextAgent,
       nextStage: nextMapping?.stage || (effectiveNextAgent === "PR Writer" ? "pr" : undefined),
       nextRequestFileName: nextMapping?.fileName || (effectiveNextAgent === "PR Writer" ? STAGE_FILE_NAMES.pr : undefined),
-      nextInputRef: `done/${DONE_FILE_NAMES.sinxQaEngineer}`,
+      nextInputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
       humanApprovalRequired: effectiveNextAgent === "Human Review" || (effectiveNextAgent === "PR Writer" && !nextMapping),
       startedAt,
       provider: result.provider,
