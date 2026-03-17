@@ -121,7 +121,7 @@ async function readPackageJson(packageJsonPath: string): Promise<PackageJsonShap
   }
 }
 
-function resolveEslintDeps(args: {
+export function resolveEslintDeps(args: {
   tsProject: boolean;
   pkg: PackageJsonShape;
 }): string[] {

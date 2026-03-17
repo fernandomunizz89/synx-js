@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { collectReadinessReport, type ReadinessReport } from "./readiness.js";
+import { collectReadinessReport, printReadinessReport, type ReadinessReport } from "./readiness.js";
 import { loadResolvedProjectConfig } from "./config.js";
 import { checkProviderHealth } from "./provider-health.js";
 import { exists } from "./fs.js";
@@ -94,5 +94,28 @@ describe("readiness checks", () => {
     const report = await collectReadinessReport({ includeProviderChecks: true });
     expect(report.ok).toBe(false);
     expect(report.issues.some((i) => i.message.includes("Network Error"))).toBe(true);
+  });
+
+  describe("printReadinessReport", () => {
+    it("does nothing for empty reports", () => {
+      const consoleSpy = vi.spyOn(console, "log");
+      printReadinessReport({ ok: true, issues: [] });
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
+
+    it("prints issues with markers", () => {
+      const consoleSpy = vi.spyOn(console, "log");
+      const report: ReadinessReport = {
+        ok: false,
+        issues: [
+          { severity: "error", message: "Err" },
+          { severity: "warning", message: "Warn" },
+        ],
+      };
+      printReadinessReport(report, "Title");
+      expect(consoleSpy).toHaveBeenCalledWith("\nTitle");
+      expect(consoleSpy).toHaveBeenCalledWith("✗ Err");
+      expect(consoleSpy).toHaveBeenCalledWith("! Warn");
+    });
   });
 });
