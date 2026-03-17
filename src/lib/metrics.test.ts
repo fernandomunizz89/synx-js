@@ -2,8 +2,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { loadTimingEntries, summarizeMetrics } from "./metrics.js";
 import { promises as fs } from "node:fs";
 import { exists } from "./fs.js";
-import path from "node:path";
-import { logsDir } from "./paths.js";
 
 vi.mock("node:fs", () => ({
   promises: {

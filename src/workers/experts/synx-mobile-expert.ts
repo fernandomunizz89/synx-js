@@ -19,7 +19,7 @@ import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilit
 import { WorkerBase } from "../base.js";
 
 /**
- * Synx Mobile Expert – Dream Stack 2026
+ * Synx Mobile Expert
  *
  * Domain specialist for Expo + React Native.
  * Targets zero dropped frames, minimal JS bundle bloat,
@@ -105,7 +105,7 @@ export class SynxMobileExpert extends WorkerBase {
     });
 
     const mobileContract = `
-SYNX MOBILE EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
+SYNX MOBILE EXPERT – EXECUTION CONTRACT:
 - Stack: Expo (managed workflow) + React Native ONLY.
 - Animations: use Reanimated for all UI-thread-critical transitions. Avoid JS-thread animations in hot paths.
 - Bundle: audit imports for bundle-bloat; tree-shake aggressively. No unnecessary polyfills.
@@ -190,7 +190,7 @@ SYNX MOBILE EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
 
     output.technicalRisks = uniqueNormalized([...output.technicalRisks, ...output.risks]).slice(0, 16);
 
-    const view = `# HANDOFF\n\n## Agent\nSynx Mobile Expert (Dream Stack 2026)\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx Mobile Expert\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
 
     await this.finishStage({
       taskId,

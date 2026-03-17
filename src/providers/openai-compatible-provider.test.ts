@@ -304,7 +304,7 @@ describe.sequential("providers/openai-compatible-provider", () => {
     const p1 = provider.generateStructured(requestBase());
     const p2 = provider.generateStructured(requestBase());
     
-    const [res1, res2] = await Promise.all([p1, p2]);
+    const [_, res2] = await Promise.all([p1, p2]);
     expect(res2.providerRateLimitWaitMs).toBeGreaterThan(0);
     
     delete process.env.AI_AGENTS_PROVIDER_MAX_CONCURRENT_REQUESTS;

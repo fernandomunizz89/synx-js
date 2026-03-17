@@ -14,8 +14,6 @@ import {
   type QaReturnContextItem,
   type QaReturnHistoryEntry,
   type QaTestCase,
-  type RiskLevel,
-  type TechnicalRiskSummary,
   buildQaCumulativeFindings,
   compactQaReturnHistoryEntries,
   formatReturnContextForView,
@@ -33,7 +31,7 @@ import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
-import { normalizeIssueLine, unique } from "../lib/text-utils.js";
+import { unique } from "../lib/text-utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runE2ESelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
 
@@ -1046,7 +1044,7 @@ function deriveQaValidationMode(checks: Array<{ status: "passed" | "failed" | "s
 }
 
 export class QaWorker extends WorkerBase {
-  readonly agent = "QA Validator" as const;
+  readonly agent = "Synx QA Engineer" as const;
   readonly requestFileName = STAGE_FILE_NAMES.qa;
   readonly workingFileName = "06-qa.working.json";
 
@@ -1169,7 +1167,7 @@ export class QaWorker extends WorkerBase {
       },
     });
 
-    const remediationAgent: AgentName = baseInput.task.typeHint === "Bug" ? "Bug Fixer" : "Feature Builder";
+    const remediationAgent: AgentName = baseInput.task.typeHint === "Bug" ? "Synx Back Expert" : "Synx Front Expert";
 
     const modelInput = {
       ...baseInput,
@@ -1226,26 +1224,26 @@ MANDATORY VALIDATION CONTRACT:
 - Explicitly fill filesReviewed, validationMode, technicalRiskSummary, recommendedChecks, manualValidationNeeded, and residualRisks.
 - Do not claim full certainty unless checks were truly executed.
 - If part of the conclusion is static analysis only, state it in residualRisks/manualValidationNeeded.
-- If verdict is "pass", set "nextAgent" to "PR Writer".
+- If verdict is "pass", set "nextAgent" to "Human Review".
 - This QA attempt is ${currentQaAttempt} of max ${maxQaRetriesHint} before forced human escalation.
 - Keep failures specific and actionable.
 `;
 
-    const roleContract = buildAgentRoleContract("QA Validator", {
+    const roleContract = buildAgentRoleContract("Synx QA Engineer", {
       stage: "qa",
       taskTypeHint: baseInput.task.typeHint,
       qaAttempt: currentQaAttempt,
     });
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
     const result = await provider.generateStructured({
-      agent: "QA Validator",
+      agent: "Synx QA Engineer",
       taskId,
       stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "Human Review | Synx Front Expert | Synx Back Expert" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
@@ -1287,7 +1285,8 @@ MANDATORY VALIDATION CONTRACT:
       config: retryConfig,
     });
 
-    output.nextAgent = output.verdict === "pass" ? "PR Writer" : remediationAgent;
+    const finalNextAgent: AgentName = output.verdict === "pass" ? "Human Review" : remediationAgent;
+    output.nextAgent = finalNextAgent;
     const escalatedToHuman = output.verdict === "fail" && currentQaAttempt >= maxQaRetries;
     if (escalatedToHuman) {
       output.failures = unique([
@@ -1448,12 +1447,8 @@ MANDATORY VALIDATION CONTRACT:
     output.qaHandoffContext = qaHandoffContext;
 
     const queuedNextAgent = escalatedToHuman ? undefined : output.nextAgent;
-    const queuedNextStage = queuedNextAgent === "PR Writer" ? "pr" : queuedNextAgent === "Bug Fixer" ? "bug-fixer" : "builder";
-    const queuedNextRequestFileName = queuedNextAgent === "PR Writer"
-      ? STAGE_FILE_NAMES.pr
-      : queuedNextAgent === "Bug Fixer"
-        ? STAGE_FILE_NAMES.bugFixer
-        : STAGE_FILE_NAMES.builder;
+    const queuedNextStage = "builder";
+    const queuedNextRequestFileName = STAGE_FILE_NAMES.builder;
     const nextInputRef = `done/${DONE_FILE_NAMES.qa}`;
 
     const view = `# HANDOFF

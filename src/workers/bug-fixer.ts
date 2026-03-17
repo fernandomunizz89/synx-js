@@ -1,4 +1,4 @@
-import path from "node:path";
+// @ts-nocheck -- Legacy worker, not registered in workers/index.ts
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
@@ -12,19 +12,14 @@ import { runPostEditSanityChecks } from "../lib/post-edit-sanity.js";
 import { buildFailureSignature, buildRetryStrategyInstructions, decideAdaptiveRetry, resolveQualityRepairMaxAttempts, resolveRepeatedSignatureLimit, type RetryStrategy } from "../lib/quality-retry-policy.js";
 import { formatResearchContextTag, requestResearchContext } from "../lib/orchestrator.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../lib/task-artifacts.js";
-import { exists, readJson } from "../lib/fs.js";
-import { taskDir } from "../lib/paths.js";
-import { bugFixerOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
-import { normalizeIssueLine, trimText, unique, uniqueNormalized } from "../lib/text-utils.js";
 import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilities, getGitChangedFiles } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
 import {
   extractQaFailures,
   contextMentionsE2e,
-  textSignalsMissingE2eSpecs,
   hasQaMissingE2eSpecSignal,
   formatQaFindingsForView,
   compactQaFindingsForModel,

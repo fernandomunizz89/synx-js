@@ -57,17 +57,12 @@ const VALID_TASK_TYPES: TaskType[] = [
 ];
 
 const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
+  // Orchestration layer
   "Dispatcher": 0.1,
   "Spec Planner": 0.1,
   "Bug Investigator": 0.1,
-  "Bug Fixer": 0.05,
-  "Feature Builder": 0.05,
-  "Researcher": 0.2,
-  "Reviewer": 0.05,
-  "QA Validator": 0.05,
-  "PR Writer": 0.3,
   "Human Review": 0.1,
-  // Dream Stack 2026 – Expert Squad
+  // Expert Squad
   "Synx Front Expert": 0.05,
   "Synx Mobile Expert": 0.05,
   "Synx Back Expert": 0.05,

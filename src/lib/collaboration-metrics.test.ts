@@ -2,9 +2,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { buildCollaborationMetricsReport, parseMetricsTimestamp } from "./collaboration-metrics.js";
 import { promises as fs } from "node:fs";
 import { exists, listFiles, listDirectories, readJson } from "./fs.js";
-import path from "node:path";
-import { logsDir, tasksDir } from "./paths.js";
-
 vi.mock("node:fs", () => ({
   promises: {
     readFile: vi.fn(),

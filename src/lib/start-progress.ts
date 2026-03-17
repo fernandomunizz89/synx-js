@@ -343,7 +343,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       ? (snapshot.consoleLogLines.length ? snapshot.consoleLogLines.slice(-5) : [synxMuted("No console messages yet.")])
       : (snapshot.eventLogLines.length ? snapshot.eventLogLines.slice(-5) : [synxMuted("No events yet. Waiting for activity...")]);
     const researcherActive = snapshot.metas.some((meta) =>
-      (meta.currentAgent === "Researcher" || meta.currentStage.endsWith(":research"))
+      meta.currentStage.endsWith(":research")
       && ["new", "in_progress", "waiting_agent"].includes(meta.status),
     );
     if (!isConsoleView && researcherActive) {

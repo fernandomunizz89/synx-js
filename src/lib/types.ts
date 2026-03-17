@@ -10,17 +10,12 @@ export type TaskStatus =
   | "archived";
 
 export type AgentName =
+  // Orchestration layer
   | "Dispatcher"
   | "Spec Planner"
-  | "Bug Investigator"
-  | "Bug Fixer"
-  | "Feature Builder"
-  | "Researcher"
-  | "Reviewer"
-  | "QA Validator"
-  | "PR Writer"
   | "Human Review"
-  // Dream Stack 2026 – Specialized Expert Squad
+  // Expert Squad
+  | "Bug Investigator"
   | "Synx Front Expert"
   | "Synx Mobile Expert"
   | "Synx Back Expert"

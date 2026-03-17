@@ -117,7 +117,7 @@ export class BugInvestigatorWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "confidenceScore": 0.0, "suspectFiles": ["string"], "suspectAreas": ["string"], "primaryHypothesis": "string", "secondaryHypotheses": ["string"], "riskAssessment": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "integrationRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "builderChecks": ["string"], "handoffNotes": ["string"], "nextAgent": "Bug Fixer" }',
+        '{ "symptomSummary": "string", "knownFacts": ["string"], "likelyCauses": ["string"], "investigationSteps": ["string"], "unknowns": ["string"], "confidenceScore": 0.0, "suspectFiles": ["string"], "suspectAreas": ["string"], "primaryHypothesis": "string", "secondaryHypotheses": ["string"], "riskAssessment": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "integrationRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "builderChecks": ["string"], "handoffNotes": ["string"], "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Bug Investigator | Human Review" }',
     });
     const output = bugInvestigatorOutputSchema.parse(result.parsed);
     const triageDiagnostics = triageChecks.flatMap((check) => check.diagnostics);
@@ -295,7 +295,7 @@ ${triageChecks.length ? triageChecks.map((check) => {
 ${symbolContracts.length ? symbolContracts.map((contract) => `- ${contract.expectedImportShape} | ${contract.mismatchSummary}`).join("\n") : "- [none]"}
 
 ## Next
-Bug Fixer
+Synx Back Expert
 `;
 
     await this.finishStage({
@@ -305,9 +305,9 @@ Bug Fixer
       viewFileName: "02b-bug-investigator.md",
       viewContent: view,
       output,
-      nextAgent: "Bug Fixer",
-      nextStage: "bug-fixer",
-      nextRequestFileName: STAGE_FILE_NAMES.bugFixer,
+      nextAgent: "Synx Back Expert",
+      nextStage: "synx-back-expert",
+      nextRequestFileName: STAGE_FILE_NAMES.synxBackExpert,
       nextInputRef: `done/${DONE_FILE_NAMES.bugInvestigator}`,
       startedAt,
       provider: result.provider,

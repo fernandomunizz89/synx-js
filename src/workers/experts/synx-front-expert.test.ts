@@ -350,7 +350,7 @@ describe.sequential("workers/experts/synx-front-expert", () => {
     const { ensureCodeQualityBootstrap } = await import("../../lib/code-quality-bootstrap.js");
     const { runPostEditSanityChecks } = await import("../../lib/post-edit-sanity.js");
     const { synthesizeQaSelectorHotfixEdits } = await import("../../lib/qa-remediation.js");
-    const { getGitChangedFiles, detectTestCapabilities } = await import("../../lib/workspace-tools.js");
+    const { detectTestCapabilities } = await import("../../lib/workspace-tools.js");
 
     // 1. Trigger bootstrap notes/warnings
     vi.mocked(ensureCodeQualityBootstrap).mockResolvedValueOnce({

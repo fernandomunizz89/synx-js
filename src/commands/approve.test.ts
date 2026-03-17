@@ -1,8 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { approveCommand } from "./approve.js";
 import { allTaskIds, loadTaskMeta, saveTaskMeta } from "../lib/task.js";
-import { confirmAction, selectOption } from "../lib/interactive.js";
-import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { collectReadinessReport } from "../lib/readiness.js";
 
 vi.mock("../lib/task.js", () => ({

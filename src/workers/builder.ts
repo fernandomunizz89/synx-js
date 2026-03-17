@@ -1,4 +1,3 @@
-import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
@@ -19,20 +18,17 @@ import {
 } from "../lib/quality-retry-policy.js";
 import { formatResearchContextTag, requestResearchContext } from "../lib/orchestrator.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../lib/task-artifacts.js";
-import { exists, readJson } from "../lib/fs.js";
-import { taskDir } from "../lib/paths.js";
 import { builderOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
-import { normalizeRiskLevel, raiseRisk, type RiskLevel } from "../lib/risk.js";
-import { normalizeIssueLine, trimText, unique, uniqueNormalized } from "../lib/text-utils.js";
+import { normalizeRiskLevel, raiseRisk } from "../lib/risk.js";
+import { trimText, unique, uniqueNormalized } from "../lib/text-utils.js";
 import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilities, getGitChangedFiles } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
 import {
   extractQaFailures,
   contextMentionsE2e,
-  textSignalsMissingE2eSpecs,
   hasQaMissingE2eSpecSignal,
   formatQaFindingsForView,
   compactQaFindingsForModel,
@@ -52,7 +48,7 @@ import {
 
 
 export class BuilderWorker extends WorkerBase {
-  readonly agent = "Feature Builder" as const;
+  readonly agent = "Synx Front Expert" as const;
   readonly requestFileName = STAGE_FILE_NAMES.builder;
   readonly workingFileName = "04-builder.working.json";
 
@@ -329,14 +325,14 @@ Return exactly this JSON shape:
 }
 `;
 
-    const roleContract = buildAgentRoleContract("Feature Builder", {
+    const roleContract = buildAgentRoleContract("Synx Front Expert", {
       stage: "builder",
       taskTypeHint: baseInput.task.typeHint,
       qaAttempt: qaHandoffContext?.attempt ?? 0,
     });
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}`;
     const result = await provider.generateStructured({
-      agent: "Feature Builder",
+      agent: "Synx Front Expert",
       taskId,
       stage: request.stage,
       taskType: baseInput.task.typeHint,
@@ -629,7 +625,7 @@ Return exactly this JSON shape:
       const repairPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(repairInput, null, 2))}\n\n${roleContract}\n\n${strictContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}\n\nQUALITY GATE REMEDIATION:\n- Current attempt: ${qualityRepairAttempts}/${maxQualityRepairAttempts}.\n- Fix every blocking failure from qualityGate.blockingFailures before handover.\n- Keep edits scoped to qualityGate.scopeFiles when possible.\n- Do not create unrelated behavior changes.\n- If diagnostics mention TS6198 or no-unused-vars, remove or rename unused bindings so lint/typecheck passes.\n- If diagnostics mention TS2322 / IntrinsicAttributes, align props with existing component contracts instead of widening APIs blindly.\n- Return valid JSON with concrete edits only.\n\n${retryInstructions}`;
       const retryStartedAt = Date.now();
       const repairResult = await provider.generateStructured({
-        agent: "Feature Builder",
+        agent: "Synx Front Expert",
         taskId,
         stage: request.stage,
         taskType: baseInput.task.typeHint,
@@ -952,7 +948,7 @@ ${retryMetricsLine}
 ${output.edits.length ? output.edits.map((x) => `- ${x.action.toUpperCase()} ${x.path}`).join("\n") : "- [none]"}
 
 ## Next
-Reviewer
+Human Review
 `;
 
     await this.finishStage({
@@ -962,7 +958,7 @@ Reviewer
       viewFileName: "04-implementation.md",
       viewContent: view,
       output,
-      nextAgent: "Reviewer",
+      nextAgent: "Human Review",
       nextStage: "reviewer",
       nextRequestFileName: STAGE_FILE_NAMES.reviewer,
       nextInputRef: `done/${DONE_FILE_NAMES.builder}`,

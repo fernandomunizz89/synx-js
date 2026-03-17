@@ -19,7 +19,7 @@ import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilit
 import { WorkerBase } from "../base.js";
 
 /**
- * Synx SEO Specialist – Dream Stack 2026
+ * Synx SEO Specialist
  *
  * Search Engine Optimization Architect.
  * Owns structured data (JSON-LD), Core Web Vitals, Next.js metadata API,
@@ -105,7 +105,7 @@ export class SynxSeoSpecialist extends WorkerBase {
     });
 
     const seoContract = `
-SYNX SEO SPECIALIST – EXECUTION CONTRACT (Dream Stack 2026):
+SYNX SEO SPECIALIST – EXECUTION CONTRACT:
 - Stack: Next.js App Router ONLY. Use the metadata API (generateMetadata / export const metadata) – never raw <head> tags.
 - Structured Data: implement JSON-LD using Schema.org types. Validate with Google Rich Results Test output.
 - Core Web Vitals gate: LCP < 2.5 s, INP < 200 ms, CLS < 0.1. Provide evidence or instrumentation for improvements.
@@ -191,7 +191,7 @@ SYNX SEO SPECIALIST – EXECUTION CONTRACT (Dream Stack 2026):
 
     output.technicalRisks = uniqueNormalized([...output.technicalRisks, ...output.risks]).slice(0, 16);
 
-    const view = `# HANDOFF\n\n## Agent\nSynx SEO Specialist (Dream Stack 2026)\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx SEO Specialist\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
 
     await this.finishStage({
       taskId,

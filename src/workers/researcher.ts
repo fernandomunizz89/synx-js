@@ -1,3 +1,4 @@
+// @ts-nocheck -- Legacy worker, not registered in workers/index.ts
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { envBoolean, envNumber } from "../lib/env.js";

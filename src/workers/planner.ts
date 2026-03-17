@@ -48,7 +48,7 @@ export class PlannerWorker extends WorkerBase {
     const targetExpert =
       typeof dispatcherOutput?.targetExpert === "string" && dispatcherOutput.targetExpert
         ? dispatcherOutput.targetExpert
-        : "Feature Builder";
+        : "Synx Front Expert";
     const researchDecision = await requestResearchContext({
       taskId,
       stage: "planner",
@@ -118,9 +118,7 @@ Human Review
       stage: "planner",
       taskTypeHint: baseInput.task.typeHint,
     });
-    const targetExpertHint = targetExpert !== "Feature Builder"
-      ? `\n\n[PLANNING DIRECTIVE]: After decomposing this task, route to "${targetExpert}" (identified by the Dispatcher as the domain expert for this task). Set nextAgent to "${targetExpert}"."`
-      : "";
+    const targetExpertHint = `\n\n[PLANNING DIRECTIVE]: After decomposing this task, route to "${targetExpert}" (identified by the Dispatcher as the domain expert for this task). Set nextAgent to "${targetExpert}"."`;  
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}${researchContextTag ? `\n\n${researchContextTag}` : ""}${targetExpertHint}`;
     const result = await provider.generateStructured({
       agent: "Spec Planner",
@@ -150,10 +148,10 @@ Human Review
       "Synx Mobile Expert":  { stage: "synx-mobile-expert",  fileName: STAGE_FILE_NAMES.synxMobileExpert },
       "Synx Back Expert":    { stage: "synx-back-expert",    fileName: STAGE_FILE_NAMES.synxBackExpert },
       "Synx SEO Specialist": { stage: "synx-seo-specialist", fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
-      "Feature Builder":     { stage: "builder",             fileName: STAGE_FILE_NAMES.builder },
     };
-    const resolvedNext = expertStageMap[output.nextAgent] ?? expertStageMap["Feature Builder"];
-    const resolvedNextAgent = output.nextAgent;
+    const resolvedNext = expertStageMap[output.nextAgent] ?? expertStageMap["Synx Front Expert"];
+     
+    const resolvedNextAgent = output.nextAgent as any;
 
     const view = `# HANDOFF
 

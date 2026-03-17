@@ -139,80 +139,129 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
         inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
         agent: "Bug Investigator",
       };
-    case "Bug Fixer":
-      if (await exists(done(DONE_FILE_NAMES.qa))) {
+    // Expert Squad – implementation agents
+    case "Synx Front Expert":
+      if (await exists(done(DONE_FILE_NAMES.synxQaEngineer))) {
         return {
-          stage: "bug-fixer",
-          requestFileName: STAGE_FILE_NAMES.bugFixer,
-          inputRef: `done/${DONE_FILE_NAMES.qa}`,
-          agent: "Bug Fixer",
-        };
-      }
-      if (!(await exists(done(DONE_FILE_NAMES.bugInvestigator)))) return null;
-      return {
-        stage: "bug-fixer",
-        requestFileName: STAGE_FILE_NAMES.bugFixer,
-        inputRef: `done/${DONE_FILE_NAMES.bugInvestigator}`,
-        agent: "Bug Fixer",
-      };
-    case "Feature Builder":
-      if (await exists(done(DONE_FILE_NAMES.qa))) {
-        return {
-          stage: "builder",
-          requestFileName: STAGE_FILE_NAMES.builder,
-          inputRef: `done/${DONE_FILE_NAMES.qa}`,
-          agent: "Feature Builder",
-        };
-      }
-      if (await exists(done(DONE_FILE_NAMES.bugInvestigator))) {
-        return {
-          stage: "builder",
-          requestFileName: STAGE_FILE_NAMES.builder,
-          inputRef: `done/${DONE_FILE_NAMES.bugInvestigator}`,
-          agent: "Feature Builder",
+          stage: "synx-front-expert",
+          requestFileName: STAGE_FILE_NAMES.synxFrontExpert,
+          inputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
+          agent: "Synx Front Expert",
         };
       }
       if (await exists(done(DONE_FILE_NAMES.planner))) {
         return {
-          stage: "builder",
-          requestFileName: STAGE_FILE_NAMES.builder,
+          stage: "synx-front-expert",
+          requestFileName: STAGE_FILE_NAMES.synxFrontExpert,
           inputRef: `done/${DONE_FILE_NAMES.planner}`,
-          agent: "Feature Builder",
+          agent: "Synx Front Expert",
+        };
+      }
+      if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
+      return {
+        stage: "synx-front-expert",
+        requestFileName: STAGE_FILE_NAMES.synxFrontExpert,
+        inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
+        agent: "Synx Front Expert",
+      };
+    case "Synx Mobile Expert":
+      if (await exists(done(DONE_FILE_NAMES.synxQaEngineer))) {
+        return {
+          stage: "synx-mobile-expert",
+          requestFileName: STAGE_FILE_NAMES.synxMobileExpert,
+          inputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
+          agent: "Synx Mobile Expert",
+        };
+      }
+      if (await exists(done(DONE_FILE_NAMES.planner))) {
+        return {
+          stage: "synx-mobile-expert",
+          requestFileName: STAGE_FILE_NAMES.synxMobileExpert,
+          inputRef: `done/${DONE_FILE_NAMES.planner}`,
+          agent: "Synx Mobile Expert",
+        };
+      }
+      if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
+      return {
+        stage: "synx-mobile-expert",
+        requestFileName: STAGE_FILE_NAMES.synxMobileExpert,
+        inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
+        agent: "Synx Mobile Expert",
+      };
+    case "Synx Back Expert":
+      if (await exists(done(DONE_FILE_NAMES.synxQaEngineer))) {
+        return {
+          stage: "synx-back-expert",
+          requestFileName: STAGE_FILE_NAMES.synxBackExpert,
+          inputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
+          agent: "Synx Back Expert",
+        };
+      }
+      if (await exists(done(DONE_FILE_NAMES.planner))) {
+        return {
+          stage: "synx-back-expert",
+          requestFileName: STAGE_FILE_NAMES.synxBackExpert,
+          inputRef: `done/${DONE_FILE_NAMES.planner}`,
+          agent: "Synx Back Expert",
+        };
+      }
+      if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
+      return {
+        stage: "synx-back-expert",
+        requestFileName: STAGE_FILE_NAMES.synxBackExpert,
+        inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
+        agent: "Synx Back Expert",
+      };
+    case "Synx SEO Specialist":
+      if (await exists(done(DONE_FILE_NAMES.planner))) {
+        return {
+          stage: "synx-seo-specialist",
+          requestFileName: STAGE_FILE_NAMES.synxSeoSpecialist,
+          inputRef: `done/${DONE_FILE_NAMES.planner}`,
+          agent: "Synx SEO Specialist",
+        };
+      }
+      if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
+      return {
+        stage: "synx-seo-specialist",
+        requestFileName: STAGE_FILE_NAMES.synxSeoSpecialist,
+        inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
+        agent: "Synx SEO Specialist",
+      };
+    case "Synx QA Engineer":
+      if (await exists(done(DONE_FILE_NAMES.synxFrontExpert))) {
+        return {
+          stage: "synx-qa-engineer",
+          requestFileName: STAGE_FILE_NAMES.synxQaEngineer,
+          inputRef: `done/${DONE_FILE_NAMES.synxFrontExpert}`,
+          agent: "Synx QA Engineer",
+        };
+      }
+      if (await exists(done(DONE_FILE_NAMES.synxMobileExpert))) {
+        return {
+          stage: "synx-qa-engineer",
+          requestFileName: STAGE_FILE_NAMES.synxQaEngineer,
+          inputRef: `done/${DONE_FILE_NAMES.synxMobileExpert}`,
+          agent: "Synx QA Engineer",
+        };
+      }
+      if (await exists(done(DONE_FILE_NAMES.synxBackExpert))) {
+        return {
+          stage: "synx-qa-engineer",
+          requestFileName: STAGE_FILE_NAMES.synxQaEngineer,
+          inputRef: `done/${DONE_FILE_NAMES.synxBackExpert}`,
+          agent: "Synx QA Engineer",
+        };
+      }
+      if (await exists(done(DONE_FILE_NAMES.synxSeoSpecialist))) {
+        return {
+          stage: "synx-qa-engineer",
+          requestFileName: STAGE_FILE_NAMES.synxQaEngineer,
+          inputRef: `done/${DONE_FILE_NAMES.synxSeoSpecialist}`,
+          agent: "Synx QA Engineer",
         };
       }
       return null;
-    case "Reviewer":
-      if (await exists(done(DONE_FILE_NAMES.bugFixer))) {
-        return {
-          stage: "reviewer",
-          requestFileName: STAGE_FILE_NAMES.reviewer,
-          inputRef: `done/${DONE_FILE_NAMES.bugFixer}`,
-          agent: "Reviewer",
-        };
-      }
-      if (!(await exists(done(DONE_FILE_NAMES.builder)))) return null;
-      return {
-        stage: "reviewer",
-        requestFileName: STAGE_FILE_NAMES.reviewer,
-        inputRef: `done/${DONE_FILE_NAMES.builder}`,
-        agent: "Reviewer",
-      };
-    case "QA Validator":
-      if (!(await exists(done(DONE_FILE_NAMES.reviewer)))) return null;
-      return {
-        stage: "qa",
-        requestFileName: STAGE_FILE_NAMES.qa,
-        inputRef: `done/${DONE_FILE_NAMES.reviewer}`,
-        agent: "QA Validator",
-      };
-    case "PR Writer":
-      if (!(await exists(done(DONE_FILE_NAMES.qa)))) return null;
-      return {
-        stage: "pr",
-        requestFileName: STAGE_FILE_NAMES.pr,
-        inputRef: `done/${DONE_FILE_NAMES.qa}`,
-        agent: "PR Writer",
-      };
     default:
       return null;
   }

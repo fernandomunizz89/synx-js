@@ -195,7 +195,6 @@ describe.sequential("workers/experts/synx-mobile-expert", () => {
     const { DONE_FILE_NAMES } = await import("../../lib/constants.js");
     const { ARTIFACT_FILES } = await import("../../lib/task-artifacts.js");
     const { applyWorkspaceEdits, getGitChangedFiles } = await import("../../lib/workspace-tools.js");
-    const { runPostEditSanityChecks } = await import("../../lib/post-edit-sanity.js");
     const { createProvider } = await import("../../providers/factory.js");
 
     vi.mocked(getGitChangedFiles)
@@ -291,7 +290,7 @@ describe.sequential("workers/experts/synx-mobile-expert", () => {
     const { ensureCodeQualityBootstrap } = await import("../../lib/code-quality-bootstrap.js");
     const { runPostEditSanityChecks } = await import("../../lib/post-edit-sanity.js");
     const { synthesizeQaSelectorHotfixEdits } = await import("../../lib/qa-remediation.js");
-    const { getGitChangedFiles, detectTestCapabilities } = await import("../../lib/workspace-tools.js");
+    const { detectTestCapabilities } = await import("../../lib/workspace-tools.js");
 
     vi.mocked(ensureCodeQualityBootstrap).mockResolvedValueOnce({
       notes: ["Bootstrap note"],

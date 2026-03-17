@@ -35,7 +35,7 @@ vi.mock("../../providers/factory.js", () => ({
         residualRisks: [],
         executedChecks: [],
         returnContext: [],
-        nextAgent: "PR Writer",
+        nextAgent: "Human Review",
       },
       provider: "mock",
       model: "static-mock",
@@ -128,7 +128,7 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("passes QA validation and routes to PR Writer", async () => {
+  it("passes QA validation and routes to Human Review", async () => {
     const task = await createTask({
       title: "Dark mode toggle",
       typeHint: "Feature",
@@ -153,7 +153,7 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_human");
-    expect(meta.nextAgent).toBe("PR Writer");
+    expect(meta.nextAgent).toBe("Human Review");
   });
 
   it("routes QA failure back to Synx Front Expert when it was the previous stage", async () => {
@@ -439,7 +439,7 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
           acceptanceChecklist: [],
           verdict: "pass",
           failures: [],
-          nextAgent: "PR Writer",
+          nextAgent: "Human Review",
           returnContext: [],
         },
       }),
@@ -459,7 +459,7 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
       stage: "builder",
       status: "done",
       createdAt: new Date().toISOString(),
-      agent: "Feature Builder",
+      agent: "Synx Front Expert",
       output: {
         executedChecks: [
           {
@@ -521,9 +521,9 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
     expect(meta.status).toBe("waiting_human");
   });
 
-  it("exercises fallback to Feature Builder for cumulative findings when expert is unknown", async () => {
+  it("exercises fallback to Synx Front Expert for cumulative findings when expert is unknown", async () => {
     // We already have "handles corrupted history" which triggers empty history.
-    // This test specifically targets the line where it maps to "Feature Builder" if isExpertAgent is false.
+    // This test specifically targets the line where it maps to "Synx Front Expert" if isExpertAgent is false.
     const task = await createTask({
       title: "Unknown expert fallback",
       typeHint: "Feature",
@@ -536,8 +536,8 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
     const meta = await loadTaskMeta(task.taskId);
     meta.history = [
       {
-        agent: "Feature Builder",
-        stage: "setup",
+        agent: "Synx Front Expert",
+        stage: "synx-front-expert",
         status: "done",
         startedAt: new Date().toISOString(),
         endedAt: new Date().toISOString(),
@@ -602,7 +602,7 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
             regressionRisk: "low",
           },
           executedChecks: mockChecks, // LLM returning the mapped checks
-          nextAgent: "PR Writer",
+          nextAgent: "Human Review",
         },
       }),
     } as any);

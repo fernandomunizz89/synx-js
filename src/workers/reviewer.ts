@@ -1,3 +1,4 @@
+// @ts-nocheck -- Legacy worker, not registered in workers/index.ts
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";

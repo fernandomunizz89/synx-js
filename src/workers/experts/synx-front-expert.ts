@@ -10,7 +10,7 @@ import { deriveQaRootCauseFocus } from "../../lib/root-cause-intelligence.js";
 import { runPostEditSanityChecks } from "../../lib/post-edit-sanity.js";
 import { formatResearchContextTag, requestResearchContext } from "../../lib/orchestrator.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../../lib/task-artifacts.js";
-import { taskDir } from "../../lib/paths.js";
+
 import { builderOutputSchema } from "../../lib/schema.js";
 import type { StageEnvelope } from "../../lib/types.js";
 import { createProvider } from "../../providers/factory.js";
@@ -20,7 +20,7 @@ import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilit
 import { WorkerBase } from "../base.js";
 
 /**
- * Synx Front Expert – Dream Stack 2026
+ * Synx Front Expert
  *
  * Domain specialist for Next.js (App Router) + TailwindCSS interfaces.
  * Enforces Gold-Standard WCAG 2.1 accessibility, scoped Design Tokens,
@@ -109,7 +109,7 @@ export class SynxFrontExpert extends WorkerBase {
     });
 
     const frontendContract = `
-SYNX FRONT EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
+SYNX FRONT EXPERT – EXECUTION CONTRACT:
 - Stack: Next.js App Router ONLY. No Pages Router patterns.
 - Styling: TailwindCSS with scoped Design Tokens. Zero global CSS unless explicitly justified.
 - Accessibility: WCAG 2.1 AA minimum. Every interactive element must be keyboard navigable and screen-reader friendly.
@@ -194,7 +194,7 @@ SYNX FRONT EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
 
     output.technicalRisks = uniqueNormalized([...output.technicalRisks, ...output.risks]).slice(0, 16);
 
-    const view = `# HANDOFF\n\n## Agent\nSynx Front Expert (Dream Stack 2026)\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx Front Expert\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
 
     await this.finishStage({
       taskId,

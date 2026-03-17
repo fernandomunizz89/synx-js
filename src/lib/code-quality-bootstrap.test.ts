@@ -2,7 +2,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { resolveEslintDeps, ensureCodeQualityBootstrap } from "./code-quality-bootstrap.js";
 import { promises as fs, existsSync } from "node:fs";
 import { runCommand } from "./workspace-tools.js";
-import path from "node:path";
 
 vi.mock("node:fs", () => ({
   existsSync: vi.fn(),

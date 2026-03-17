@@ -1,13 +1,12 @@
 import { trimText } from "./text-utils.js";
 
 export type QaRemediationAgent =
-  | "Feature Builder"
-  | "Bug Fixer"
-  // Dream Stack 2026 – Expert Squad return routing
+  // Expert Squad return routing
   | "Synx Front Expert"
   | "Synx Mobile Expert"
   | "Synx Back Expert"
-  | "Synx SEO Specialist";
+  | "Synx SEO Specialist"
+  | "Bug Investigator";
 
 export interface QaReturnContextItem {
   issue: string;
@@ -35,7 +34,7 @@ export interface QaCumulativeFinding extends QaReturnContextItem {
 export interface QaHandoffContext {
   attempt: number;
   maxRetries: number;
-  returnedTo: "PR Writer" | QaRemediationAgent;
+  returnedTo: "Human Review" | QaRemediationAgent;
   summary: string;
   latestFindings: QaReturnContextItem[];
   cumulativeFindings: QaCumulativeFinding[];
@@ -70,12 +69,11 @@ function asStringArray(value: unknown): string[] {
 
 function isQaRemediationAgent(value: string): value is QaRemediationAgent {
   return (
-    value === "Feature Builder" ||
-    value === "Bug Fixer" ||
     value === "Synx Front Expert" ||
     value === "Synx Mobile Expert" ||
     value === "Synx Back Expert" ||
-    value === "Synx SEO Specialist"
+    value === "Synx SEO Specialist" ||
+    value === "Bug Investigator"
   );
 }
 
@@ -403,7 +401,7 @@ export function extractQaHandoffContext(previousStage: unknown): QaHandoffContex
   const maxRetries = typeof maxRetriesRaw === "number" && Number.isFinite(maxRetriesRaw) ? Math.floor(maxRetriesRaw) : 0;
   const returnedToRaw = asText(raw.returnedTo);
   if (attempt < 1 || maxRetries < 1) return null;
-  if (returnedToRaw !== "PR Writer" && !isQaRemediationAgent(returnedToRaw)) return null;
+  if (returnedToRaw !== "Human Review" && !isQaRemediationAgent(returnedToRaw)) return null;
 
   const latestFindings = compactQaReturnContextItems(normalizeQaReturnContextItems(raw.latestFindings));
   const history = compactQaReturnHistoryEntries(normalizeQaReturnHistoryEntries(raw.history));

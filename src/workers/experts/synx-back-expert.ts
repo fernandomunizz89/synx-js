@@ -19,7 +19,7 @@ import { applyWorkspaceEdits, buildWorkspaceContextSnapshot, detectTestCapabilit
 import { WorkerBase } from "../base.js";
 
 /**
- * Synx Back Expert – Dream Stack 2026
+ * Synx Back Expert
  *
  * Server-side guardian for Node.js via NestJS or Fastify + Prisma ORM.
  * Enforces strict TypeScript end-to-end, dependency injection patterns,
@@ -105,7 +105,7 @@ export class SynxBackExpert extends WorkerBase {
     });
 
     const backendContract = `
-SYNX BACK EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
+SYNX BACK EXPERT – EXECUTION CONTRACT:
 - Stack: Node.js via NestJS or Fastify. Prisma ORM for all DB access. TypeScript strict mode.
 - Type Safety: ZERO use of \`any\`. All inputs/outputs must be fully typed with Zod or class-validator.
 - DI: design all services and modules for dependency injection. No singletons outside DI containers.
@@ -191,7 +191,7 @@ SYNX BACK EXPERT – EXECUTION CONTRACT (Dream Stack 2026):
 
     output.technicalRisks = uniqueNormalized([...output.technicalRisks, ...output.risks]).slice(0, 16);
 
-    const view = `# HANDOFF\n\n## Agent\nSynx Back Expert (Dream Stack 2026)\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx Back Expert\n\n## Summary\n${output.implementationSummary}\n\n## Files Changed\n${output.filesChanged.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Changes Made\n${output.changesMade.map((c) => `- ${c}`).join("\n") || "- [none]"}\n\n## Technical Risks\n${output.technicalRisks.map((r) => `- ${r}`).join("\n") || "- [none]"}\n\n## Next\nSynx QA Engineer\n`;
 
     await this.finishStage({
       taskId,

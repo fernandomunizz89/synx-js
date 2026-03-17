@@ -23,10 +23,10 @@ describe("providers/mock-provider", () => {
     expect(result.model).toBe("mock-v1");
   });
 
-  it("returns implementation edits for Feature Builder stage", async () => {
+  it("returns implementation edits for Synx Front Expert stage", async () => {
     const provider = new MockProvider("mock-v1");
     const result = await provider.generateStructured({
-      agent: "Feature Builder",
+      agent: "Synx Front Expert",
       systemPrompt: "x",
       input: {
         task: {

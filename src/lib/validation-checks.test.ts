@@ -1,9 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { 
   detectTestCapabilities, 
-  runProjectChecks,
-  BASE_CHECK_SCRIPT_ORDER,
-  E2E_SCRIPT_CANDIDATES
+  runProjectChecks
 } from "./validation-checks.js";
 import { readPackageScripts, runCommand } from "./command-runner.js";
 import { existsSync, promises as fs } from "node:fs";

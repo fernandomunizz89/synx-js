@@ -59,13 +59,12 @@ function isExpertAgent(name: string): name is QaRemediationAgent {
     || name === "Synx Mobile Expert"
     || name === "Synx Back Expert"
     || name === "Synx SEO Specialist"
-    || name === "Feature Builder"
-    || name === "Bug Fixer"
+    || name === "Bug Investigator"
   );
 }
 
 /**
- * Synx QA Engineer – Dream Stack 2026
+ * Synx QA Engineer
  *
  * High-Voltage Execution Arbiter for the expert squad.
  * Validates software produced by domain experts. Chooses contextually
@@ -137,15 +136,15 @@ export class SynxQAEngineer extends WorkerBase {
     });
 
     const qaContract = `
-SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
+SYNX QA ENGINEER – EXECUTION CONTRACT:
 - Mission: validate ALL behavior against acceptance criteria. You are the last quality gate.
 - Strategy: choose Playwright for full Web E2E; Vitest for isolated logic units. Never mix coverage signals.
 - Destructive Mindset: probe edge cases, race conditions, missing guards, and type boundaries.
 - Evidence: every finding must include: returnContext[] with issue, expectedResult, receivedResult, evidence[], recommendedAction.
 - Verdict: "pass" only if ALL acceptance criteria + automated checks pass.
 - Stack: validate mechanical integrity of Next.js, Expo/React Native, Fastify/NestJS.
-- nextAgent must be one of: "PR Writer" | "Feature Builder" | "Bug Fixer" | "Synx Front Expert" | "Synx Mobile Expert" | "Synx Back Expert" | "Human Review".
-  Use the expert that built the failing feature. Use "PR Writer" on pass.
+- nextAgent must be one of: "Synx Front Expert" | "Synx Mobile Expert" | "Synx Back Expert" | "Synx SEO Specialist" | "Bug Investigator" | "Human Review".
+  Use the expert that built the failing feature. Use "Human Review" on pass.
 `;
 
     const modelInput = {
@@ -179,7 +178,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer | Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Human Review" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Human Review" }',
     });
 
     const output = qaOutputSchema.parse(result.parsed);
@@ -193,7 +192,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
       {
         attempt: returnHistory.length + 1,
         returnedAt: nowIso(),
-        returnedTo: isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Feature Builder",
+        returnedTo: isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Bug Investigator",
         summary: output.failures.slice(0, 2).join("; ") || "[no failures]",
         failures: output.failures,
         findings: mergedReturnContext,
@@ -204,8 +203,8 @@ SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
       attempt: returnHistory.length + 1,
       maxRetries: 3,
       returnedTo: verdict === "pass"
-        ? "PR Writer"
-        : (isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Feature Builder"),
+        ? "Human Review"
+        : (isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Bug Investigator"),
       summary: output.failures.slice(0, 2).join("; ") || (verdict === "pass" ? "All checks passed." : "[no summary]"),
       latestFindings: mergedReturnContext,
       cumulativeFindings: cumulativeFindings.slice(0, 8),
@@ -235,23 +234,22 @@ SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
       "Synx Mobile Expert":   { stage: "synx-mobile-expert",   fileName: STAGE_FILE_NAMES.synxMobileExpert },
       "Synx Back Expert":     { stage: "synx-back-expert",     fileName: STAGE_FILE_NAMES.synxBackExpert },
       "Synx SEO Specialist":  { stage: "synx-seo-specialist",  fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
-      "Feature Builder":      { stage: "builder",              fileName: STAGE_FILE_NAMES.builder },
-      "Bug Fixer":            { stage: "bug-fixer",            fileName: STAGE_FILE_NAMES.bugFixer },
+      "Bug Investigator":     { stage: "bug-investigator",     fileName: STAGE_FILE_NAMES.bugInvestigator },
     };
 
     const findingsView = mergedReturnContext
       .map((f, i) => `${i + 1}. ${f.issue}\n   Expected: ${f.expectedResult}\n   Received: ${f.receivedResult}\n   Action: ${f.recommendedAction}`)
       .join("\n") || "- [none]";
 
-    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer (Dream Stack 2026)\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${verdict === "pass" ? "Human Review (PR Writer)" : String(previousExpert)}\n`;
+    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${verdict === "pass" ? "Human Review" : String(previousExpert)}\n`;
 
     const effectiveNextAgent: AgentName = verdict === "pass"
-      ? "PR Writer"
+      ? "Human Review"
       : (isExpertAgent(String(previousExpert)) ? (previousExpert as AgentName) : "Human Review");
 
-    const expertInfo = expertStageMap[String(effectiveNextAgent)];
 
-    const nextMapping = effectiveNextAgent === "PR Writer" ? null : expertStageMap[effectiveNextAgent];
+
+    const nextMapping = effectiveNextAgent === "Human Review" ? null : expertStageMap[effectiveNextAgent];
 
     await this.finishStage({
       taskId,
@@ -265,10 +263,10 @@ SYNX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
         qaHandoffContext,
       },
       nextAgent: effectiveNextAgent,
-      nextStage: nextMapping?.stage || (effectiveNextAgent === "PR Writer" ? "pr" : undefined),
-      nextRequestFileName: nextMapping?.fileName || (effectiveNextAgent === "PR Writer" ? STAGE_FILE_NAMES.pr : undefined),
+      nextStage: nextMapping?.stage || undefined,
+      nextRequestFileName: nextMapping?.fileName || undefined,
       nextInputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
-      humanApprovalRequired: effectiveNextAgent === "Human Review" || (effectiveNextAgent === "PR Writer" && !nextMapping),
+      humanApprovalRequired: effectiveNextAgent === "Human Review",
       startedAt,
       provider: result.provider,
       model: result.model,

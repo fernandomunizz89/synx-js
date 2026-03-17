@@ -51,9 +51,9 @@ function buildMeta(): TaskMeta {
     type: "Bug",
     project: "repo",
     status: "in_progress",
-    currentStage: "bug-fixer",
-    currentAgent: "Bug Fixer",
-    nextAgent: "Reviewer",
+    currentStage: "synx-back-expert",
+    currentAgent: "Synx Back Expert",
+    nextAgent: "Synx QA Engineer",
     humanApprovalRequired: false,
     createdAt: "2026-03-16T00:00:00.000Z",
     updatedAt: "2026-03-16T00:00:00.000Z",
@@ -120,7 +120,7 @@ describe("orchestrator research coordination", () => {
     const result = await requestResearchContext({
       taskId: "task-1",
       stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.9 } },
       errorContext: "some context",
@@ -138,7 +138,7 @@ describe("orchestrator research coordination", () => {
     const result = await requestResearchContext({
       taskId: "task-1",
       stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.42 } },
       errorContext: "Uncaught SyntaxError export mismatch",
@@ -168,7 +168,7 @@ describe("orchestrator research coordination", () => {
           id: "entry-1",
           createdAt: "2026-03-16T00:00:00.000Z",
           stage: "bug-fixer",
-          requesterAgent: "Bug Fixer",
+          requesterAgent: "Synx Back Expert",
           taskType: "Bug",
           triggerReasons: ["low_confidence:0.50"],
           errorSignature: "sig",
@@ -194,14 +194,14 @@ describe("orchestrator research coordination", () => {
       recommendedAction: "existing action",
       isBreakingChange: false,
       stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      requesterAgent: "Synx Back Expert",
       triggerReasons: ["low_confidence:0.50"],
     });
 
     const result = await requestResearchContext({
       taskId: "task-1",
       stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.5 } },
       errorContext: "same",
@@ -220,7 +220,7 @@ describe("orchestrator research coordination", () => {
     const first = await requestResearchContext({
       taskId: "task-1",
       stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.4 } },
       errorContext: "same error signature",
@@ -233,7 +233,7 @@ describe("orchestrator research coordination", () => {
     const second = await requestResearchContext({
       taskId: "task-1",
       stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.4 } },
       errorContext: "same error signature",
@@ -255,8 +255,8 @@ describe("orchestrator research coordination", () => {
       confidenceScore: 0.62,
       recommendedAction: "Do action",
       isBreakingChange: true,
-      stage: "builder",
-      requesterAgent: "Feature Builder",
+      stage: "synx-back-expert",
+      requesterAgent: "Synx Back Expert",
       triggerReasons: ["low_confidence:0.58"],
     });
 

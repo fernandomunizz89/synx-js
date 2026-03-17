@@ -15,8 +15,8 @@ describe("schema", () => {
   it("accepts valid task and agent enums", () => {
     expect(taskTypeSchema.parse("Feature")).toBe("Feature");
     expect(taskTypeSchema.parse("Bug")).toBe("Bug");
-    expect(agentNameSchema.parse("QA Validator")).toBe("QA Validator");
-    expect(agentNameSchema.parse("Researcher")).toBe("Researcher");
+    expect(agentNameSchema.parse("Synx QA Engineer")).toBe("Synx QA Engineer");
+    expect(agentNameSchema.parse("Human Review")).toBe("Human Review");
   });
 
   it("rejects invalid task enum value", () => {
@@ -73,7 +73,7 @@ describe("schema", () => {
           content: "export const feature = true;\n",
         },
       ],
-      nextAgent: "Reviewer",
+      nextAgent: "Synx QA Engineer",
     });
     expect(createParsed.edits[0]?.action).toBe("create");
 
@@ -91,7 +91,7 @@ describe("schema", () => {
           replace: "feature = true",
         },
       ],
-      nextAgent: "Reviewer",
+      nextAgent: "Synx QA Engineer",
     });
     expect(snippetParsed.edits[0]?.action).toBe("replace_snippet");
   });
@@ -110,7 +110,7 @@ describe("schema", () => {
           replace: "feature = true",
         },
       ],
-      nextAgent: "Reviewer",
+      nextAgent: "Synx QA Engineer",
     })).toThrow();
   });
 
@@ -120,7 +120,7 @@ describe("schema", () => {
       acceptanceChecklist: ["Timer starts when clicking start"],
       failures: [],
       verdict: "pass",
-      nextAgent: "PR Writer",
+      nextAgent: "Human Review",
     });
     expect(passParsed.validationMode).toBe("executed_checks");
     expect(passParsed.testCases).toEqual([]);
@@ -142,15 +142,15 @@ describe("schema", () => {
       qaHandoffContext: {
         attempt: 1,
         maxRetries: 3,
-        returnedTo: "Feature Builder",
+        returnedTo: "Synx Front Expert",
         summary: "Need correction in timer state update",
         latestFindings: [],
         cumulativeFindings: [],
         history: [],
       },
-      nextAgent: "Feature Builder",
+      nextAgent: "Synx Front Expert",
     });
-    expect(failParsed.qaHandoffContext?.returnedTo).toBe("Feature Builder");
+    expect(failParsed.qaHandoffContext?.returnedTo).toBe("Synx Front Expert");
     expect(failParsed.returnContext[0]?.issue).toBe("Timer logic broken");
   });
 
@@ -165,9 +165,9 @@ describe("schema", () => {
       edgeCases: [],
       risks: [],
       validationCriteria: ["Looks good"],
-      nextAgent: "Feature Builder",
+      nextAgent: "Synx Front Expert",
     });
-    expect(valid.nextAgent).toBe("Feature Builder");
+    expect(valid.nextAgent).toBe("Synx Front Expert");
 
     expect(() => plannerOutputSchema.parse({
       technicalContext: "Next.js app",
@@ -179,7 +179,7 @@ describe("schema", () => {
       edgeCases: [],
       risks: [],
       validationCriteria: ["Looks good"],
-      nextAgent: "Feature Builder",
+      nextAgent: "Synx Front Expert",
     })).toThrow();
   });
 
@@ -207,10 +207,10 @@ describe("schema", () => {
       likelyCauses: ["Null pointer"],
       investigationSteps: ["Check logs"],
       unknowns: [],
-      nextAgent: "Bug Fixer",
+      nextAgent: "Synx Back Expert",
     });
     expect(defaultRisk.riskAssessment.buildRisk).toBe("unknown"); // Checks default applies
-    expect(defaultRisk.nextAgent).toBe("Bug Fixer");
+    expect(defaultRisk.nextAgent).toBe("Synx Back Expert");
   });
 
   it("validates bug fixer output schema correctly", () => {
@@ -227,7 +227,7 @@ describe("schema", () => {
           content: "if(val) {}",
         },
       ],
-      nextAgent: "Reviewer",
+      nextAgent: "Synx QA Engineer",
     });
     expect(valid.edits[0].action).toBe("replace");
 
@@ -238,7 +238,7 @@ describe("schema", () => {
       testsToRun: [],
       risks: [],
       edits: [], // Must be min 1
-      nextAgent: "Reviewer",
+      nextAgent: "Synx QA Engineer",
     })).toThrow();
   });
 

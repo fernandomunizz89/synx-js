@@ -17,9 +17,9 @@ describe("start-progress", () => {
     type: "Feature",
     project: "test-project",
     status: "in_progress",
-    currentStage: "builder",
-    currentAgent: "Feature Builder",
-    nextAgent: "Reviewer",
+    currentStage: "synx-front-expert",
+    currentAgent: "Synx Front Expert",
+    nextAgent: "Synx QA Engineer",
     humanApprovalRequired: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -210,7 +210,6 @@ describe("start-progress", () => {
 
   describe("Internal Helper Functions", () => {
     it("shortTaskId should truncate long IDs", () => {
-        const longId = "a".repeat(50);
         // buildUserInputLines is exported but shortTaskId is internal to start-progress.ts
         // Since it's internal we can't test it directly unless we export it or test it via render.
         // But for coverage purposes, we'll ensure it's hit by the render test.

@@ -291,7 +291,7 @@ describe.sequential("workers/experts/synx-seo-specialist", () => {
     const { ensureCodeQualityBootstrap } = await import("../../lib/code-quality-bootstrap.js");
     const { runPostEditSanityChecks } = await import("../../lib/post-edit-sanity.js");
     const { synthesizeQaSelectorHotfixEdits } = await import("../../lib/qa-remediation.js");
-    const { getGitChangedFiles, detectTestCapabilities } = await import("../../lib/workspace-tools.js");
+    const { detectTestCapabilities } = await import("../../lib/workspace-tools.js");
 
     vi.mocked(ensureCodeQualityBootstrap).mockResolvedValueOnce({
       notes: ["Bootstrap note"],

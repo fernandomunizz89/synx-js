@@ -1,4 +1,4 @@
-import { trimText, unique, uniqueNormalized } from "./text-utils.js";
+import { trimText, unique } from "./text-utils.js";
 import path from "node:path";
 import { exists, readJson } from "./fs.js";
 import { taskDir } from "./paths.js";

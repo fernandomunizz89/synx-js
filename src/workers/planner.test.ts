@@ -21,7 +21,7 @@ vi.mock("../providers/factory.js", () => {
           edgeCases: [],
           risks: [],
           validationCriteria: [],
-          nextAgent: "Feature Builder",
+          nextAgent: "Synx Front Expert",
         },
         provider: "mock",
         model: "static-mock",
@@ -86,7 +86,7 @@ describe.sequential("workers/planner", () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("processes a spec plan and routes to feature builder", async () => {
+  it("processes a spec plan and routes to synx front expert", async () => {
     // 1. Arrange
     const task = await createTask({
       title: "Add feature plan",
@@ -115,7 +115,7 @@ describe.sequential("workers/planner", () => {
     
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Feature Builder");
+    expect(meta.nextAgent).toBe("Synx Front Expert");
 
     // Has artifact
     const artifactPath = path.join(task.taskPath, "artifacts", "project-profile.json");
