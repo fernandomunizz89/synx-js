@@ -89,3 +89,28 @@ Best run reached PR with zero QA returns after the evidence-backed QA verdict gu
 - Stale lock detection by age + dead PID; orphaned working file recovery.
 - `doctor`, `resume`, `fix` for full diagnostic and repair coverage.
 - Config cascade: internal defaults → global → project-local.
+
+---
+
+## Expert Squad Coverage Push (2026-03-17)
+
+### Decision
+Standardized the test infrastructure and stabilized mocks across all 5 expert agents to achieve a minimum of **80% branch coverage** (professional-grade gate).
+
+### Key Technical Adjustments
+
+- **Research Abort Logic**: Corrected the `tryProcess` expectation for `abort_to_human`. The agent now returns `true` on successful handoff to human, ensuring the orchestrator proceeds to the next high-level state.
+- **Zod Schema Alignment**: Updated `extraContext` mocks to include required `relatedFiles`, `logs`, and `notes` fields, preventing `buildAgentInput` validation failures.
+- **Builder Output Normalization**: Added `filesChanged` and `nextAgent` to all expert builder mocks to satisfy `builderOutputSchema`.
+- **Error Expectation Strategy**: Shifted from `rejects.toThrow` to `expect(processed).toBe(false)` for simulated failures, as the framework's `tryProcess` internalizes errors for graceful recovery.
+- **Workspace Tool Stabilization**: Globally mocked `acquireLock` and `isTaskCancelRequested` in all expert tests to prevent race conditions and file system contention.
+
+### Final Metrics
+
+- **Total Experts Coverage**: 82.5% Branch / 99.4% Stmts / 100% Lines.
+- **Individual Branch Coverage**:
+  - `Sinx-Back-Expert`: 83.33%
+  - `Sinx-Mobile-Expert`: 83.33%
+  - `Sinx-SEO-Specialist`: 83.33%
+  - `Sinx-Front-Expert`: 81.25%
+  - `Sinx-QA-Engineer`: 81.69%

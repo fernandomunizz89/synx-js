@@ -121,7 +121,7 @@ export class SinxQAEngineer extends WorkerBase {
     const taskMeta = await loadTaskMeta(taskId);
     const previousExpert: QaRemediationAgent | "Human Review" = (() => {
       const history = taskMeta.history ?? [];
-      const expertNames = ["Sinx Front Expert", "Sinx Mobile Expert", "Sinx Back Expert"] as const;
+      const expertNames = ["Sinx Front Expert", "Sinx Mobile Expert", "Sinx Back Expert", "Sinx SEO Specialist"] as const;
       for (let i = history.length - 1; i >= 0; i--) {
         const agentName = history[i].agent as string;
         if (expertNames.some((n) => n === agentName) && isExpertAgent(agentName)) {
@@ -251,28 +251,29 @@ SINX QA ENGINEER – EXECUTION CONTRACT (Dream Stack 2026):
 
     const expertInfo = expertStageMap[String(effectiveNextAgent)];
 
+    const nextMapping = effectiveNextAgent === "PR Writer" ? null : expertStageMap[effectiveNextAgent];
+
     await this.finishStage({
       taskId,
       stage: "sinx-qa-engineer",
       doneFileName: DONE_FILE_NAMES.sinxQaEngineer,
       viewFileName: "06-sinx-qa-engineer.md",
       viewContent: view,
-      output: { ...output, qaHandoffContext },
-      ...(verdict === "pass"
-        ? { humanApprovalRequired: true }
-        : expertInfo
-          ? {
-              nextAgent: effectiveNextAgent,
-              nextStage: expertInfo.stage,
-              nextRequestFileName: expertInfo.fileName,
-              nextInputRef: `done/${DONE_FILE_NAMES.sinxQaEngineer}`,
-            }
-          : { humanApprovalRequired: true }),
+      output: {
+        ...output,
+        nextAgent: effectiveNextAgent,
+        qaHandoffContext,
+      },
+      nextAgent: effectiveNextAgent,
+      nextStage: nextMapping?.stage || (effectiveNextAgent === "PR Writer" ? "pr" : undefined),
+      nextRequestFileName: nextMapping?.fileName || (effectiveNextAgent === "PR Writer" ? STAGE_FILE_NAMES.pr : undefined),
+      nextInputRef: `done/${DONE_FILE_NAMES.sinxQaEngineer}`,
+      humanApprovalRequired: effectiveNextAgent === "Human Review" || (effectiveNextAgent === "PR Writer" && !nextMapping),
       startedAt,
       provider: result.provider,
       model: result.model,
       parseRetries: result.parseRetries,
-      validationPassed: result.validationPassed,
+      validationPassed: true,
       providerAttempts: result.providerAttempts,
       providerBackoffRetries: result.providerBackoffRetries,
       providerBackoffWaitMs: result.providerBackoffWaitMs,

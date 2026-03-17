@@ -311,7 +311,7 @@ export const builderOutputSchema = z.object({
   verificationMode: z.enum(["static_review", "executed_checks", "mixed"]).optional().default("static_review"),
   risks: z.array(z.string()),
   edits: z.array(builderEditSchema).min(1),
-  nextAgent: z.literal("Reviewer"),
+  nextAgent: agentNameSchema,
 });
 
 export const bugFixerOutputSchema = z.object({
@@ -322,7 +322,7 @@ export const bugFixerOutputSchema = z.object({
   testsToRun: z.array(z.string()),
   risks: z.array(z.string()),
   edits: z.array(builderEditSchema).min(1),
-  nextAgent: z.literal("Reviewer"),
+  nextAgent: agentNameSchema,
 });
 
 export const reviewerOutputSchema = z.object({

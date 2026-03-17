@@ -193,7 +193,7 @@ Priority (lowest → highest):
 
 ## 🧪 Testing
 
-Uses **Vitest** with V8 coverage. Minimum 50% coverage gate.
+Uses **Vitest** with V8 coverage. Minimum 80% coverage gate.
 
 ```bash
 npm test              # run test suite

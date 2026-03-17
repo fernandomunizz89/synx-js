@@ -69,7 +69,14 @@ function asStringArray(value: unknown): string[] {
 }
 
 function isQaRemediationAgent(value: string): value is QaRemediationAgent {
-  return value === "Feature Builder" || value === "Bug Fixer";
+  return (
+    value === "Feature Builder" ||
+    value === "Bug Fixer" ||
+    value === "Sinx Front Expert" ||
+    value === "Sinx Mobile Expert" ||
+    value === "Sinx Back Expert" ||
+    value === "Sinx SEO Specialist"
+  );
 }
 
 function contextKey(item: QaReturnContextItem): string {
