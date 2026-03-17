@@ -71,7 +71,15 @@ describe("code-quality-bootstrap", () => {
     it("bootstraps typecheck for TS project without quality scripts", async () => {
       vi.mocked(existsSync).mockImplementation((p: any) => p.toString().endsWith("package.json") || p.toString().endsWith("tsconfig.json"));
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ scripts: {} }));
-      vi.mocked(runCommand).mockResolvedValue({ exitCode: 0, timedOut: false, stdout: "", stderr: "" });
+      vi.mocked(runCommand).mockResolvedValue({ 
+        command: "npm", 
+        args: ["install"], 
+        exitCode: 0, 
+        timedOut: false, 
+        stdout: "", 
+        stderr: "", 
+        durationMs: 100 
+      });
       
       const result = await ensureCodeQualityBootstrap({ workspaceRoot });
       expect(result.notes).toContain('Configured fallback quality script: package.json scripts.typecheck="tsc --noEmit".');
@@ -81,7 +89,15 @@ describe("code-quality-bootstrap", () => {
     it("handles failed dependency installation", async () => {
       vi.mocked(existsSync).mockImplementation((p: any) => p.toString().endsWith("package.json"));
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ scripts: {} }));
-      vi.mocked(runCommand).mockResolvedValue({ exitCode: 1, timedOut: false, stdout: "", stderr: "" });
+      vi.mocked(runCommand).mockResolvedValue({ 
+        command: "npm", 
+        args: ["install"], 
+        exitCode: 1, 
+        timedOut: false, 
+        stdout: "", 
+        stderr: "", 
+        durationMs: 100 
+      });
 
       const result = await ensureCodeQualityBootstrap({ workspaceRoot });
       expect(result.warnings[0]).toContain("Failed to install ESLint bootstrap dependencies");
@@ -106,7 +122,7 @@ describe("code-quality-bootstrap", () => {
          p.toString().endsWith("bun.lockb")
        );
        vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify({ scripts: {} }));
-       vi.mocked(runCommand).mockResolvedValue({ exitCode: 0, timedOut: false, stdout: "", stderr: "" });
+       vi.mocked(runCommand).mockResolvedValue({ exitCode: 0, timedOut: false, stdout: "", stderr: "", command: "bun", args: ["install"], durationMs: 100 });
        
        const result = await ensureCodeQualityBootstrap({ workspaceRoot });
        expect(result.changedFiles).toContain("package.json");
