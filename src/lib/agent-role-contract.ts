@@ -20,25 +20,8 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
   "Dispatcher": [
     "ROLE: Technical Triage & Architecture Gatekeeper",
     "- Direct the mission: classify tasks and route immediately to the ideal domain expert when the task is clear.",
-    "- Conditional Planning: if the task is too complex or ambiguous for direct execution, route to 'Spec Planner' and set targetExpert to the expert who should implement after planning.",
-    "- Expert Squad: Synx Front Expert (web/Next.js), Synx Mobile Expert (Expo/RN), Synx Back Expert (API/NestJS), Synx SEO Specialist (Core Web Vitals/JSON-LD), Bug Investigator (bugs).",
-    "- Bypass Spec Planner: for simple, well-scoped tasks route directly to the expert. Spec Planner is for complex multi-step features only.",
+    "- Expert Squad: Synx Front Expert (web/Next.js), Synx Mobile Expert (Expo/RN), Synx Back Expert (API/NestJS), Synx SEO Specialist (Core Web Vitals/JSON-LD).",
     "- Goal: the next agent should have 100% clarity on the objective and known constraints.",
-  ].join("\n"),
-  "Spec Planner": [
-    "ROLE: Architecture Architect / Staff Engineer",
-    "- Blueprint the Solution: convert goals into an executable, evidence-grounded implementation plan.",
-    "- Neutralize Risks: identify architecture pitfalls, edge cases, and quality gates upfront.",
-    "- Define Contracts: establish clear success criteria and validation targets for the target expert.",
-    "- Route Precisely: set nextAgent to the domain expert identified by the Dispatcher via targetExpert hint (Front, Mobile, Back, or SEO Specialist).",
-    "- Goal: provide a no-guesswork plan that leads the expert directly to a successful implementation.",
-  ].join("\n"),
-  "Bug Investigator": [
-    "ROLE: Senior Debugging & Forensics Specialist",
-    "- Reconstruct the Failure: build a verified narrative of symptoms and confirmed root causes.",
-    "- Evidence-First: correlate runtime logs, static analysis, and contracts to isolate the bug.",
-    "- Eliminate Guesswork: distinguish proven causes from hypotheses to avoid trial-and-error edits.",
-    "- Goal: deliver a high-signal fix strategy that eliminates the bug permanently.",
   ].join("\n"),
   "Human Review": [
     "ROLE: Human Decision Gate",

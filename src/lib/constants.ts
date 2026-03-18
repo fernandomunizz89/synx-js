@@ -11,13 +11,6 @@ export const DEFAULT_QA_MAX_RETRIES = 3;
 
 export const STAGE_FILE_NAMES = {
   dispatcher: "00-dispatcher.request.json",
-  planner: "02-planner.request.json",
-  bugInvestigator: "02b-bug-investigator.request.json",
-  bugFixer: "04b-bug-fixer.request.json",
-  builder: "04-builder.request.json",
-  reviewer: "05-reviewer.request.json",
-  qa: "06-qa.request.json",
-  pr: "07-pr.request.json",
   // Dream Stack 2026 – Expert Squad
   synxFrontExpert: "04-synx-front-expert.request.json",
   synxMobileExpert: "04-synx-mobile-expert.request.json",
@@ -28,13 +21,6 @@ export const STAGE_FILE_NAMES = {
 
 export const DONE_FILE_NAMES = {
   dispatcher: "01-dispatcher.done.json",
-  planner: "02-planner.done.json",
-  bugInvestigator: "02b-bug-investigator.done.json",
-  bugFixer: "04b-bug-fixer.done.json",
-  builder: "04-implementation.done.json",
-  reviewer: "05-review.done.json",
-  qa: "06-qa.done.json",
-  pr: "07-pr.done.json",
   // Dream Stack 2026 – Expert Squad
   synxFrontExpert: "04-synx-front-expert.done.json",
   synxMobileExpert: "04-synx-mobile-expert.done.json",
@@ -45,14 +31,8 @@ export const DONE_FILE_NAMES = {
 
 export const REQUIRED_PROMPT_FILES = [
   "dispatcher.md",
-  "spec-planner.md",
-  "bug-investigator.md",
-  "bug-fixer.md",
-  "feature-builder.md",
   "researcher.md",
-  "reviewer.md",
   "qa-validator.md",
-  "pr-writer.md",
   // Dream Stack 2026 – Expert Squad
   "synx-front-expert.md",
   "synx-mobile-expert.md",

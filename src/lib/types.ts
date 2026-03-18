@@ -12,10 +12,8 @@ export type TaskStatus =
 export type AgentName =
   // Orchestration layer
   | "Dispatcher"
-  | "Spec Planner"
   | "Human Review"
   // Expert Squad
-  | "Bug Investigator"
   | "Synx Front Expert"
   | "Synx Mobile Expert"
   | "Synx Back Expert"
@@ -40,7 +38,7 @@ export interface ProviderStageConfig {
 export interface GlobalConfig {
   providers: {
     dispatcher: ProviderStageConfig;
-    planner: ProviderStageConfig;
+    planner?: ProviderStageConfig;
   };
   agentProviders?: Partial<Record<AgentName, ProviderStageConfig>>;
   defaults: {
@@ -69,7 +67,7 @@ export interface ResolvedProjectConfig {
   tasksDir: string;
   providers: {
     dispatcher: ProviderStageConfig;
-    planner: ProviderStageConfig;
+    planner?: ProviderStageConfig;
   };
   agentProviders: Partial<Record<AgentName, ProviderStageConfig>>;
 }

@@ -5,8 +5,7 @@ export type QaRemediationAgent =
   | "Synx Front Expert"
   | "Synx Mobile Expert"
   | "Synx Back Expert"
-  | "Synx SEO Specialist"
-  | "Bug Investigator";
+  | "Synx SEO Specialist";
 
 export interface QaReturnContextItem {
   issue: string;
@@ -19,7 +18,7 @@ export interface QaReturnContextItem {
 export interface QaReturnHistoryEntry {
   attempt: number;
   returnedAt: string;
-  returnedTo: QaRemediationAgent;
+  returnedTo: "Human Review" | QaRemediationAgent;
   summary: string;
   failures: string[];
   findings: QaReturnContextItem[];
@@ -72,8 +71,7 @@ function isQaRemediationAgent(value: string): value is QaRemediationAgent {
     value === "Synx Front Expert" ||
     value === "Synx Mobile Expert" ||
     value === "Synx Back Expert" ||
-    value === "Synx SEO Specialist" ||
-    value === "Bug Investigator"
+    value === "Synx SEO Specialist"
   );
 }
 
@@ -218,7 +216,7 @@ export function normalizeQaReturnHistoryEntries(value: unknown): QaReturnHistory
     const attemptRaw = raw.attempt;
     const attempt = typeof attemptRaw === "number" && Number.isFinite(attemptRaw) ? Math.floor(attemptRaw) : 0;
     const returnedTo = asText(raw.returnedTo);
-    if (attempt < 1 || !isQaRemediationAgent(returnedTo)) continue;
+    if (attempt < 1 || (returnedTo !== "Human Review" && !isQaRemediationAgent(returnedTo))) continue;
 
     normalized.push({
       attempt,

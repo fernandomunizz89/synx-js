@@ -15,8 +15,6 @@ export const taskStatusSchema = z.enum([
 export const agentNameSchema = z.enum([
   // Orchestration layer
   "Dispatcher",
-  "Spec Planner",
-  "Bug Investigator",
   "Human Review",
   // Expert Squad
   "Synx Front Expert",
@@ -51,7 +49,7 @@ export const providerStageConfigSchema = z.object({
 export const globalConfigSchema = z.object({
   providers: z.object({
     dispatcher: providerStageConfigSchema,
-    planner: providerStageConfigSchema,
+    planner: providerStageConfigSchema.optional(),
   }),
   agentProviders: z.record(agentNameSchema, providerStageConfigSchema).optional(),
   defaults: z.object({
@@ -156,8 +154,6 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx SEO Specialist"),
   ]).optional(),
   nextAgent: z.union([
-    z.literal("Bug Investigator"),
-    z.literal("Spec Planner"),
     // Dream Stack 2026 – Expert Squad routing
     z.literal("Synx Front Expert"),
     z.literal("Synx Mobile Expert"),
@@ -316,25 +312,6 @@ export const builderOutputSchema = z.object({
   nextAgent: agentNameSchema,
 });
 
-export const bugFixerOutputSchema = z.object({
-  implementationSummary: z.string(),
-  filesChanged: z.array(z.string()),
-  changesMade: z.array(z.string()),
-  unitTestsAdded: z.array(z.string()).optional().default([]),
-  testsToRun: z.array(z.string()),
-  risks: z.array(z.string()),
-  edits: z.array(builderEditSchema).min(1),
-  nextAgent: agentNameSchema,
-});
-
-export const reviewerOutputSchema = z.object({
-  whatLooksGood: z.array(z.string()),
-  issuesFound: z.array(z.string()),
-  requiredChanges: z.array(z.string()),
-  verdict: z.enum(["approved", "needs_changes"]),
-  nextAgent: z.literal("QA Validator"),
-});
-
 export const validationCheckResultSchema = z.object({
   command: z.string(),
   status: z.enum(["passed", "failed", "skipped"]),
@@ -368,12 +345,11 @@ export const qaReturnHistoryEntrySchema = z.object({
   attempt: z.number().int().positive(),
   returnedAt: z.string(),
   returnedTo: z.union([
-    // Expert Squad
     z.literal("Synx Front Expert"),
     z.literal("Synx Mobile Expert"),
     z.literal("Synx Back Expert"),
     z.literal("Synx SEO Specialist"),
-    z.literal("Bug Investigator"),
+    z.literal("Human Review"),
   ]),
   summary: z.string(),
   failures: z.array(z.string()).optional().default([]),
@@ -396,7 +372,6 @@ export const qaHandoffContextSchema = z.object({
     z.literal("Synx Mobile Expert"),
     z.literal("Synx Back Expert"),
     z.literal("Synx SEO Specialist"),
-    z.literal("Bug Investigator"),
   ]),
   summary: z.string(),
   latestFindings: z.array(qaReturnContextItemSchema).optional().default([]),
@@ -435,14 +410,7 @@ export const qaOutputSchema = z.object({
     z.literal("Synx Mobile Expert"),
     z.literal("Synx Back Expert"),
     z.literal("Synx SEO Specialist"),
-    z.literal("Bug Investigator"),
   ]),
 });
 
-export const prWriterOutputSchema = z.object({
-  summary: z.string(),
-  whatWasDone: z.array(z.string()),
-  testPlan: z.array(z.string()),
-  rolloutNotes: z.array(z.string()),
-  nextAgent: z.literal("Human Review"),
-});
+// Legacy agent output schemas were removed.

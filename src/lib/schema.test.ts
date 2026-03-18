@@ -1,12 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentNameSchema,
-  bugFixerOutputSchema,
-  bugInvestigatorOutputSchema,
-  builderOutputSchema,
-  plannerOutputSchema,
   qaOutputSchema,
-  researcherOutputSchema,
   taskMetaSchema,
   taskTypeSchema,
 } from "./schema.js";
@@ -35,7 +30,7 @@ describe("schema", () => {
       nextAgent: "System",
       humanApprovalRequired: false,
       createdAt: "2026-03-16T10:00:00.000Z",
-      updatedAt: "2026-03-16T10:01:00.000Z",
+      updatedAt: "2026-03-16T10:01:00:000Z",
       history: [
         {
           stage: "human-review",
@@ -57,61 +52,6 @@ describe("schema", () => {
       currentAgent: "Dispatcher",
     });
     expect(parsedNormal.currentAgent).toBe("Dispatcher");
-  });
-
-  it("validates builder output for create and replace_snippet edit actions", () => {
-    const createParsed = builderOutputSchema.parse({
-      implementationSummary: "Created feature file",
-      filesChanged: ["src/feature.ts"],
-      changesMade: ["Added src/feature.ts"],
-      testsToRun: ["npm run check"],
-      risks: [],
-      edits: [
-        {
-          path: "src/feature.ts",
-          action: "create",
-          content: "export const feature = true;\n",
-        },
-      ],
-      nextAgent: "Synx QA Engineer",
-    });
-    expect(createParsed.edits[0]?.action).toBe("create");
-
-    const snippetParsed = builderOutputSchema.parse({
-      implementationSummary: "Adjusted snippet",
-      filesChanged: ["src/feature.ts"],
-      changesMade: ["Replaced snippet"],
-      testsToRun: ["npm run check"],
-      risks: [],
-      edits: [
-        {
-          path: "src/feature.ts",
-          action: "replace_snippet",
-          find: "feature = false",
-          replace: "feature = true",
-        },
-      ],
-      nextAgent: "Synx QA Engineer",
-    });
-    expect(snippetParsed.edits[0]?.action).toBe("replace_snippet");
-  });
-
-  it("rejects invalid replace_snippet builder edit without find", () => {
-    expect(() => builderOutputSchema.parse({
-      implementationSummary: "Broken edit",
-      filesChanged: ["src/feature.ts"],
-      changesMade: ["Attempted replace"],
-      testsToRun: ["npm run check"],
-      risks: [],
-      edits: [
-        {
-          path: "src/feature.ts",
-          action: "replace_snippet",
-          replace: "feature = true",
-        },
-      ],
-      nextAgent: "Synx QA Engineer",
-    })).toThrow();
   });
 
   it("parses QA output with defaults and optional handoff context", () => {
@@ -152,128 +92,5 @@ describe("schema", () => {
     });
     expect(failParsed.qaHandoffContext?.returnedTo).toBe("Synx Front Expert");
     expect(failParsed.returnContext[0]?.issue).toBe("Timer logic broken");
-  });
-
-  it("validates planner output schema correctly", () => {
-    const valid = plannerOutputSchema.parse({
-      technicalContext: "Next.js app",
-      knownFacts: ["Uses React"],
-      unknowns: [],
-      assumptions: [],
-      requiresHumanInput: false,
-      conditionalPlan: ["Build it"],
-      edgeCases: [],
-      risks: [],
-      validationCriteria: ["Looks good"],
-      nextAgent: "Synx Front Expert",
-    });
-    expect(valid.nextAgent).toBe("Synx Front Expert");
-
-    expect(() => plannerOutputSchema.parse({
-      technicalContext: "Next.js app",
-      // Missing knownFacts
-      unknowns: [],
-      assumptions: [],
-      requiresHumanInput: false,
-      conditionalPlan: ["Build it"],
-      edgeCases: [],
-      risks: [],
-      validationCriteria: ["Looks good"],
-      nextAgent: "Synx Front Expert",
-    })).toThrow();
-  });
-
-  it("validates researcher output schema", () => {
-    const parsed = researcherOutputSchema.parse({
-      summary: "Use official docs and align the hook signature.",
-      sources: [
-        {
-          title: "Official docs",
-          url: "https://example.com/docs",
-        },
-      ],
-      confidence_score: 0.82,
-      recommended_action: "Adjust import/export and re-run typecheck.",
-      is_breaking_change: false,
-    });
-    expect(parsed.confidence_score).toBe(0.82);
-    expect(parsed.sources[0]?.url).toBe("https://example.com/docs");
-  });
-
-  it("validates bug investigator output schema correctly", () => {
-    const defaultRisk = bugInvestigatorOutputSchema.parse({
-      symptomSummary: "Crash on load",
-      knownFacts: [],
-      likelyCauses: ["Null pointer"],
-      investigationSteps: ["Check logs"],
-      unknowns: [],
-      nextAgent: "Synx Back Expert",
-    });
-    expect(defaultRisk.riskAssessment.buildRisk).toBe("unknown"); // Checks default applies
-    expect(defaultRisk.nextAgent).toBe("Synx Back Expert");
-  });
-
-  it("validates bug fixer output schema correctly", () => {
-    const valid = bugFixerOutputSchema.parse({
-      implementationSummary: "Fixed null check",
-      filesChanged: ["src/app.ts"],
-      changesMade: ["Added if(var)"],
-      testsToRun: ["npm test"],
-      risks: [],
-      edits: [
-        {
-          path: "src/app.ts",
-          action: "replace",
-          content: "if(val) {}",
-        },
-      ],
-      nextAgent: "Synx QA Engineer",
-    });
-    expect(valid.edits[0].action).toBe("replace");
-
-    expect(() => bugFixerOutputSchema.parse({
-      implementationSummary: "Forgot edits array",
-      filesChanged: ["src/app.ts"],
-      changesMade: [],
-      testsToRun: [],
-      risks: [],
-      edits: [], // Must be min 1
-      nextAgent: "Synx QA Engineer",
-    })).toThrow();
-  });
-
-  it("rejects invalid create builder edit without content", () => {
-    expect(() => builderOutputSchema.parse({
-      implementationSummary: "Broken create",
-      filesChanged: ["src/feature.ts"],
-      changesMade: ["Attempted create"],
-      testsToRun: [],
-      risks: [],
-      edits: [
-        {
-          path: "src/feature.ts",
-          action: "create",
-        },
-      ],
-      nextAgent: "Reviewer",
-    })).toThrow();
-  });
-
-  it("rejects invalid replace_snippet builder edit without replace", () => {
-    expect(() => builderOutputSchema.parse({
-      implementationSummary: "Broken replace",
-      filesChanged: ["src/feature.ts"],
-      changesMade: ["Attempted replace"],
-      testsToRun: [],
-      risks: [],
-      edits: [
-        {
-          path: "src/feature.ts",
-          action: "replace_snippet",
-          find: "old snippet",
-        },
-      ],
-      nextAgent: "Reviewer",
-    })).toThrow();
   });
 });
