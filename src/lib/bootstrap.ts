@@ -14,12 +14,6 @@ export async function ensureGlobalInitialized(): Promise<void> {
           model: "mock-dispatcher-v1",
           baseUrlEnv: "AI_AGENTS_OPENAI_BASE_URL",
           apiKeyEnv: "AI_AGENTS_OPENAI_API_KEY"
-        },
-        planner: {
-          type: "mock",
-          model: "mock-planner-v1",
-          baseUrlEnv: "AI_AGENTS_OPENAI_BASE_URL",
-          apiKeyEnv: "AI_AGENTS_OPENAI_API_KEY"
         }
       },
       defaults: { humanReviewer: "" }
@@ -55,37 +49,19 @@ export async function ensureProjectInitialized(): Promise<void> {
   const routingConfig = path.join(configDir(), "routing.json");
   if (!(await exists(routingConfig))) {
     await writeJson(routingConfig, {
-      Feature: ["Dispatcher", "Spec Planner", "Feature Builder", "Reviewer", "QA Validator", "PR Writer"],
-      Bug: ["Dispatcher", "Bug Investigator", "Bug Fixer", "Reviewer", "QA Validator", "PR Writer"]
+      Feature: ["Dispatcher", "Synx Front Expert"],
+      Bug: ["Dispatcher", "Synx QA Engineer"]
     });
   }
 
   const dispatcherPrompt = path.join(promptsDir(), "dispatcher.md");
   if (!(await exists(dispatcherPrompt))) await writeText(dispatcherPrompt, DISPATCHER_PROMPT.trim() + "\n");
 
-  const plannerPrompt = path.join(promptsDir(), "spec-planner.md");
-  if (!(await exists(plannerPrompt))) await writeText(plannerPrompt, PLANNER_PROMPT.trim() + "\n");
-
-  const bugInvestigatorPrompt = path.join(promptsDir(), "bug-investigator.md");
-  if (!(await exists(bugInvestigatorPrompt))) await writeText(bugInvestigatorPrompt, BUG_INVESTIGATOR_PROMPT.trim() + "\n");
-
-  const bugFixerPrompt = path.join(promptsDir(), "bug-fixer.md");
-  if (!(await exists(bugFixerPrompt))) await writeText(bugFixerPrompt, BUG_FIXER_PROMPT.trim() + "\n");
-
-  const builderPrompt = path.join(promptsDir(), "feature-builder.md");
-  if (!(await exists(builderPrompt))) await writeText(builderPrompt, BUILDER_PROMPT.trim() + "\n");
-
   const researcherPrompt = path.join(promptsDir(), "researcher.md");
   if (!(await exists(researcherPrompt))) await writeText(researcherPrompt, RESEARCHER_PROMPT.trim() + "\n");
 
-  const reviewerPrompt = path.join(promptsDir(), "reviewer.md");
-  if (!(await exists(reviewerPrompt))) await writeText(reviewerPrompt, REVIEWER_PROMPT.trim() + "\n");
-
   const qaPrompt = path.join(promptsDir(), "qa-validator.md");
   if (!(await exists(qaPrompt))) await writeText(qaPrompt, QA_PROMPT.trim() + "\n");
-
-  const prPrompt = path.join(promptsDir(), "pr-writer.md");
-  if (!(await exists(prPrompt))) await writeText(prPrompt, PR_PROMPT.trim() + "\n");
 
   await ensureGitignoreEntry(".ai-agents/");
 }
@@ -123,133 +99,11 @@ Return exactly:
   "assumptions": ["string"],
   "constraints": ["string"],
   "requiresHumanInput": boolean,
-  "nextAgent": "Bug Investigator | Spec Planner"
+  "nextAgent": "Spec Planner"
 }
 
 Routing:
-- Bug -> Bug Investigator
 - anything else -> Spec Planner
-
-Input JSON:
-{{INPUT_JSON}}
-`;
-
-const PLANNER_PROMPT = `
-You are the Spec Planner agent. Act as a Staff Engineer.
-Return ONLY valid JSON.
-
-You must be evidence-driven and proactive.
-Define the architecture based on confirmed facts. 
-If data is missing, prioritize identifying the technical path to acquire it.
-Your plan must be actionable and lead directly to implementation.
-
-Return exactly:
-{
-  "thoughtProcess": "string (Architecture and solution design reasoning)",
-  "technicalContext": "string",
-  "knownFacts": ["string"],
-  "unknowns": ["string"],
-  "assumptions": ["string"],
-  "requiresHumanInput": boolean,
-  "conditionalPlan": ["string"],
-  "edgeCases": ["string"],
-  "risks": ["string"],
-  "validationCriteria": ["string"],
-  "nextAgent": "Feature Builder"
-}
-
-Input JSON:
-{{INPUT_JSON}}
-`;
-
-const BUG_INVESTIGATOR_PROMPT = `
-You are the Bug Investigator agent. Act as a Forensics Specialist.
-Return ONLY valid JSON.
-
-You must be evidence-driven. 
-Identify the most probable root causes based on runtime data and code analysis.
-If evidence is missing, define the steps to acquire it (logs, tests, probes).
-
-Return exactly:
-{
-  "thoughtProcess": "string (Step-by-step root cause analysis)",
-  "symptomSummary": "string",
-  "knownFacts": ["string"],
-  "likelyCauses": ["string"],
-  "investigationSteps": ["string"],
-  "unknowns": ["string"],
-  "nextAgent": "Bug Fixer"
-}
-
-Input JSON:
-{{INPUT_JSON}}
-`;
-
-const BUG_FIXER_PROMPT = `
-You are the Bug Fixer agent. Act with Senior Engineering ownership.
-Return ONLY valid JSON.
-
-You must be evidence-driven and decisive.
-Fix the root cause permanently. Treat tests as proof of success, not just diagnostics.
-Own the entire solution: edit multiple files, update configs, and ensure E2E coverage.
-Address QA findings explicitly with verified evidence of resolution.
-Pivot strategies immediately if a prior approach failed.
-
-Return exactly:
-{
-  "thoughtProcess": "string (Technical strategy and fix rationale)",
-  "implementationSummary": "string",
-  "filesChanged": ["string"],
-  "changesMade": ["string"],
-  "unitTestsAdded": ["string"],
-  "testsToRun": ["string"],
-  "risks": ["string"],
-  "edits": [
-    {
-      "path": "relative/path.ext",
-      "action": "create | replace | replace_snippet | delete",
-      "content": "required for create/replace",
-      "find": "required for replace_snippet",
-      "replace": "required for replace_snippet"
-    }
-  ],
-  "nextAgent": "Reviewer"
-}
-
-Input JSON:
-{{INPUT_JSON}}
-`;
-
-const BUILDER_PROMPT = `
-You are the Feature Builder agent. Act as a Senior Product Engineer.
-Return ONLY valid JSON.
-
-You must be evidence-driven and decisive.
-Build production-ready, testable increments. 
-Ensure system-wide consistency and follow architectural patterns.
-Address QA findings item-by-item with proof of closure.
-Include E2E coverage for the main user flow.
-
-Return exactly:
-{
-  "thoughtProcess": "string (Implementation strategy and logic design)",
-  "implementationSummary": "string",
-  "filesChanged": ["string"],
-  "changesMade": ["string"],
-  "unitTestsAdded": ["string"],
-  "testsToRun": ["string"],
-  "risks": ["string"],
-  "edits": [
-    {
-      "path": "relative/path.ext",
-      "action": "create | replace | replace_snippet | delete",
-      "content": "required for create/replace",
-      "find": "required for replace_snippet",
-      "replace": "required for replace_snippet"
-    }
-  ],
-  "nextAgent": "Reviewer"
-}
 
 Input JSON:
 {{INPUT_JSON}}
@@ -273,28 +127,6 @@ Return exactly:
   "confidence_score": number,
   "recommended_action": "string",
   "is_breaking_change": boolean
-}
-
-Input JSON:
-{{INPUT_JSON}}
-`;
-
-const REVIEWER_PROMPT = `
-You are the Reviewer agent. Act as a Senior Peer.
-Return ONLY valid JSON.
-
-Review for correctness, maintainability, and regression risk.
-Approve only when evidence supports readiness.
-Findings must map to observable risk or inconsistency.
-
-Return exactly:
-{
-  "thoughtProcess": "string (Code review and risk assessment reasoning)",
-  "whatLooksGood": ["string"],
-  "issuesFound": ["string"],
-  "requiredChanges": ["string"],
-  "verdict": "approved | needs_changes",
-  "nextAgent": "QA Validator"
 }
 
 Input JSON:
@@ -354,30 +186,10 @@ Return exactly:
       "recommendedAction": "string"
     }
   ],
-  "nextAgent": "PR Writer | Feature Builder | Bug Fixer"
+  "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Human Review"
 }
 
 Input JSON:
 {{INPUT_JSON}}
 `;
 
-const PR_PROMPT = `
-You are the PR Writer agent. Act as an Engineering Communicator.
-Return ONLY valid JSON.
-
-Produce an accurate narrative based on verified stage evidence.
-Highlight impact, technical highlights, and the validation path.
-
-Return exactly:
-{
-  "thoughtProcess": "string (Synthesis and communication strategy)",
-  "summary": "string",
-  "whatWasDone": ["string"],
-  "testPlan": ["string"],
-  "rolloutNotes": ["string"],
-  "nextAgent": "Human Review"
-}
-
-Input JSON:
-{{INPUT_JSON}}
-`;

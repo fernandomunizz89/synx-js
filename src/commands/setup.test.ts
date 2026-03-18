@@ -60,14 +60,14 @@ describe.sequential("commands/setup", () => {
           planner: { type: "mock", model: "old-planner" },
         },
         defaults: {
-          humanReviewer: "Old Reviewer",
+          humanReviewer: "Old Approver",
         },
       })
       .mockResolvedValueOnce({
         projectName: "my-pomodoro",
         language: "TypeScript",
         framework: "React",
-        humanReviewer: "Old Reviewer",
+        humanReviewer: "Old Approver",
         tasksDir: ".ai-agents/tasks",
       });
     mocks.writeJson.mockReset().mockResolvedValue(undefined);

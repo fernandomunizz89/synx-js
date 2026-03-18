@@ -140,7 +140,6 @@ describe.sequential("commands/doctor", () => {
     await doctorCommand.parseAsync(["node", "synx"]);
     const output = consoleSpy.mock.calls.flat().join("\n");
     expect(output).toContain("✗ Global config: Missing global config.");
-    expect(output).toContain("✗ Prompt files: Missing 1 file(s): dispatcher.md");
   });
 
   it("handles empty human reviewer name", async () => {

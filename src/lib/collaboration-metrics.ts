@@ -166,14 +166,8 @@ function inWindow(ms: number | null, window: MetricsWindow): boolean {
 function normalizeStage(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return "";
-  if (normalized.includes("bug-investigator")) return "bug-investigator";
-  if (normalized.includes("bug-fixer")) return "bug-fixer";
-  if (normalized.includes("builder")) return "builder";
   if (normalized.includes("dispatcher")) return "dispatcher";
-  if (normalized.includes("planner")) return "planner";
-  if (normalized.includes("reviewer")) return "reviewer";
   if (normalized === "qa" || normalized.includes("qa")) return "qa";
-  if (normalized === "pr" || normalized.includes("pr")) return "pr";
   return normalized
     .replace(/^0+\w?-/, "")
     .replace(/^0+\w?/, "")
@@ -496,11 +490,14 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
     }
     fullBuildChecksTotal += fullBuildChecks;
 
+    const implementerStages = new Set([
+      "synx-front-expert",
+      "synx-mobile-expert",
+      "synx-back-expert",
+      "synx-seo-specialist",
+    ]);
     const implementerMs = stages
-      .filter((row) => {
-        const normalized = normalizeStage(row.stage);
-        return normalized === "builder" || normalized === "bug-fixer";
-      })
+      .filter((row) => implementerStages.has(normalizeStage(row.stage)))
       .reduce((sum, row) => sum + row.durationMs, 0);
     totalImplementerMs += implementerMs;
     totalStageMs += stages.reduce((sum, row) => sum + row.durationMs, 0);
@@ -525,8 +522,7 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
       else if (meta.status === "done" || meta.status === "waiting_human") status = "success";
     } else {
       const hasFailure = audits.some((row) => row.event === "stage_failed");
-      const reachedPr = stages.some((row) => normalizeStage(row.stage) === "pr" && row.status === "done");
-      status = hasFailure ? "failed" : reachedPr ? "success" : "in_progress";
+      status = hasFailure ? "failed" : reachedQa ? "success" : "in_progress";
     }
 
     taskMetrics.push({
@@ -637,7 +633,7 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
       topStageAvgMs,
       implementerShare,
       implementerAvgMsPerTask: taskMetrics.length ? Math.round(totalImplementerMs / taskMetrics.length) : 0,
-      implementerLikelyBottleneck: topStage === "builder" || topStage === "bug-fixer",
+      implementerLikelyBottleneck: ["synx-front-expert", "synx-mobile-expert", "synx-back-expert", "synx-seo-specialist"].includes(topStage),
     },
     operationalCost: {
       retryWaitMs: retryWaitMs + retryAdditionalMsFromWorkflow,
