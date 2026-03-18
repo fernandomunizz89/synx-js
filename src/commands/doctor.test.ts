@@ -30,6 +30,7 @@ vi.mock("../lib/fs.js", () => ({
 
 vi.mock("../lib/config.js", () => ({
   loadResolvedProjectConfig: mocks.loadResolvedProjectConfig,
+  resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.dispatcher || cfg.providers.planner),
 }));
 
 vi.mock("../lib/provider-health.js", () => ({
@@ -83,6 +84,7 @@ describe.sequential("commands/doctor", () => {
         dispatcher: { type: "mock", model: "mock-dispatcher-v1" },
         planner: { type: "mock", model: "mock-planner-v1" },
       },
+      agentProviders: {},
     });
     mocks.checkProviderHealth.mockReset().mockResolvedValue({
       reachable: true,
@@ -148,6 +150,7 @@ describe.sequential("commands/doctor", () => {
         dispatcher: { type: "mock", model: "m" },
         planner: { type: "mock", model: "m" },
       },
+      agentProviders: {},
     });
     await doctorCommand.parseAsync(["node", "synx"]);
     const output = consoleSpy.mock.calls.flat().join("\n");
@@ -166,6 +169,7 @@ describe.sequential("commands/doctor", () => {
         },
         planner: { type: "mock", model: "m" },
       },
+      agentProviders: {},
     });
     await doctorCommand.parseAsync(["node", "synx"]);
     const output = consoleSpy.mock.calls.flat().join("\n");
@@ -179,6 +183,7 @@ describe.sequential("commands/doctor", () => {
         dispatcher: { type: "lmstudio", model: "m" },
         planner: { type: "mock", model: "m" },
       },
+      agentProviders: {},
     });
     await doctorCommand.parseAsync(["node", "synx"]);
     const output = consoleSpy.mock.calls.flat().join("\n");

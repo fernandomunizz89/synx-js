@@ -41,8 +41,10 @@ vi.mock("../lib/config.js", () => {
       humanReviewer: "User",
       tasksDir: ".ai-agents/tasks",
       providers: { planner: { type: "mock", model: "static-mock" } },
+      agentProviders: {},
     }),
     loadPromptFile: vi.fn().mockResolvedValue("Mock Prompt {{INPUT_JSON}}"),
+    resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.planner),
   };
 });
 

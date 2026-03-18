@@ -52,6 +52,7 @@ vi.mock("../lib/provider-health.js", () => ({
 
 vi.mock("../lib/config.js", () => ({
   loadResolvedProjectConfig: mocks.loadResolvedProjectConfig,
+  resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.dispatcher || cfg.providers.planner),
 }));
 
 vi.mock("../lib/human-messages.js", () => ({

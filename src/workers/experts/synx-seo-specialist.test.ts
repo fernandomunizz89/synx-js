@@ -66,8 +66,10 @@ vi.mock("../../lib/config.js", () => ({
       planner: { type: "mock", model: "static-mock" },
       dispatcher: { type: "mock", model: "static-mock" },
     },
+    agentProviders: {},
   }),
   loadPromptFile: vi.fn().mockResolvedValue("Mock Prompt {{INPUT_JSON}}"),
+  resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.planner),
 }));
 
 vi.mock("../../lib/post-edit-sanity.js", () => ({

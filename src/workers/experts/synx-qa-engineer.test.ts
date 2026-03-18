@@ -56,8 +56,10 @@ vi.mock("../../lib/config.js", () => ({
       planner: { type: "mock", model: "static-mock" },
       dispatcher: { type: "mock", model: "static-mock" },
     },
+    agentProviders: {},
   }),
   loadPromptFile: vi.fn().mockResolvedValue("Mock Prompt {{INPUT_JSON}}"),
+  resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.planner),
 }));
 
 vi.mock("../../lib/code-quality-bootstrap.js", () => ({
@@ -686,6 +688,5 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
     expect(meta.humanApprovalRequired).toBe(true);
   });
 });
-
 
 
