@@ -1,7 +1,6 @@
 // Dream Stack 2026 – Squad Factory
 // Replaces the generic worker array with a squad of Domain Experts.
 // The Dispatcher still runs first and routes each task to the right expert.
-// Legacy workers are preserved on disk but are no longer registered here.
 
 import { DispatcherWorker } from "./dispatcher.js";
 import { SynxFrontExpert } from "./experts/synx-front-expert.js";

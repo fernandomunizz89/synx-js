@@ -59,7 +59,6 @@ function isExpertAgent(name: string): name is QaRemediationAgent {
     || name === "Synx Mobile Expert"
     || name === "Synx Back Expert"
     || name === "Synx SEO Specialist"
-    || name === "Bug Investigator"
   );
 }
 
@@ -143,7 +142,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
 - Evidence: every finding must include: returnContext[] with issue, expectedResult, receivedResult, evidence[], recommendedAction.
 - Verdict: "pass" only if ALL acceptance criteria + automated checks pass.
 - Stack: validate mechanical integrity of Next.js, Expo/React Native, Fastify/NestJS.
-- nextAgent must be one of: "Synx Front Expert" | "Synx Mobile Expert" | "Synx Back Expert" | "Synx SEO Specialist" | "Bug Investigator" | "Human Review".
+- nextAgent must be one of: "Synx Front Expert" | "Synx Mobile Expert" | "Synx Back Expert" | "Synx SEO Specialist" | "Human Review".
   Use the expert that built the failing feature. Use "Human Review" on pass.
 `;
 
@@ -192,7 +191,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       {
         attempt: returnHistory.length + 1,
         returnedAt: nowIso(),
-        returnedTo: isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Bug Investigator",
+        returnedTo: isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Human Review",
         summary: output.failures.slice(0, 2).join("; ") || "[no failures]",
         failures: output.failures,
         findings: mergedReturnContext,
@@ -204,7 +203,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       maxRetries: 3,
       returnedTo: verdict === "pass"
         ? "Human Review"
-        : (isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Bug Investigator"),
+        : (isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Human Review"),
       summary: output.failures.slice(0, 2).join("; ") || (verdict === "pass" ? "All checks passed." : "[no summary]"),
       latestFindings: mergedReturnContext,
       cumulativeFindings: cumulativeFindings.slice(0, 8),
@@ -234,7 +233,6 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       "Synx Mobile Expert":   { stage: "synx-mobile-expert",   fileName: STAGE_FILE_NAMES.synxMobileExpert },
       "Synx Back Expert":     { stage: "synx-back-expert",     fileName: STAGE_FILE_NAMES.synxBackExpert },
       "Synx SEO Specialist":  { stage: "synx-seo-specialist",  fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
-      "Bug Investigator":     { stage: "bug-investigator",     fileName: STAGE_FILE_NAMES.bugInvestigator },
     };
 
     const findingsView = mergedReturnContext

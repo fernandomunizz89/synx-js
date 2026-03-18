@@ -20,7 +20,7 @@ vi.mock("../providers/factory.js", () => {
           assumptions: [],
           constraints: [],
           requiresHumanInput: false,
-          nextAgent: "Spec Planner",
+          nextAgent: "Synx Front Expert",
         },
         provider: "mock",
         model: "static-mock",
@@ -93,6 +93,27 @@ describe.sequential("workers/dispatcher", () => {
 
   it("processes a feature request and routes to planner", async () => {
     // 1. Arrange
+    const { createProvider } = await import("../providers/factory.js");
+    vi.mocked(createProvider).mockReturnValue({
+      generateStructured: vi.fn().mockResolvedValue({
+        parsed: {
+          type: "Feature",
+          goal: "add login",
+          context: "needs username",
+          knownFacts: [],
+          unknowns: [],
+          assumptions: [],
+          constraints: [],
+          requiresHumanInput: false,
+          nextAgent: "Synx Front Expert",
+        },
+        provider: "mock",
+        model: "static-mock",
+        parseRetries: 0,
+        estimatedTotalTokens: 100,
+      }),
+    } as any);
+
     const task = await createTask({
       title: "Add feature",
       typeHint: "Feature",
@@ -120,10 +141,10 @@ describe.sequential("workers/dispatcher", () => {
     
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Spec Planner");
+    expect(meta.nextAgent).toBe("Synx Front Expert");
   });
 
-  it("processes a bug request and routes to bug investigator", async () => {
+  it("processes a bug request and routes to expert", async () => {
     // 1. Arrange
     const { createProvider } = await import("../providers/factory.js");
     vi.mocked(createProvider).mockReturnValueOnce({
@@ -137,7 +158,7 @@ describe.sequential("workers/dispatcher", () => {
           assumptions: [],
           constraints: [],
           requiresHumanInput: false,
-          nextAgent: "Bug Investigator",
+          nextAgent: "Synx Back Expert",
         },
         provider: "mock",
         model: "static-mock",
@@ -173,6 +194,6 @@ describe.sequential("workers/dispatcher", () => {
     
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Bug Investigator");
+    expect(meta.nextAgent).toBe("Synx Back Expert");
   });
 });

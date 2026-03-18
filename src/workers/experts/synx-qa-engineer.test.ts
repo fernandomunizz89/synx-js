@@ -455,10 +455,10 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const builderDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.builder);
-    await writeJson(builderDonePath, {
+    const expertDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxFrontExpert);
+    await writeJson(expertDonePath, {
       taskId: task.taskId,
-      stage: "builder",
+      stage: "synx-front-expert",
       status: "done",
       createdAt: new Date().toISOString(),
       agent: "Synx Front Expert",
@@ -487,7 +487,7 @@ describe.sequential("workers/experts/synx-qa-engineer", () => {
       status: "request",
       createdAt: new Date().toISOString(),
       agent: "Synx QA Engineer",
-      inputRef: `done/${DONE_FILE_NAMES.builder}`,
+      inputRef: `done/${DONE_FILE_NAMES.synxFrontExpert}`,
     });
 
     const qa = new SynxQAEngineer();

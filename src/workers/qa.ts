@@ -951,7 +951,12 @@ function isLikelyUnitTestFile(filePath: string): boolean {
 
 async function loadReportedUnitTests(taskId: string): Promise<string[]> {
   const doneDir = path.join(taskDir(taskId), "done");
-  const candidates = [DONE_FILE_NAMES.bugFixer, DONE_FILE_NAMES.builder];
+  const candidates = [
+    DONE_FILE_NAMES.synxFrontExpert,
+    DONE_FILE_NAMES.synxMobileExpert,
+    DONE_FILE_NAMES.synxBackExpert,
+    DONE_FILE_NAMES.synxSeoSpecialist,
+  ];
   const reported: string[] = [];
 
   for (const fileName of candidates) {
@@ -1045,7 +1050,7 @@ function deriveQaValidationMode(checks: Array<{ status: "passed" | "failed" | "s
 
 export class QaWorker extends WorkerBase {
   readonly agent = "Synx QA Engineer" as const;
-  readonly requestFileName = STAGE_FILE_NAMES.qa;
+  readonly requestFileName = STAGE_FILE_NAMES.synxQaEngineer;
   readonly workingFileName = "06-qa.working.json";
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
@@ -1448,8 +1453,8 @@ MANDATORY VALIDATION CONTRACT:
 
     const queuedNextAgent = escalatedToHuman ? undefined : output.nextAgent;
     const queuedNextStage = "builder";
-    const queuedNextRequestFileName = STAGE_FILE_NAMES.builder;
-    const nextInputRef = `done/${DONE_FILE_NAMES.qa}`;
+    const queuedNextRequestFileName = STAGE_FILE_NAMES.synxFrontExpert;
+    const nextInputRef = `done/${DONE_FILE_NAMES.synxQaEngineer}`;
 
     const view = `# HANDOFF
 
@@ -1538,7 +1543,7 @@ ${escalatedToHuman ? "Human Review" : output.nextAgent}
     await this.finishStage({
       taskId,
       stage: "qa",
-      doneFileName: DONE_FILE_NAMES.qa,
+      doneFileName: DONE_FILE_NAMES.synxQaEngineer,
       viewFileName: "06-qa.md",
       viewContent: view,
       output,
