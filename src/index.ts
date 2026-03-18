@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { loadDotEnvFile } from "./lib/load-dotenv.js";
 import { setupCommand } from "./commands/setup.js";
 import { startCommand } from "./commands/start.js";
 import { newCommand } from "./commands/new.js";
@@ -13,6 +14,8 @@ import { metricsCommand } from "./commands/metrics.js";
 import { showConfigCommand } from "./commands/show-config.js";
 import { cancelCommand } from "./commands/cancel.js";
 import { reproveCommand } from "./commands/reprove.js";
+
+loadDotEnvFile();
 
 const program = new Command();
 

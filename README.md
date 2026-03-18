@@ -35,6 +35,8 @@ The Dispatcher sets `nextAgent: "Spec Planner"` with a `targetExpert` hint for c
 - Primary commands: `setup`, `start`, `new`, `status`, `approve`, `reprove`, `doctor`, `resume`, `fix`, `metrics`
 - Prompt stubs for each expert live in `.ai-agents/prompts/`
 - Full docs in the `docs/` folder
+
+You can now configure a specific model for each agent and connect to external providers: OpenAI and Google models can be used by supplying the appropriate API key in the agent configuration. Anthropic Claude Code models are also available when you provide the Anthropic API key. Set the desired model/provider per agent before running `synx run` so every specialist executes with the intended stack. SYNX automatically reads a `.env` file in the repository root (copy `.env.example` to `.env` and fill the placeholders), so you can keep `AI_AGENTS_OPENAI_API_KEY`, `AI_AGENTS_GOOGLE_API_KEY`, `AI_AGENTS_ANTHROPIC_API_KEY`, or provider-specific secrets in that file (make sure it stays ignored by Git) and reload the CLI to pick them up.
 </ai-context>
 
 ---
