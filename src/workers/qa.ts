@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { DEFAULT_QA_MAX_RETRIES, DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { loadPromptFile, loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../lib/code-quality-bootstrap.js";
 import { exists, readJson, writeJson } from "../lib/fs.js";
@@ -1052,7 +1052,7 @@ export class QaWorker extends WorkerBase {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("qa-validator.md");
-    const provider = createProvider(config.providers.planner);
+    const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const baseInput = await this.buildAgentInput(taskId, request);
     const qaPreferences = resolveTaskQaPreferences(baseInput.task);
     const meta = await loadTaskMeta(taskId);

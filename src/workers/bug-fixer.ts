@@ -1,6 +1,6 @@
 // @ts-nocheck -- Legacy worker, not registered in workers/index.ts
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { loadPromptFile, loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../lib/code-quality-bootstrap.js";
 import { extractQaHandoffContext } from "../lib/qa-context.js";
@@ -45,7 +45,7 @@ export class BugFixerWorker extends WorkerBase {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("bug-fixer.md");
-    const provider = createProvider(config.providers.planner);
+    const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const workspaceRoot = process.cwd();
     const baseInput = await this.buildAgentInput(taskId, request);
     const qaPreferences = resolveTaskQaPreferences(baseInput.task);

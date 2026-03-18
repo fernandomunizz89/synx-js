@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { loadPromptFile, loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import {
   buildBugBrief,
@@ -82,7 +82,7 @@ export class BugInvestigatorWorker extends WorkerBase {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("bug-investigator.md");
-    const provider = createProvider(config.providers.planner);
+    const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const baseInput = await this.buildAgentInput(taskId, request);
     let projectProfile = await loadTaskArtifact<ProjectProfile>(taskId, ARTIFACT_FILES.projectProfile);
     if (!projectProfile) {

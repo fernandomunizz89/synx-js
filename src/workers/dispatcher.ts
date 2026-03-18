@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readJson } from "../lib/fs.js";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadResolvedProjectConfig, loadPromptFile } from "../lib/config.js";
+import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../lib/config.js";
 import { taskDir } from "../lib/paths.js";
 import { collectProjectProfile, projectProfileFactLines } from "../lib/project-handoff.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
@@ -22,7 +22,7 @@ export class DispatcherWorker extends WorkerBase {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("dispatcher.md");
-    const provider = createProvider(config.providers.dispatcher);
+    const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const input = await readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
     const projectProfile = await collectProjectProfile({
       workspaceRoot: process.cwd(),
