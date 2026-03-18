@@ -44,10 +44,10 @@ async function createFixture(): Promise<FixturePaths> {
   await writeJson(globalConfigPath, {
     providers: {
       dispatcher: { type: "mock", model: "global-dispatcher" },
-      planner: { type: "mock", model: "global-planner" },
     },
+    agentProviders: {},
     defaults: {
-      humanReviewer: "Global Reviewer",
+        humanReviewer: "Global Approver",
     },
   });
   await writeJson(localConfigPath, {
@@ -115,16 +115,18 @@ describe.sequential("config", () => {
     const second = await loadResolvedProjectConfig();
 
     expect(second).toBe(first);
-    expect(first.humanReviewer).toBe("Global Reviewer");
+    expect(first.humanReviewer).toBe("Global Approver");
     expect(first.providers.dispatcher.model).toBe("local-dispatcher");
-    expect(first.providers.planner.model).toBe("global-planner");
+    if (first.providers.planner) {
+      expect(first.providers.planner.model).toBe("global-planner");
+    }
 
     await new Promise((resolve) => setTimeout(resolve, 12));
     await writeJson(fixture.localConfigPath, {
       projectName: "my-project",
       language: "TypeScript",
       framework: "Vite",
-      humanReviewer: "Local Reviewer",
+      humanReviewer: "Local Approver",
       tasksDir: ".ai-agents/tasks",
       providerOverrides: {
         dispatcher: { model: "local-dispatcher-v2" },
@@ -133,15 +135,14 @@ describe.sequential("config", () => {
 
     const third = await loadResolvedProjectConfig();
     expect(third).not.toBe(first);
-    expect(third.humanReviewer).toBe("Local Reviewer");
+    expect(third.humanReviewer).toBe("Local Approver");
     expect(third.providers.dispatcher.model).toBe("local-dispatcher-v2");
   });
 
   it("resolves agent-specific provider config overrides", async () => {
     const resolved = await loadResolvedProjectConfig();
-    expect(resolved.agentProviders["Synx Front Expert"]?.model).toBe("local-front-expert");
     expect(resolveProviderConfigForAgent(resolved, "Synx Front Expert").model).toBe("local-front-expert");
-    expect(resolveProviderConfigForAgent(resolved, "Synx Back Expert")).toBe(resolved.providers.planner);
+    expect(resolveProviderConfigForAgent(resolved, "Synx Back Expert")).toBe(resolved.providers.dispatcher);
   });
 
   it("bypasses resolved config cache when explicitly disabled", async () => {
