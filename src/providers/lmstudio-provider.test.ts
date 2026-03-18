@@ -103,7 +103,7 @@ describe.sequential("providers/lmstudio-provider", () => {
     });
 
     const result = await provider.generateStructured({
-      agent: "Spec Planner",
+      agent: "Dispatcher",
       taskId: "task-2",
       stage: "planner",
       systemPrompt: "x",

@@ -41,11 +41,11 @@ class LifecycleWorker extends WorkerBase {
       output: {
         type: "Feature",
         goal: "Implement change",
-        nextAgent: "Spec Planner",
+        nextAgent: "Synx Front Expert",
       },
-      nextAgent: "Spec Planner",
-      nextStage: "planner",
-      nextRequestFileName: STAGE_FILE_NAMES.planner,
+      nextAgent: "Synx Front Expert",
+      nextStage: "synx-front-expert",
+      nextRequestFileName: STAGE_FILE_NAMES.synxFrontExpert,
       nextInputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
       startedAt: nowIso(),
       provider: "mock",
@@ -85,19 +85,18 @@ describe.sequential("integration/pipeline-critical-scenarios", () => {
       agent: "Dispatcher",
     });
 
-    const nextRequest = await readJson(path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.planner));
+    const nextRequest = await readJson(path.join(root, ".ai-agents", "tasks", task.taskId, "inbox", STAGE_FILE_NAMES.synxFrontExpert));
     expect(nextRequest).toMatchObject({
       taskId: task.taskId,
-      stage: "planner",
+      stage: "synx-front-expert",
+      agent: "Synx Front Expert",
       status: "request",
-      agent: "Spec Planner",
-      inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
     });
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
     expect(meta.currentAgent).toBe("Dispatcher");
-    expect(meta.nextAgent).toBe("Spec Planner");
+    expect(meta.nextAgent).toBe("Synx Front Expert");
     expect(meta.history).toHaveLength(1);
   });
 
@@ -116,16 +115,16 @@ describe.sequential("integration/pipeline-critical-scenarios", () => {
   it("working recovery: requeues known working file and quarantines unknown one", async () => {
     const task = await createTask(baseTaskInput("Recover working files"));
     const workingDir = path.join(task.taskPath, "working");
-    await fs.writeFile(path.join(workingDir, "04-builder.working.json"), "{\"ok\":true}", "utf8");
+    await fs.writeFile(path.join(workingDir, "06-synx-qa-engineer.working.json"), "{\"ok\":true}", "utf8");
     await fs.writeFile(path.join(workingDir, "unknown.working.json"), "{\"ok\":false}", "utf8");
 
     const recovered = await recoverWorkingFiles();
     expect(recovered).toEqual(expect.arrayContaining([
-      expect.objectContaining({ taskId: task.taskId, file: "04-builder.working.json", action: "requeued" }),
+      expect.objectContaining({ taskId: task.taskId, file: "06-synx-qa-engineer.working.json", action: "requeued" }),
       expect.objectContaining({ taskId: task.taskId, file: "unknown.working.json", action: "moved_to_failed" }),
     ]));
 
-    const requeued = await readJson(path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.builder));
+    const requeued = await readJson(path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer));
     expect(requeued).toMatchObject({ ok: true });
   });
 });

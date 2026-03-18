@@ -24,38 +24,10 @@ export class MockProvider implements LlmProvider {
           assumptions: [],
           constraints: ["Do not change unrelated code paths."],
           requiresHumanInput: false,
-          nextAgent: normalizedType === "Bug" ? "Bug Investigator" : "Spec Planner",
-        };
-        break;
-      }
-      case "Spec Planner":
-        parsed = {
-          technicalContext: "Current technical context is unknown from available data.",
-          knownFacts: ["The task was classified earlier in the pipeline."],
-          unknowns: ["Exact files and data flow are not yet confirmed."],
-          assumptions: [],
-          requiresHumanInput: false,
-          conditionalPlan: [
-            "Locate the implementation related to the task goal.",
-            "Apply the smallest safe change.",
-            "Validate behavior did not regress.",
-          ],
-          edgeCases: ["Ambiguous scope", "Missing target file"],
-          risks: ["Planning beyond confirmed facts"],
-          validationCriteria: ["Change remains scoped to requested behavior"],
           nextAgent: "Synx Front Expert",
         };
         break;
-      case "Bug Investigator":
-        parsed = {
-          symptomSummary: "Observed issue based on task description.",
-          knownFacts: ["The user reported a bug-like behavior."],
-          likelyCauses: ["Implementation does not match expected behavior."],
-          investigationSteps: ["Locate relevant files.", "Apply minimal correction.", "Validate changes."],
-          unknowns: ["Precise root cause before file inspection."],
-          nextAgent: "Synx Back Expert",
-        };
-        break;
+      }
       case "Synx Front Expert":
       case "Synx Mobile Expert":
       case "Synx Back Expert":
@@ -92,6 +64,12 @@ export class MockProvider implements LlmProvider {
           changedFiles: ["mock-change.txt"],
           executedChecks: [],
           nextAgent: "Human Review",
+        };
+        break;
+      case "Human Review":
+        parsed = {
+          accepted: true,
+          feedback: "Looks good.",
         };
         break;
       default:

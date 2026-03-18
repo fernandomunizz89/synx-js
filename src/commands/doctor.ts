@@ -9,7 +9,7 @@ import { providerHealthToHuman } from "../lib/human-messages.js";
 import { confirmAction } from "../lib/interactive.js";
 import { clearStaleLocks, detectInterruptedTasks, detectStaleLocks, detectWorkingOrphans, recoverInterruptedTasks, recoverWorkingFiles } from "../lib/runtime.js";
 import { commandExample } from "../lib/cli-command.js";
-import { REQUIRED_PROMPT_FILES } from "../lib/constants.js";
+import { STAGE_FILE_NAMES } from "../lib/constants.js";
 import path from "node:path";
 import type { ProviderStageConfig } from "../lib/types.js";
 
@@ -100,25 +100,14 @@ export const doctorCommand = new Command("doctor")
       message: await exists(aiRoot()) ? "Found local .ai-agents folder." : "Missing local .ai-agents folder.",
     });
 
-    checks.push({
-      label: "Prompts",
-      ok: await exists(promptsDir()),
-      message: await exists(promptsDir()) ? "Prompt folder exists." : "Prompt folder is missing.",
-    });
-
-    const missingPrompts: string[] = [];
-    for (const promptFile of REQUIRED_PROMPT_FILES) {
-      if (!(await exists(path.join(promptsDir(), promptFile)))) {
-        missingPrompts.push(promptFile);
-      }
-    }
-    checks.push({
-      label: "Prompt files",
-      ok: missingPrompts.length === 0,
-      message: missingPrompts.length
-        ? `Missing ${missingPrompts.length} file(s): ${missingPrompts.join(", ")}`
-        : "All required prompt files are present.",
-    });
+    const promptsDirValue = promptsDir();
+    checks.push(
+      { label: "Synx Front Expert", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxFrontExpert)), message: "Prompt file missing" },
+      { label: "Synx Mobile Expert", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxMobileExpert)), message: "Prompt file missing" },
+      { label: "Synx Back Expert", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxBackExpert)), message: "Prompt file missing" },
+      { label: "Synx SEO Specialist", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxSeoSpecialist)), message: "Prompt file missing" },
+      { label: "Synx QA Engineer", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxQaEngineer)), message: "Prompt file missing" },
+    );
 
     const config = await loadResolvedProjectConfig();
     checks.push({
@@ -129,23 +118,25 @@ export const doctorCommand = new Command("doctor")
         : `Missing reviewer name. Run \`${commandExample("setup")}\` to set it explicitly.`,
     });
 
-    checks.push(buildProviderEnvCheck("Dispatcher provider", config.providers.dispatcher));
-    checks.push(buildProviderEnvCheck("Planner provider", config.providers.planner));
+    if (config.providers.dispatcher) {
+      checks.push(buildProviderEnvCheck("Dispatcher provider", config.providers.dispatcher));
+      const dispatcherHealth = await checkProviderHealth(config.providers.dispatcher);
+      checks.push({
+        label: "Dispatcher provider",
+        ok: dispatcherHealth.reachable && (dispatcherHealth.modelFound ?? true),
+        message: providerHealthToHuman(dispatcherHealth.message),
+      });
+    }
 
-    const dispatcherHealth = await checkProviderHealth(config.providers.dispatcher);
-    const plannerHealth = await checkProviderHealth(config.providers.planner);
-
-    checks.push({
-      label: "Dispatcher provider",
-      ok: dispatcherHealth.reachable && (dispatcherHealth.modelFound ?? true),
-      message: providerHealthToHuman(dispatcherHealth.message),
-    });
-
-    checks.push({
-      label: "Planner provider",
-      ok: plannerHealth.reachable && (plannerHealth.modelFound ?? true),
-      message: providerHealthToHuman(plannerHealth.message),
-    });
+    if (config.providers.planner) {
+      checks.push(buildProviderEnvCheck("Planner provider", config.providers.planner));
+      const plannerHealth = await checkProviderHealth(config.providers.planner);
+      checks.push({
+        label: "Planner provider",
+        ok: plannerHealth.reachable && (plannerHealth.modelFound ?? true),
+        message: providerHealthToHuman(plannerHealth.message),
+      });
+    }
 
     const taskFolders = await (await exists(tasksDir()) ? listDirectories(tasksDir()) : Promise.resolve([]));
     checks.push({

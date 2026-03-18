@@ -60,8 +60,6 @@ const VALID_TASK_TYPES: TaskType[] = [
 const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   // Orchestration layer
   "Dispatcher": 0.1,
-  "Spec Planner": 0.1,
-  "Bug Investigator": 0.1,
   "Human Review": 0.1,
   // Expert Squad
   "Synx Front Expert": 0.05,

@@ -4,9 +4,9 @@ import { checkProviderHealth } from "./provider-health.js";
 import { commandExample } from "./cli-command.js";
 import { exists } from "./fs.js";
 import { promptsDir } from "./paths.js";
-import { REQUIRED_PROMPT_FILES } from "./constants.js";
-import path from "node:path";
+import { STAGE_FILE_NAMES } from "./constants.js";
 import { isAutoModelToken } from "./lmstudio.js";
+import path from "node:path";
 
 export type ReadinessSeverity = "error" | "warning";
 
@@ -32,13 +32,22 @@ export async function collectReadinessReport(options: ReadinessOptions): Promise
   const issues: ReadinessIssue[] = [];
   const config = await loadResolvedProjectConfig();
 
-  for (const promptFile of REQUIRED_PROMPT_FILES) {
-    const promptPath = path.join(promptsDir(), promptFile);
+  const promptsDirValue = promptsDir();
+  const promptFilesToCheck = [
+    { label: "Dispatcher Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.dispatcher) },
+    { label: "Front-end Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxFrontExpert) },
+    { label: "Mobile-end Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxMobileExpert) },
+    { label: "Back-end Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxBackExpert) },
+    { label: "SEO Specialist Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxSeoSpecialist) },
+    { label: "QA Engineer Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxQaEngineer) },
+  ];
+
+  for (const { label, path: promptPath } of promptFilesToCheck) {
     if (!(await exists(promptPath))) {
       pushIssue(
         issues,
         "error",
-        `Prompt file missing: ${promptFile}. Run \`${commandExample("setup")}\` to recreate defaults.`
+        `${label} file missing: ${path.basename(promptPath)}. Run \`${commandExample("setup")}\` to recreate defaults.`
       );
     }
   }
@@ -63,25 +72,16 @@ export async function collectReadinessReport(options: ReadinessOptions): Promise
       );
     }
 
-    if (
-      !config.providers.planner.model.trim()
-      && !(config.providers.planner.type === "lmstudio" && isAutoModelToken(config.providers.planner.model))
-    ) {
-      pushIssue(
-        issues,
-        "error",
-        `Planner model is empty. Run \`${commandExample("setup")}\` to choose a model.`
-      );
-    }
-
     const dispatcherHealth = await checkProviderHealth(config.providers.dispatcher);
     if (!(dispatcherHealth.reachable && (dispatcherHealth.modelFound ?? true))) {
       pushIssue(issues, "error", `Dispatcher provider: ${providerHealthToHuman(dispatcherHealth.message)}`);
     }
 
-    const plannerHealth = await checkProviderHealth(config.providers.planner);
-    if (!(plannerHealth.reachable && (plannerHealth.modelFound ?? true))) {
-      pushIssue(issues, "error", `Planner provider: ${providerHealthToHuman(plannerHealth.message)}`);
+    if (config.providers.planner) {
+      const plannerHealth = await checkProviderHealth(config.providers.planner);
+      if (!(plannerHealth.reachable && (plannerHealth.modelFound ?? true))) {
+        pushIssue(issues, "error", `Planner provider: ${providerHealthToHuman(plannerHealth.message)}`);
+      }
     }
   }
 

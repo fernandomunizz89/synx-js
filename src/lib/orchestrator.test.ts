@@ -35,7 +35,7 @@ vi.mock("./logging.js", () => ({
   logDaemon: mocks.logDaemon,
 }));
 
-vi.mock("../workers/researcher.js", () => ({
+vi.mock("../workers/web-researcher.js", () => ({
   ResearcherWorker: class {
     run = mocks.researcherRun;
   },
@@ -86,8 +86,8 @@ describe("orchestrator research coordination", () => {
     mocks.researcherRun.mockResolvedValue({
       requestedAt: "2026-03-16T00:00:00.000Z",
       finishedAt: "2026-03-16T00:00:01.000Z",
-      stage: "bug-fixer",
-      requesterAgent: "Bug Fixer",
+      stage: "synx-back-expert",
+      requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       triggerQuestion: "question",
       searchesUsed: 1,
@@ -119,7 +119,7 @@ describe("orchestrator research coordination", () => {
   it("skips research when triggers are not present", async () => {
     const result = await requestResearchContext({
       taskId: "task-1",
-      stage: "bug-fixer",
+      stage: "synx-back-expert",
       requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.9 } },
@@ -137,7 +137,7 @@ describe("orchestrator research coordination", () => {
   it("runs researcher when confidence is below threshold and stores context", async () => {
     const result = await requestResearchContext({
       taskId: "task-1",
-      stage: "bug-fixer",
+      stage: "synx-back-expert",
       requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.42 } },
@@ -167,7 +167,7 @@ describe("orchestrator research coordination", () => {
         {
           id: "entry-1",
           createdAt: "2026-03-16T00:00:00.000Z",
-          stage: "bug-fixer",
+          stage: "synx-back-expert",
           requesterAgent: "Synx Back Expert",
           taskType: "Bug",
           triggerReasons: ["low_confidence:0.50"],
@@ -193,14 +193,14 @@ describe("orchestrator research coordination", () => {
       confidenceScore: 0.7,
       recommendedAction: "existing action",
       isBreakingChange: false,
-      stage: "bug-fixer",
+      stage: "synx-back-expert",
       requesterAgent: "Synx Back Expert",
       triggerReasons: ["low_confidence:0.50"],
     });
 
     const result = await requestResearchContext({
       taskId: "task-1",
-      stage: "bug-fixer",
+      stage: "synx-back-expert",
       requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.5 } },
@@ -219,7 +219,7 @@ describe("orchestrator research coordination", () => {
   it("triggers anti-loop abort when recommendation repeats with recurring issue", async () => {
     const first = await requestResearchContext({
       taskId: "task-1",
-      stage: "bug-fixer",
+      stage: "synx-back-expert",
       requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.4 } },
@@ -232,7 +232,7 @@ describe("orchestrator research coordination", () => {
 
     const second = await requestResearchContext({
       taskId: "task-1",
-      stage: "bug-fixer",
+      stage: "synx-back-expert",
       requesterAgent: "Synx Back Expert",
       taskType: "Bug",
       previousStage: { output: { confidenceScore: 0.4 } },

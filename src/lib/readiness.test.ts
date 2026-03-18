@@ -30,8 +30,8 @@ describe("readiness checks", () => {
     humanReviewer: "yes",
     providers: {
       dispatcher: { type: "openai-compatible", model: "gpt-4o", baseUrl: "https://api.openai.com/v1" },
-      planner: { type: "openai-compatible", model: "gpt-4o-mini", baseUrl: "https://api.openai.com/v1" },
     },
+    agentProviders: {},
   };
 
   beforeEach(() => {
@@ -74,7 +74,6 @@ describe("readiness checks", () => {
       ...dummyConfig,
       providers: {
         dispatcher: { type: "openai-compatible", model: "  ", baseUrl: "https://api.openai.com/v1" },
-        planner: { type: "openai-compatible", model: "  ", baseUrl: "https://api.openai.com/v1" },
       },
     });
     vi.mocked(checkProviderHealth).mockResolvedValue({ reachable: true, modelFound: true, message: "" } as any);
@@ -82,7 +81,6 @@ describe("readiness checks", () => {
     const report = await collectReadinessReport({ includeProviderChecks: true });
     expect(report.ok).toBe(false);
     expect(report.issues.some((i) => i.message.includes("Dispatcher model is empty"))).toBe(true);
-    expect(report.issues.some((i) => i.message.includes("Planner model is empty"))).toBe(true);
   });
 
   it("reports provider health errors", async () => {

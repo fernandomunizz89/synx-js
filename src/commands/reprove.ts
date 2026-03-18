@@ -31,9 +31,9 @@ function remediationTarget(taskType: TaskType): {
 } {
   if (taskType === "Bug") {
     return {
-      agent: "Bug Investigator",
-      stage: "bug-investigator",
-      requestFileName: STAGE_FILE_NAMES.bugInvestigator,
+      agent: "Synx QA Engineer",
+      stage: "synx-qa-engineer",
+      requestFileName: STAGE_FILE_NAMES.synxQaEngineer,
     };
   }
 
@@ -64,7 +64,12 @@ async function collectTaskChangedFiles(taskId: string): Promise<string[]> {
   const doneDir = path.join(base, "done");
   const files: string[] = [];
 
-  for (const name of [DONE_FILE_NAMES.builder, DONE_FILE_NAMES.bugFixer]) {
+  for (const name of [
+    DONE_FILE_NAMES.synxFrontExpert,
+    DONE_FILE_NAMES.synxMobileExpert,
+    DONE_FILE_NAMES.synxBackExpert,
+    DONE_FILE_NAMES.synxSeoSpecialist,
+  ]) {
     const target = path.join(doneDir, name);
     if (!(await exists(target))) continue;
 
@@ -280,9 +285,8 @@ export const reproveCommand = new Command("reprove")
     }
 
     const now = nowIso();
-    const qaDoneRef = `done/${DONE_FILE_NAMES.qa}`;
-    const prDoneRef = `done/${DONE_FILE_NAMES.pr}`;
-    const nextInputRef = await exists(path.join(taskDir(taskId), qaDoneRef)) ? qaDoneRef : prDoneRef;
+    const qaDoneRef = `done/${DONE_FILE_NAMES.synxQaEngineer}`;
+    const nextInputRef = qaDoneRef;
 
     meta.status = "waiting_agent";
     meta.currentStage = "reproved";

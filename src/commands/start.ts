@@ -97,9 +97,9 @@ function summarizeTaskCounts(metas: TaskMeta[]): StatusCounts {
 function remediationTarget(taskType: TaskType): RemediationTarget {
   if (taskType === "Bug") {
     return {
-      agent: "Bug Investigator",
-      stage: "bug-investigator",
-      requestFileName: STAGE_FILE_NAMES.bugInvestigator,
+      agent: "Synx QA Engineer",
+      stage: "synx-qa-engineer",
+      requestFileName: STAGE_FILE_NAMES.synxQaEngineer,
     };
   }
 
@@ -273,13 +273,11 @@ export const startCommand = new Command("start")
 
     const config = await loadResolvedProjectConfig();
     const dispatcherHealth = await checkProviderHealth(config.providers.dispatcher);
-    const plannerHealth = await checkProviderHealth(config.providers.planner);
 
     const reviewerLine = !config.humanReviewer.trim()
       ? synxWaiting(`Human reviewer: missing (run \`${commandExample("setup")}\`)`)
       : synxSuccess(`Human reviewer: ${config.humanReviewer}`);
     const dispatcherLine = providerHealthToHuman(dispatcherHealth.message);
-    const plannerLine = providerHealthToHuman(plannerHealth.message);
     const providerTone = (line: string): string => {
       const lower = line.toLowerCase();
       if (lower.includes("reachable") || lower.includes("available")) return synxSuccess(line);
@@ -291,7 +289,6 @@ export const startCommand = new Command("start")
       `Flow: ${synxControlFlowDiagram()}`,
       reviewerLine,
       `Dispatcher provider: ${providerTone(dispatcherLine)}`,
-      `Planner provider: ${providerTone(plannerLine)}`,
       `Agent state palette: ${formatSynxStatus("processing")} | ${formatSynxStatus("success")} | ${formatSynxStatus("critical_error")} | ${formatSynxStatus("waiting_human")}`,
     ];
 
@@ -523,9 +520,8 @@ export const startCommand = new Command("start")
 
         const target = remediationTarget(meta.type);
         const now = nowIso();
-        const qaDoneRef = `done/${DONE_FILE_NAMES.qa}`;
-        const prDoneRef = `done/${DONE_FILE_NAMES.pr}`;
-        const nextInputRef = await exists(path.join(taskDir(command.taskId), qaDoneRef)) ? qaDoneRef : prDoneRef;
+        const qaDoneRef = `done/${DONE_FILE_NAMES.synxQaEngineer}`;
+        const nextInputRef = qaDoneRef;
 
         meta.status = "waiting_agent";
         meta.currentStage = "reproved";

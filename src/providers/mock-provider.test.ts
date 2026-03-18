@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MockProvider } from "./mock-provider.js";
 
 describe("providers/mock-provider", () => {
-  it("routes bug tasks from Dispatcher to Bug Investigator", async () => {
+  it("routes bug tasks from Dispatcher to Synx Front Expert", async () => {
     const provider = new MockProvider("mock-v1");
     const result = await provider.generateStructured({
       agent: "Dispatcher",
@@ -18,7 +18,7 @@ describe("providers/mock-provider", () => {
 
     const parsed = result.parsed as { type: string; nextAgent: string };
     expect(parsed.type).toBe("Bug");
-    expect(parsed.nextAgent).toBe("Bug Investigator");
+    expect(parsed.nextAgent).toBe("Synx Front Expert");
     expect(result.provider).toBe("mock");
     expect(result.model).toBe("mock-v1");
   });

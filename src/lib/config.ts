@@ -15,7 +15,7 @@ function mergeProvider(base: ProviderStageConfig, override?: Partial<ProviderSta
 }
 
 function mergeAgentProviders(args: {
-  baseProviders: { dispatcher: ProviderStageConfig; planner: ProviderStageConfig };
+  baseProviders: { dispatcher: ProviderStageConfig; planner?: ProviderStageConfig };
   globalOverrides?: Partial<Record<AgentName, ProviderStageConfig>>;
   localOverrides?: Partial<Record<AgentName, Partial<ProviderStageConfig>>>;
 }): Partial<Record<AgentName, ProviderStageConfig>> {
@@ -30,7 +30,7 @@ function mergeAgentProviders(args: {
   if (args.localOverrides) {
     for (const [agentKey, override] of Object.entries(args.localOverrides)) {
       const agent = agentKey as AgentName;
-      const base = merged[agent] ?? (agent === "Dispatcher" ? args.baseProviders.dispatcher : args.baseProviders.planner);
+      const base = merged[agent] ?? (agent === "Dispatcher" ? args.baseProviders.dispatcher : (args.baseProviders.planner ?? args.baseProviders.dispatcher));
       merged[agent] = mergeProvider(base, override);
     }
   }
@@ -98,11 +98,17 @@ export async function loadResolvedProjectConfig(): Promise<ResolvedProjectConfig
   const globalConfig = await loadGlobalConfig();
   const localConfig = await loadLocalProjectConfig();
   const dispatcherProvider = mergeProvider(globalConfig.providers.dispatcher, localConfig.providerOverrides?.dispatcher);
-  const plannerProvider = mergeProvider(globalConfig.providers.planner, localConfig.providerOverrides?.planner);
-  const baseProviders = {
-    dispatcher: dispatcherProvider,
-    planner: plannerProvider,
-  };
+  const hasPlannerConfigured = Boolean(globalConfig.providers.planner) || Boolean(localConfig.providerOverrides?.planner);
+  const plannerProvider = hasPlannerConfigured
+    ? mergeProvider(
+      globalConfig.providers.planner ?? globalConfig.providers.dispatcher,
+      localConfig.providerOverrides?.planner,
+    )
+    : undefined;
+
+  const baseProviders: ResolvedProjectConfig["providers"] = { dispatcher: dispatcherProvider };
+  if (plannerProvider) baseProviders.planner = plannerProvider;
+
   const resolved: ResolvedProjectConfig = {
     projectName: localConfig.projectName,
     language: localConfig.language,
@@ -135,7 +141,7 @@ export async function loadResolvedProjectConfig(): Promise<ResolvedProjectConfig
 }
 
 export function resolveProviderConfigForAgent(config: ResolvedProjectConfig, agent: AgentName): ProviderStageConfig {
-  return config.agentProviders[agent] ?? (agent === "Dispatcher" ? config.providers.dispatcher : config.providers.planner);
+  return config.agentProviders[agent] ?? (agent === "Dispatcher" ? config.providers.dispatcher : (config.providers.planner ?? config.providers.dispatcher));
 }
 
 export async function loadPromptFile(fileName: string): Promise<string> {

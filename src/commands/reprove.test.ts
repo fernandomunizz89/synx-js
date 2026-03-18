@@ -80,9 +80,9 @@ describe.sequential("commands/reprove", () => {
       title: "Fix timer",
       type: "Bug",
       status: "waiting_human",
-      currentStage: "pr",
-      currentAgent: "PR Writer",
-      nextAgent: "",
+      currentStage: "reproved",
+      currentAgent: "Synx QA Engineer",
+      nextAgent: "Synx QA Engineer",
       humanApprovalRequired: true,
       createdAt: "2026-03-16T00:00:00.000Z",
       updatedAt: "2026-03-16T00:00:00.000Z",
@@ -109,7 +109,7 @@ describe.sequential("commands/reprove", () => {
     vi.clearAllMocks();
   });
 
-  it("reproves waiting task and returns to Bug Fixer without rollback by default", async () => {
+  it("reproves waiting task and returns to QA without rollback by default", async () => {
     await reproveCommand.parseAsync([
       "node",
       "synx",
@@ -124,12 +124,12 @@ describe.sequential("commands/reprove", () => {
       status: "waiting_agent",
       currentStage: "reproved",
       currentAgent: "Human Review",
-      nextAgent: "Bug Investigator",
+      nextAgent: "Synx QA Engineer",
       humanApprovalRequired: false,
     });
 
     expect(mocks.writeJson).toHaveBeenCalled();
-    const requestCall = mocks.writeJson.mock.calls.find(([file]) => String(file).includes("bug-investigator.request.json"));
+    const requestCall = mocks.writeJson.mock.calls.find(([file]) => String(file).includes("synx-qa-engineer.request.json"));
     expect(requestCall).toBeTruthy();
 
     expect(mocks.runCommand).not.toHaveBeenCalled();
@@ -142,8 +142,8 @@ describe.sequential("commands/reprove", () => {
       type: "Bug",
       status: "in_progress",
       currentStage: "qa",
-      currentAgent: "QA Validator",
-      nextAgent: "PR Writer",
+      currentAgent: "Synx QA Engineer",
+      nextAgent: "Human Review",
       humanApprovalRequired: false,
       createdAt: "2026-03-16T00:00:00.000Z",
       updatedAt: "2026-03-16T00:00:00.000Z",

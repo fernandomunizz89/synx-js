@@ -120,8 +120,8 @@ function extractCandidateText(response: unknown): string {
         })
         .join("");
     }
-    if (typeof (content as { text?: unknown }).text === "string") {
-      return (content as { text?: unknown }).text || "";
+    if (typeof (content as any).text === "string") {
+      return (content as any).text || "";
     }
   }
 

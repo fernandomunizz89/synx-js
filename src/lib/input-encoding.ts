@@ -43,10 +43,6 @@ export interface ToonWrapperV1 {
   __toonData: unknown;
 }
 
-const TOON_V_KEY = "__toonV";
-const TOON_KEYS_MAP_KEY = "__toonKeysMap";
-const TOON_DATA_KEY = "__toonData";
-
 function collectKeysRec(value: unknown, out: Set<string>): void {
   if (Array.isArray(value)) {
     for (const item of value) collectKeysRec(item, out);

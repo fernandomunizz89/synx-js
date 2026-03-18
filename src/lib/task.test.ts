@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { allTaskIds, createTask, finalizeForHumanReview, latestTaskId, loadTaskMeta, writeView } from "./task.js";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "./constants.js";
 import { readJson, writeJson } from "./fs.js";
-import type { NewTaskInput } from "./types.js";
+import type { NewTaskInput, StageEnvelope } from "./types.js";
 
 const originalCwd = process.cwd();
 
@@ -112,15 +112,15 @@ describe.sequential("task", () => {
     const viewContent = await fs.readFile(path.join(second.taskPath, "views", "99-test-view.md"), "utf8");
     expect(viewContent).toBe("# hello");
 
-    await writeJson(path.join(second.taskPath, "done", DONE_FILE_NAMES.pr), { ok: true });
+    await writeJson(path.join(second.taskPath, "done", DONE_FILE_NAMES.synxQaEngineer), { ok: true });
+    
     await finalizeForHumanReview(second.taskId);
-    const humanRequest = await readJson(path.join(second.taskPath, "human", "90-final-review.request.json"));
-    expect(humanRequest).toMatchObject({
+
+    const req = await readJson<StageEnvelope>(path.join(second.taskPath, "human", "90-final-review.request.json"));
+    expect(req).toMatchObject({
       taskId: second.taskId,
       stage: "human-review",
       status: "request",
-      agent: "Human Review",
-      inputRef: `done/${DONE_FILE_NAMES.pr}`,
     });
   });
 });

@@ -42,13 +42,7 @@ interface NextStageRequest {
 
 const WORKING_TO_REQUEST_FILE: Record<string, string> = {
   "00-dispatcher.working.json": STAGE_FILE_NAMES.dispatcher,
-  "02-planner.working.json": STAGE_FILE_NAMES.planner,
-  "02b-bug-investigator.working.json": STAGE_FILE_NAMES.bugInvestigator,
-  "04b-bug-fixer.working.json": STAGE_FILE_NAMES.bugFixer,
-  "04-builder.working.json": STAGE_FILE_NAMES.builder,
-  "05-reviewer.working.json": STAGE_FILE_NAMES.reviewer,
-  "06-qa.working.json": STAGE_FILE_NAMES.qa,
-  "07-pr.working.json": STAGE_FILE_NAMES.pr,
+  "06-synx-qa-engineer.working.json": STAGE_FILE_NAMES.synxQaEngineer,
 };
 
 export function processIsRunning(pid: number): boolean {
@@ -123,22 +117,6 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
         inputRef: "input/new-task.json",
         agent: "Dispatcher",
       };
-    case "Spec Planner":
-      if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
-      return {
-        stage: "planner",
-        requestFileName: STAGE_FILE_NAMES.planner,
-        inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
-        agent: "Spec Planner",
-      };
-    case "Bug Investigator":
-      if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
-      return {
-        stage: "bug-investigator",
-        requestFileName: STAGE_FILE_NAMES.bugInvestigator,
-        inputRef: `done/${DONE_FILE_NAMES.dispatcher}`,
-        agent: "Bug Investigator",
-      };
     // Expert Squad – implementation agents
     case "Synx Front Expert":
       if (await exists(done(DONE_FILE_NAMES.synxQaEngineer))) {
@@ -146,14 +124,6 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
           stage: "synx-front-expert",
           requestFileName: STAGE_FILE_NAMES.synxFrontExpert,
           inputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
-          agent: "Synx Front Expert",
-        };
-      }
-      if (await exists(done(DONE_FILE_NAMES.planner))) {
-        return {
-          stage: "synx-front-expert",
-          requestFileName: STAGE_FILE_NAMES.synxFrontExpert,
-          inputRef: `done/${DONE_FILE_NAMES.planner}`,
           agent: "Synx Front Expert",
         };
       }
@@ -173,14 +143,6 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
           agent: "Synx Mobile Expert",
         };
       }
-      if (await exists(done(DONE_FILE_NAMES.planner))) {
-        return {
-          stage: "synx-mobile-expert",
-          requestFileName: STAGE_FILE_NAMES.synxMobileExpert,
-          inputRef: `done/${DONE_FILE_NAMES.planner}`,
-          agent: "Synx Mobile Expert",
-        };
-      }
       if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
       return {
         stage: "synx-mobile-expert",
@@ -197,14 +159,6 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
           agent: "Synx Back Expert",
         };
       }
-      if (await exists(done(DONE_FILE_NAMES.planner))) {
-        return {
-          stage: "synx-back-expert",
-          requestFileName: STAGE_FILE_NAMES.synxBackExpert,
-          inputRef: `done/${DONE_FILE_NAMES.planner}`,
-          agent: "Synx Back Expert",
-        };
-      }
       if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
       return {
         stage: "synx-back-expert",
@@ -213,14 +167,6 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
         agent: "Synx Back Expert",
       };
     case "Synx SEO Specialist":
-      if (await exists(done(DONE_FILE_NAMES.planner))) {
-        return {
-          stage: "synx-seo-specialist",
-          requestFileName: STAGE_FILE_NAMES.synxSeoSpecialist,
-          inputRef: `done/${DONE_FILE_NAMES.planner}`,
-          agent: "Synx SEO Specialist",
-        };
-      }
       if (!(await exists(done(DONE_FILE_NAMES.dispatcher)))) return null;
       return {
         stage: "synx-seo-specialist",

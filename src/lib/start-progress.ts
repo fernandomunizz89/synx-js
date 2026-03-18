@@ -16,20 +16,38 @@ export function formatDuration(ms: number): string {
 }
 
 export function stageRoute(meta: TaskMeta): string[] {
-  const stagesInHistory = new Set(meta.history.map((x) => x.stage));
-  if (stagesInHistory.has("bug-fixer")) {
-    return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
+  const route: string[] = [];
+  const push = (stage: string | undefined) => {
+    if (!stage) return;
+    if (!route.includes(stage)) route.push(stage);
+  };
+
+  // Baseline (legacy-free): keeps progress bar computation stable.
+  push("dispatcher");
+  push("planner");
+  if (meta.type === "Bug") push("bug-investigator");
+
+  // Prefer the actual execution history.
+  for (const item of meta.history) push(item.stage);
+  push(meta.currentStage);
+
+  // Implied next stage.
+  if (meta.status === "waiting_human") {
+    push("human-review");
+  } else if (meta.status === "waiting_agent") {
+    const nextStageByAgent: Partial<Record<TaskMeta["nextAgent"], string>> = {
+      Dispatcher: "dispatcher",
+      "Synx Front Expert": "synx-front-expert",
+      "Synx Mobile Expert": "synx-mobile-expert",
+      "Synx Back Expert": "synx-back-expert",
+      "Synx QA Engineer": "synx-qa-engineer",
+      "Synx SEO Specialist": "synx-seo-specialist",
+      "Human Review": "human-review",
+    };
+    push(nextStageByAgent[meta.nextAgent]);
   }
-  if (stagesInHistory.has("bug-investigator")) {
-    return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
-  }
-  if (stagesInHistory.has("planner")) {
-    return ["dispatcher", "planner", "builder", "reviewer", "qa", "pr"];
-  }
-  if (meta.type === "Bug") {
-    return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
-  }
-  return ["dispatcher", "planner", "builder", "reviewer", "qa", "pr"];
+
+  return route;
 }
 
 export function stageLabel(stage: string): string {
@@ -46,18 +64,18 @@ export function stageLabel(stage: string): string {
       return "Feature Builder";
     case "builder:research":
       return "Researcher";
-    case "bug-fixer":
-      return "Bug Fixer";
-    case "bug-fixer:research":
-      return "Researcher";
-    case "researcher":
-      return "Researcher";
-    case "reviewer":
-      return "Reviewer";
+    case "synx-front-expert":
+      return "Synx Front Expert";
+    case "synx-mobile-expert":
+      return "Synx Mobile Expert";
+    case "synx-back-expert":
+      return "Synx Back Expert";
+    case "synx-qa-engineer":
+      return "Synx QA Engineer";
+    case "synx-seo-specialist":
+      return "Synx SEO Specialist";
     case "qa":
       return "QA Validator";
-    case "pr":
-      return "PR Writer";
     case "approved":
       return "Approved";
     case "submitted":
@@ -77,7 +95,7 @@ export function progressForMeta(meta: TaskMeta): { done: number; total: number; 
     ratio = 1;
   } else if (meta.status === "in_progress") {
     ratio = Math.min(0.99, (done + 0.4) / total);
-  } else if (meta.status === "failed" || meta.status === "blocked") {
+  } else if (meta.status === "failed" || meta.status === "blocked" || meta.history.some(h => h.stage === "bug-investigator" && h.status === "done")) {
     ratio = Math.min(1, (done + 0.2) / total);
   }
 

@@ -6,7 +6,7 @@ import { envNumber } from "./env.js";
 import { normalizeIssueLine, trimText, unique } from "./text-utils.js";
 import { nowIso } from "./utils.js";
 import type { AgentName, TaskType } from "./types.js";
-import { ResearcherWorker, researchEnabled, type ResearchSource, type ResearcherKnowledgeOutput, type ResearcherRunArtifact } from "../workers/researcher.js";
+import { ResearcherWorker, researchEnabled, type ResearchSource, type ResearcherKnowledgeOutput, type ResearcherRunArtifact } from "../workers/web-researcher.js";
 
 export interface ResearchContextPacket {
   summary: string;

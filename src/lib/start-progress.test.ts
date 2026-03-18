@@ -230,49 +230,40 @@ describe("start-progress", () => {
   });
 
   describe("stageRoute", () => {
-    it("should return bug route for Bug type", () => {
+    it("should return expert route for Bug type", () => {
       const meta: TaskMeta = { ...mockMeta, type: "Bug", history: [] };
       expect(stageRoute(meta)).toContain("bug-investigator");
     });
 
-    it("should return bug route if history has bug-investigator", () => {
+    it("should return expert route if history has specialized agent", () => {
       const meta: TaskMeta = { 
         ...mockMeta, 
         type: "Feature", 
-        history: [{ stage: "bug-investigator" } as any] 
+        history: [{ stage: "synx-qa-engineer" } as any] 
       };
-      expect(stageRoute(meta)).toContain("bug-fixer");
+      expect(stageRoute(meta)).toContain("synx-qa-engineer");
     });
 
-    it("should return planner route for Feature type", () => {
+    it("should return expert route for Feature type", () => {
       const meta: TaskMeta = { ...mockMeta, type: "Feature", history: [] };
-      expect(stageRoute(meta)).toContain("planner");
+      expect(stageRoute(meta)).toContain("synx-front-expert");
     });
     
-    it("should return bug route if history has bug-fixer", () => {
-      const meta: TaskMeta = { 
-        ...mockMeta, 
-        type: "Feature", 
-        history: [{ stage: "bug-fixer" } as any] 
-      };
-      expect(stageRoute(meta)).toContain("bug-investigator");
-    });
-
-    it("should return planner route if history has planner", () => {
+    it("should return correct route if history has specialist", () => {
       const meta: TaskMeta = { 
         ...mockMeta, 
         type: "Bug", 
-        history: [{ stage: "planner" } as any] 
+        history: [{ stage: "synx-front-expert" } as any] 
       };
-      expect(stageRoute(meta)).toContain("builder");
+      expect(stageRoute(meta)).toContain("synx-front-expert");
     });
   });
 
   describe("stageLabel", () => {
     it("should return correct labels", () => {
       expect(stageLabel("dispatcher")).toBe("Dispatcher");
-      expect(stageLabel("planner:research")).toBe("Researcher");
-      expect(stageLabel("builder")).toBe("Feature Builder");
+      expect(stageLabel("synx-front-expert")).toBe("Synx Front Expert");
+      expect(stageLabel("synx-qa-engineer")).toBe("Synx QA Engineer");
       expect(stageLabel("unknown")).toBe("unknown");
       expect(stageLabel("")).toBe("[none]");
     });

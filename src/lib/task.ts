@@ -1,5 +1,5 @@
 import path from "node:path";
-import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "./constants.js";
+import { STAGE_FILE_NAMES } from "./constants.js";
 import { ensureDir, exists, listDirectories, readJsonValidated, writeJson, writeText } from "./fs.js";
 import { taskDir, tasksDir } from "./paths.js";
 import type { NewTaskInput, StageEnvelope, TaskMeta, TaskMetaHistoryItem } from "./types.js";
@@ -90,8 +90,6 @@ export async function finalizeForHumanReview(taskId: string): Promise<void> {
     stage: "human-review",
     status: "request",
     createdAt: nowIso(),
-    agent: "Human Review",
-    inputRef: `done/${DONE_FILE_NAMES.pr}`,
   });
 }
 
