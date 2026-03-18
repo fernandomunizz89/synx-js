@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]);
-export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio"]);
+export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio", "google", "anthropic"]);
 export const taskStatusSchema = z.enum([
   "new",
   "in_progress",
@@ -53,6 +53,7 @@ export const globalConfigSchema = z.object({
     dispatcher: providerStageConfigSchema,
     planner: providerStageConfigSchema,
   }),
+  agentProviders: z.record(agentNameSchema, providerStageConfigSchema).optional(),
   defaults: z.object({
     humanReviewer: z.string(),
   }),
@@ -67,6 +68,7 @@ export const localProjectConfigSchema = z.object({
   providerOverrides: z.object({
     dispatcher: providerStageConfigSchema.partial().optional(),
     planner: providerStageConfigSchema.partial().optional(),
+    agents: z.record(agentNameSchema, providerStageConfigSchema.partial()).optional(),
   }).optional(),
 });
 

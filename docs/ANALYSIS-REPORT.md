@@ -18,7 +18,7 @@
 | **Model** | Conditional planning: simple tasks go directly to the expert; complex tasks pass through the Spec Planner |
 | **Domains** | Front (Next.js), Mobile (Expo/RN), Back (NestJS/Fastify), SEO (Core Web Vitals) |
 | **Quality** | QA Engineer with Playwright (E2E) and Vitest (unit); retry loop up to 3x with failure routing back to the original expert |
-| **Providers** | LM Studio (local) or any OpenAI-compatible endpoint |
+| **Providers** | LM Studio (local), OpenAI-compatible endpoints, Google Generative AI, or Anthropic Claude Code |
 | **Research** | On-demand Researcher (DuckDuckGo or Tavily) when confidence < 0.6 or consecutive QA failures occur |
 
 ---

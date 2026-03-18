@@ -54,7 +54,7 @@
 
 ## Provider & LLM
 
-- Supports LM Studio (local, runtime model auto-discovery) and any OpenAI-compatible endpoint.
+- Supports LM Studio (local, runtime model auto-discovery), OpenAI-compatible endpoints, Google Generative AI, and Anthropic Claude Code.
 - Stateless calls: each LLM call sends only current stage context (no chat history reuse).
 - Dynamic temperature per agent and task type, with full env-override support.
 - SSE streaming mode optional (`AI_AGENTS_PROVIDER_STREAMING=true`).

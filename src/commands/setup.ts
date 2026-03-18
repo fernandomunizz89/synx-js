@@ -16,8 +16,13 @@ import {
   isAutoModelToken,
 } from "../lib/lmstudio.js";
 import type { GlobalConfig, LocalProjectConfig, ProviderHealth, ProviderStageConfig } from "../lib/types.js";
+import {
+  DEFAULT_ANTHROPIC_BASE_URL,
+  DEFAULT_ANTHROPIC_BASE_URL_ENV,
+  DEFAULT_ANTHROPIC_API_KEY_ENV,
+} from "../providers/anthropic-provider.js";
 
-type SetupProviderChoice = "mock" | "lm-studio" | "openai-compatible";
+type SetupProviderChoice = "mock" | "lm-studio" | "openai-compatible" | "google" | "anthropic";
 type ConnectionMode = "saved" | "env";
 type LmStudioConnectionMode = "saved-recommended" | "saved-custom" | "env";
 type LmStudioModelMode = "auto" | "fixed";
@@ -25,6 +30,10 @@ type OpenAiCompatiblePreset = "openai" | "openrouter" | "custom";
 
 const DEFAULT_BASE_URL_ENV = "AI_AGENTS_OPENAI_BASE_URL";
 const DEFAULT_API_KEY_ENV = "AI_AGENTS_OPENAI_API_KEY";
+const DEFAULT_GOOGLE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_GOOGLE_BASE_URL_ENV = "AI_AGENTS_GOOGLE_BASE_URL";
+const DEFAULT_GOOGLE_API_KEY_ENV = "AI_AGENTS_GOOGLE_API_KEY";
+const GOOGLE_MODEL_EXAMPLES = ["text-bison-001", "code-gecko-001", "gemini-1.5-pro", "gemini-1.5-flash-001"];
 
 interface OpenAiCompatiblePresetConfig {
   label: string;
@@ -190,15 +199,17 @@ export const setupCommand = new Command("setup")
       }
 
       const reviewer = await promptRequiredText("Human reviewer name (required):");
-      const providerChoice = await selectOption<SetupProviderChoice>(
-        "Choose provider for Dispatcher and Planner",
-        [
-          { value: "mock", label: "Mock (offline/demo mode)" },
-          { value: "lm-studio", label: "LM Studio (local OpenAI-compatible server)" },
-          { value: "openai-compatible", label: "OpenAI-compatible endpoint (remote or self-hosted)" },
-        ],
-        "mock"
-      );
+          const providerChoice = await selectOption<SetupProviderChoice>(
+            "Choose provider for Dispatcher and Planner",
+            [
+              { value: "mock", label: "Mock (offline/demo mode)" },
+              { value: "lm-studio", label: "LM Studio (local OpenAI-compatible server)" },
+              { value: "openai-compatible", label: "OpenAI-compatible endpoint (remote or self-hosted)" },
+              { value: "google", label: "Google Generative AI (Gemini/PaLM)", description: "Use Google Generative Language API with API key" },
+              { value: "anthropic", label: "Anthropic Claude Code", description: "Claude Code via Anthropic API key" },
+            ],
+            "mock"
+          );
 
       const nextGlobal: GlobalConfig = {
         ...currentGlobal,
@@ -346,6 +357,151 @@ export const setupCommand = new Command("setup")
 
         nextGlobal.providers.dispatcher = { ...lmStudioConfig };
         nextGlobal.providers.planner = { ...lmStudioConfig };
+      } else if (providerChoice === "google") {
+        const connectionMode = await selectOption<ConnectionMode>(
+          "Google connection mode",
+          [
+            {
+              value: "saved",
+              label: "Save base URL and API key in global config",
+              description: "Recommended to avoid per-terminal exports",
+            },
+            {
+              value: "env",
+              label: "Use environment variables",
+            },
+          ],
+          "saved"
+        );
+
+        let googleConfig: ProviderStageConfig = {
+          type: "google",
+          model: currentGlobal.providers.dispatcher.model || "",
+          baseUrlEnv: DEFAULT_GOOGLE_BASE_URL_ENV,
+          apiKeyEnv: DEFAULT_GOOGLE_API_KEY_ENV,
+        };
+
+        if (connectionMode === "saved") {
+          const existingBaseUrl = currentGlobal.providers.dispatcher.baseUrl || DEFAULT_GOOGLE_BASE_URL;
+          const baseUrl = await promptTextWithDefault("Google base URL:", existingBaseUrl);
+          const apiKey = await promptTextWithDefault(
+            "Google API key (optional, press Enter to keep empty):",
+            currentGlobal.providers.dispatcher.apiKey || ""
+          );
+          googleConfig = {
+            ...googleConfig,
+            baseUrl,
+            apiKey,
+          };
+        } else {
+          const envMode = await selectOption<"default" | "custom">(
+            "Choose environment variable names",
+            [
+              {
+                value: "default",
+                label: `Use default names (${DEFAULT_GOOGLE_BASE_URL_ENV} / ${DEFAULT_GOOGLE_API_KEY_ENV})`,
+              },
+              { value: "custom", label: "Type custom environment variable names" },
+            ],
+            "default"
+          );
+          const baseUrlEnv = envMode === "default"
+            ? DEFAULT_GOOGLE_BASE_URL_ENV
+            : await promptRequiredText("Base URL env variable name (required):");
+          const apiKeyEnv = envMode === "default"
+            ? DEFAULT_GOOGLE_API_KEY_ENV
+            : await promptRequiredText("API key env variable name (required):");
+          googleConfig = {
+            ...googleConfig,
+            baseUrlEnv,
+            apiKeyEnv,
+            baseUrl: envMode === "default" ? DEFAULT_GOOGLE_BASE_URL : undefined,
+            apiKey: undefined,
+          };
+          console.log(
+            envMode === "default"
+              ? `\nYou chose env mode with preset base URL (${DEFAULT_GOOGLE_BASE_URL}). Define ${DEFAULT_GOOGLE_API_KEY_ENV} in each terminal.`
+              : `\nYou chose env mode. Remember to define ${baseUrlEnv} and ${apiKeyEnv} in each terminal.`
+          );
+        }
+
+        if (GOOGLE_MODEL_EXAMPLES.length) {
+          console.log(`\nModel examples for Google: ${GOOGLE_MODEL_EXAMPLES.join(", ")}`);
+        }
+
+        const googleModel = await chooseOpenAiCompatibleModel(googleConfig, GOOGLE_MODEL_EXAMPLES);
+        nextGlobal.providers.dispatcher = { ...googleConfig, model: googleModel };
+        nextGlobal.providers.planner = { ...googleConfig, model: googleModel };
+      } else if (providerChoice === "anthropic") {
+        const connectionMode = await selectOption<ConnectionMode>(
+          "Anthropic connection mode",
+          [
+            {
+              value: "saved",
+              label: "Save base URL and API key in global config",
+              description: "Recommended to avoid per-terminal exports",
+            },
+            {
+              value: "env",
+              label: "Use environment variables",
+            },
+          ],
+          "saved"
+        );
+
+        let anthropicConfig: ProviderStageConfig = {
+          type: "anthropic",
+          model: currentGlobal.providers.dispatcher.model || "",
+          baseUrlEnv: DEFAULT_ANTHROPIC_BASE_URL_ENV,
+          apiKeyEnv: DEFAULT_ANTHROPIC_API_KEY_ENV,
+        };
+
+        if (connectionMode === "saved") {
+          const existingBaseUrl = currentGlobal.providers.dispatcher.baseUrl || DEFAULT_ANTHROPIC_BASE_URL;
+          const baseUrl = await promptTextWithDefault("Anthropic base URL:", existingBaseUrl);
+          const existingApiKey = currentGlobal.providers.dispatcher.apiKey || "";
+          const apiKey = existingApiKey
+            ? await promptTextWithDefault("Anthropic API key (required):", existingApiKey)
+            : await promptRequiredText("Anthropic API key (required):");
+          anthropicConfig = {
+            ...anthropicConfig,
+            baseUrl,
+            apiKey,
+          };
+        } else {
+          const envMode = await selectOption<"default" | "custom">(
+            "Choose environment variable names",
+            [
+              {
+                value: "default",
+                label: `Use default names (${DEFAULT_ANTHROPIC_BASE_URL_ENV} / ${DEFAULT_ANTHROPIC_API_KEY_ENV})`,
+              },
+              { value: "custom", label: "Type custom environment variable names" },
+            ],
+            "default"
+          );
+          const baseUrlEnv = envMode === "default"
+            ? DEFAULT_ANTHROPIC_BASE_URL_ENV
+            : await promptRequiredText("Base URL env variable name (required):");
+          const apiKeyEnv = envMode === "default"
+            ? DEFAULT_ANTHROPIC_API_KEY_ENV
+            : await promptRequiredText("API key env variable name (required):");
+          anthropicConfig = {
+            ...anthropicConfig,
+            baseUrlEnv,
+            apiKeyEnv,
+            baseUrl: envMode === "default" ? DEFAULT_ANTHROPIC_BASE_URL : undefined,
+            apiKey: undefined,
+          };
+          console.log(
+            envMode === "default"
+              ? `\nYou chose env mode with preset base URL (${DEFAULT_ANTHROPIC_BASE_URL}). Define ${DEFAULT_ANTHROPIC_API_KEY_ENV} in each terminal.`
+              : `\nYou chose env mode. Remember to define ${baseUrlEnv} and ${apiKeyEnv} in each terminal.`
+          );
+        }
+
+        nextGlobal.providers.dispatcher = { ...anthropicConfig };
+        nextGlobal.providers.planner = { ...anthropicConfig };
       } else {
         const openAiPreset = await selectOption<OpenAiCompatiblePreset>(
           "OpenAI-compatible provider preset",

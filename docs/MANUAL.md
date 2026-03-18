@@ -285,6 +285,25 @@ synx start
 - Cloud: `openai-compatible` preset for OpenAI/OpenRouter/custom gateways.
 - In preset env mode, setup keeps the provider base URL in config and usually requires only the API key env variable.
 - You can switch models/providers per machine without changing pipeline stages.
+- Anthropic Claude Code (`anthropic`) for Claude-oriented workloads using `AI_AGENTS_ANTHROPIC_API_KEY`.
+
+### Environment files
+SYNX reads a `.env` file from the current working directory before any command runs, so API keys can live in that file instead of being typed manually in every shell. Copy `.env.example` to `.env` and replace the placeholder values with your real secrets. Each provider already knows which environment names to look for:
+
+- `AI_AGENTS_OPENAI_BASE_URL` and `AI_AGENTS_OPENAI_API_KEY` (OpenAI-compatible endpoints)
+- `AI_AGENTS_GOOGLE_API_KEY` (Google Cloud generative AI)
+- `AI_AGENTS_LMSTUDIO_API_KEY` (LM Studio when you host local models)
+- `AI_AGENTS_ANTHROPIC_API_KEY` (Claude Code / Anthropic models)
+
+Use the usual `KEY=VALUE` or `export KEY=VALUE` syntax and wrap values in quotes if they contain spaces. The repository also provides a `.env.example` stub with the provider keys defined; copy it to `.env` before editing. Example `.env`:
+
+```
+AI_AGENTS_OPENAI_BASE_URL=https://api.openai.com/v1
+AI_AGENTS_OPENAI_API_KEY=sk-us-east-123
+AI_AGENTS_GOOGLE_API_KEY=AIza...
+```
+
+Keep that file in the repo root, add it to `.gitignore`, and reload `synx` (or reopen your terminal) after editing to make the new secrets available.
 
 ## Where files live
 

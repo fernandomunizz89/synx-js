@@ -3,6 +3,7 @@ import { createProvider } from "./factory.js";
 import { MockProvider } from "./mock-provider.js";
 import { OpenAiCompatibleProvider } from "./openai-compatible-provider.js";
 import { LmStudioProvider } from "./lmstudio-provider.js";
+import { AnthropicProvider } from "./anthropic-provider.js";
 
 vi.mock("./mock-provider.js", () => ({
   MockProvider: vi.fn(),
@@ -12,6 +13,12 @@ vi.mock("./openai-compatible-provider.js", () => ({
 }));
 vi.mock("./lmstudio-provider.js", () => ({
   LmStudioProvider: vi.fn(),
+}));
+vi.mock("./anthropic-provider.js", () => ({
+  AnthropicProvider: vi.fn(),
+  DEFAULT_ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+  DEFAULT_ANTHROPIC_BASE_URL_ENV: "AI_AGENTS_ANTHROPIC_BASE_URL",
+  DEFAULT_ANTHROPIC_API_KEY_ENV: "AI_AGENTS_ANTHROPIC_API_KEY",
 }));
 vi.mock("../lib/lmstudio.js", () => ({
   resolveLmStudioRuntimeSettings: vi.fn((config) => ({
@@ -48,6 +55,12 @@ describe("provider factory", () => {
     const config = { type: "lmstudio" as const, model: "luna" };
     createProvider(config);
     expect(LmStudioProvider).toHaveBeenCalledWith(config);
+  });
+
+  it("creates an anthropic provider", () => {
+    const config = { type: "anthropic" as const, model: "claude-code" };
+    createProvider(config);
+    expect(AnthropicProvider).toHaveBeenCalledWith(config);
   });
 
   it("caches providers by default", () => {

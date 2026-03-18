@@ -11,6 +11,7 @@ describe("provider-health", () => {
         AI_AGENTS_PROVIDER_DISCOVERY_TIMEOUT_MS: "1000",
         AI_AGENTS_OPENAI_BASE_URL: "http://openai.api",
         AI_AGENTS_OPENAI_API_KEY: "sk-test",
+        AI_AGENTS_ANTHROPIC_API_KEY: "sk-anthropic",
       },
     });
   });
@@ -33,8 +34,8 @@ describe("provider-health", () => {
 
     it("should handle missing base URL for openai-compatible", async () => {
       vi.stubGlobal("process", { env: {} });
-      const config = { type: "openai-compatible" as const, model: "test-model" };
-      const result = await discoverProviderModels(config);
+    const config = { type: "openai-compatible" as const, model: "test-model" };
+    const result = await discoverProviderModels(config);
       expect(result.reachable).toBe(false);
       expect(result.message).toContain("Missing provider base URL");
     });
@@ -51,7 +52,7 @@ describe("provider-health", () => {
         model: "model-1",
         baseUrl: "http://api.test"
       };
-      const result = await discoverProviderModels(config);
+    const result = await discoverProviderModels(config);
       
       expect(result.reachable).toBe(true);
       expect(result.models).toEqual(["model-1", "model-2"]);
@@ -66,7 +67,7 @@ describe("provider-health", () => {
         model: "model-1",
         baseUrl: "http://api.test"
       };
-      const result = await discoverProviderModels(config);
+    const result = await discoverProviderModels(config);
       expect(result.reachable).toBe(false);
       expect(result.message).toContain("timed out");
     });
@@ -104,6 +105,32 @@ describe("provider-health", () => {
       const result = await discoverProviderModels(config);
       expect(result.reachable).toBe(false);
       expect(result.message).toContain("invalid models response");
+    });
+
+    it("should handle missing API key for anthropic", async () => {
+      vi.stubGlobal("process", {
+        env: {
+          AI_AGENTS_ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+        },
+      });
+
+      const config = { type: "anthropic" as const, model: "claude-code" };
+      const result = await discoverProviderModels(config);
+      expect(result.reachable).toBe(false);
+      expect(result.message).toContain("Missing Anthropic API key");
+    });
+
+    it("should fetch anthropic models successfully", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "claude-code" }] }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const config = { type: "anthropic" as const, model: "claude-code", baseUrl: "https://api.anthropic.com" };
+      const result = await discoverProviderModels(config);
+      expect(result.reachable).toBe(true);
+      expect(result.models).toEqual(["claude-code"]);
     });
 
     it("should handle lmstudio provider", async () => {
@@ -214,6 +241,20 @@ describe("provider-health", () => {
       expect(result.modelFound).toBe(true);
       expect(result.modelFound).toBe(true);
       expect(result.message).toContain("auto-discovery selected model: auto-selected");
+    });
+
+    it("should validate anthropic model", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ id: "claude-code" }] }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const config = { type: "anthropic" as const, model: "claude-code", baseUrl: "https://api.anthropic.com" };
+      const result = await checkProviderHealth(config);
+      expect(result.reachable).toBe(true);
+      expect(result.modelFound).toBe(true);
+      expect(result.message).toContain("discovered model: claude-code");
     });
 
     it("should handle lmstudio fallback when target is auto and auto-discovery is disabled", async () => {
