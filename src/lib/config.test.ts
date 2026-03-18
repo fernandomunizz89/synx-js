@@ -2,7 +2,13 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadGlobalConfig, loadLocalProjectConfig, loadPromptFile, loadResolvedProjectConfig } from "./config.js";
+import {
+  loadGlobalConfig,
+  loadLocalProjectConfig,
+  loadPromptFile,
+  loadResolvedProjectConfig,
+  resolveProviderConfigForAgent,
+} from "./config.js";
 import { writeJson } from "./fs.js";
 
 const CONFIG_CACHE_ENV = "AI_AGENTS_DISABLE_CONFIG_CACHE";
@@ -52,6 +58,9 @@ async function createFixture(): Promise<FixturePaths> {
     tasksDir: ".ai-agents/tasks",
     providerOverrides: {
       dispatcher: { model: "local-dispatcher" },
+      agents: {
+        "Synx Front Expert": { model: "local-front-expert" },
+      },
     },
   });
   await fs.writeFile(promptFilePath, "dispatcher prompt v1", "utf8");
@@ -126,6 +135,13 @@ describe.sequential("config", () => {
     expect(third).not.toBe(first);
     expect(third.humanReviewer).toBe("Local Reviewer");
     expect(third.providers.dispatcher.model).toBe("local-dispatcher-v2");
+  });
+
+  it("resolves agent-specific provider config overrides", async () => {
+    const resolved = await loadResolvedProjectConfig();
+    expect(resolved.agentProviders["Synx Front Expert"]?.model).toBe("local-front-expert");
+    expect(resolveProviderConfigForAgent(resolved, "Synx Front Expert").model).toBe("local-front-expert");
+    expect(resolveProviderConfigForAgent(resolved, "Synx Back Expert")).toBe(resolved.providers.planner);
   });
 
   it("bypasses resolved config cache when explicitly disabled", async () => {

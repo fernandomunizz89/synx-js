@@ -10,18 +10,19 @@ export type TaskStatus =
   | "archived";
 
 export type AgentName =
+  // Orchestration layer
   | "Dispatcher"
   | "Spec Planner"
+  | "Human Review"
+  // Expert Squad
   | "Bug Investigator"
-  | "Bug Fixer"
-  | "Feature Builder"
-  | "Researcher"
-  | "Reviewer"
-  | "QA Validator"
-  | "PR Writer"
-  | "Human Review";
+  | "Synx Front Expert"
+  | "Synx Mobile Expert"
+  | "Synx Back Expert"
+  | "Synx QA Engineer"
+  | "Synx SEO Specialist";
 
-export type ProviderType = "mock" | "openai-compatible" | "lmstudio";
+export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
 export type E2EPolicy = "auto" | "required" | "skip";
 export type E2EFramework = "auto" | "playwright" | "other";
 
@@ -41,6 +42,7 @@ export interface GlobalConfig {
     dispatcher: ProviderStageConfig;
     planner: ProviderStageConfig;
   };
+  agentProviders?: Partial<Record<AgentName, ProviderStageConfig>>;
   defaults: {
     humanReviewer: string;
   };
@@ -55,6 +57,7 @@ export interface LocalProjectConfig {
   providerOverrides?: Partial<{
     dispatcher: Partial<ProviderStageConfig>;
     planner: Partial<ProviderStageConfig>;
+    agents: Partial<Record<AgentName, Partial<ProviderStageConfig>>>;
   }>;
 }
 
@@ -68,6 +71,7 @@ export interface ResolvedProjectConfig {
     dispatcher: ProviderStageConfig;
     planner: ProviderStageConfig;
   };
+  agentProviders: Partial<Record<AgentName, ProviderStageConfig>>;
 }
 
 export interface NewTaskInput {

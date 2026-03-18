@@ -1,58 +1,70 @@
-# Features (Initial Commit)
+# SYNX – Features
 
-## CLI UX
-- Interactive terminal menus (arrow keys + Enter) for setup/new/approve/fix.
-- Dynamic command hints that match how the CLI was invoked.
-- Human-friendly next-step guidance after key commands.
-- Explicit task type support in `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
-- Per-task human QA preferences in `new` for E2E policy/framework/objective (`--e2e`, `--e2e-framework`, `--qa-objective`).
-- Live `start` terminal indicator with spinner, elapsed time, stage-based per-task progress bars, and task counters (`--no-progress` available).
-- `status` now defaults to a focused view (current task or latest completed), with `status --all` for full history.
+## CLI & UX
 
-## Setup and Configuration
-- Guided setup with required human reviewer name (no implicit default).
-- Provider selection via menu, with model discovery when available.
-- LM Studio recommended mode saves local connection in global config by default.
-- Support for provider config via saved `baseUrl`/`apiKey` or environment variables.
+- Interactive terminal menus (arrow keys + Enter) for `setup`, `new`, `approve`, `fix`.
+- Live `start` progress panel: spinner, per-task status bars, task counters, event stream.
+- Inline `HUMAN INPUT` panel for approve/reprove without a second terminal.
+- Hotkeys during `start`: `?` help, `F1` extended help, `F2` new-task template, `F3` pause/resume, `F4` toggle console/stream, `F10` graceful stop.
+- Task type flags for `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
+- Per-task E2E preferences via `--e2e`, `--e2e-framework`, `--qa-objective`.
+- `status` defaults to focused view (current or latest task); `--all` for full history.
 
-## Readiness and Safety
-- Preflight readiness checks before `start`, `new`, `status`, and `approve`.
-- `start` aborts by default when setup is broken, with clear remediation.
-- Optional `start --force` for advanced/manual recovery scenarios.
-- Readiness now verifies required prompt files explicitly (not just prompt directory existence).
+## Setup & Configuration
 
-## Recovery and Operations
+- Guided `setup` with required human reviewer name.
+- Provider selection via interactive menu with model discovery (LM Studio auto-detect).
+- Config cascade: global `~/.ai-agents/config.json` → project `.ai-agents/config/project.json`.
+- `show-config` command to inspect resolved config.
+
+## Dream Stack 2026 – Expert Agent Squad
+
+- **Dispatcher:** triages tasks and routes directly to the correct domain expert (or to Spec Planner for complex tasks with `targetExpert` hint).
+- **Conditional Planning:** Spec Planner is invoked only when the Dispatcher flags a task as complex/multi-step; it decomposes the task and routes to the expert identified by `targetExpert`.
+- **Synx Front Expert:** Next.js App Router, TailwindCSS, WCAG 2.1, RSC patterns, React Testing Library.
+- **Synx Mobile Expert:** Expo, React Native, Reanimated (UI-thread), EAS managed workflow, Jest/RNTL.
+- **Synx Back Expert:** NestJS/Fastify, Prisma ORM, strict TypeScript, Vitest integration tests with mock injection.
+- **Synx SEO Specialist:** Core Web Vitals (LCP/INP/CLS), JSON-LD Schema.org, Next.js Metadata API (`generateMetadata`), Lighthouse ≥ 90/90/90/95, robots.txt / sitemap.xml audits.
+- **Synx QA Engineer:** Playwright (E2E) + Vitest (unit); produces structured verdicts with `issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction` per finding; auto-routes failures back to the originating expert.
+
+## QA & Quality Gates
+
+- QA failure context is cumulative across retries (previous findings carried forward).
+- QA retry loop capped at 3 (default). Exceeded cap → `waiting_human` escalation.
+- Root-cause intelligence: QA surfaced hints map to source files and git-changed files.
+- Post-edit sanity checks after every expert stage (lint, TypeScript compile, build).
+- E2E enforcement for `Feature`, `Bug`, `Refactor`, `Mixed` tasks.
+- QA strategy: Playwright for web E2E; Vitest for isolated logic. Never mixed.
+- Language-aware fallback checks (TypeScript/Python/Go/Rust/Java) when no package scripts match.
+
+## Recovery & Operations
+
 - Stale lock detection by age and dead PID.
-- Safe recovery for orphan `working/` files.
-- Interrupted-task requeue logic when safe.
-- Improved diagnostics and repair flow via doctor/fix/resume.
+- Orphaned `working/` file recovery to inbox.
+- Interrupted task requeue logic.
+- Task cancellation (graceful, mid-stage).
+- `doctor`, `resume`, `fix` for full repair coverage.
 
-## Approval Flow
-- Interactive selection for pending approvals.
-- `approve --yes` auto-selects when only one task is pending.
+## Research (On-demand)
 
-## Documentation
-- Updated operational docs for day-1 setup and daily usage.
-- Added guidance for new machine/new user onboarding.
+- Gated Researcher service: activated when confidence < 0.6 or the same QA failure repeats.
+- Synthesizes web evidence (DuckDuckGo or Tavily) into structured guidance without editing code.
+- Anti-loop guard: if recommendation repeats while the issue persists, task escalates to `waiting_human`.
+- Max 2 web searches per stage (default, configurable).
 
-## Agent Execution
-- Dispatcher and Spec Planner run with provider-backed structured output.
-- Bug Investigator, Bug Fixer, Feature Builder, Reviewer, QA Validator, and PR Writer also run with provider-backed structured output (no mock-only downstream path).
-- All stage outputs are validated with strict zod schemas before advancing.
-- Stage input chaining now includes both original task input and prior stage artifacts for downstream agents.
-- Bug tasks now route through `Bug Investigator -> Bug Fixer`.
-- QA can send failed tasks back to the correct implementation agent (`Bug Fixer` for bugs, `Feature Builder` for non-bugs).
-- QA now converts failed check output into compact, actionable remediation context (expected vs received + evidence + recommended action).
-- QA and implementation stages now honor human-defined E2E quality gates from task input.
-- QA failure now carries structured blocker context (`expectedResult` vs `receivedResult`, evidence, and recommended action).
-- QA return context is cumulative across retries and is refreshed on every new return.
-- QA output now includes concrete test cases (`expectedResult` vs `actualResult`) to emulate real QA validation.
-- Implementation retries now include anti-repeat strategy guidance when previous QA loops failed.
-- QA retry loops are capped and escalate to human review when the retry limit is reached.
-- Feature Builder and Bug Fixer apply real file edits in the target workspace (`create`, `replace`, `replace_snippet`, `delete`).
-- Implementation stages support broader multi-file edits for related source/test/config files while keeping protected paths blocked.
-- Implementation stages now include explicit unit-test update reporting when test scripts are available.
-- Main-flow E2E is enforced for `Feature`, `Bug`, `Refactor`, and `Mixed` tasks, with remediation instructions to create missing E2E infra when needed.
-- E2E checks include runtime QA diagnostics tuning and structured failure evidence to improve handoff quality and reduce blind retries.
-- QA Validator now captures real validation evidence (`git diff` changed files + runnable checks from package scripts, including common E2E scripts).
-- OpenAI-compatible provider calls now support timeout control via `AI_AGENTS_PROVIDER_TIMEOUT_MS`.
+## Provider & LLM
+
+- Supports LM Studio (local, runtime model auto-discovery), OpenAI-compatible endpoints, Google Generative AI, and Anthropic Claude Code.
+- Stateless calls: each LLM call sends only current stage context (no chat history reuse).
+- Dynamic temperature per agent and task type, with full env-override support.
+- SSE streaming mode optional (`AI_AGENTS_PROVIDER_STREAMING=true`).
+- Backoff/retry for transient provider errors with jitter.
+- Local rate-limit window and max-concurrent-requests controls.
+- Token and cost estimation per stage, reported in `metrics`.
+
+## Diagnostics & Observability
+
+- `synx metrics [--since <timestamp>] [--json]` for pipeline performance data.
+- `synx status [--all]` for task state overview.
+- `synx doctor` for preflight checks: config, prompts, provider health, stale locks.
+- Structured JSONL logs: `polling-metrics`, `queue-latency`, `provider-throttle`, `stage-metrics`, `provider-model-resolution`.

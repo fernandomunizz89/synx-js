@@ -124,9 +124,9 @@ describe.sequential("providers/lmstudio-provider", () => {
     });
 
     const result = await provider.generateStructured({
-      agent: "Reviewer",
+      agent: "Synx QA Engineer",
       taskId: "task-3",
-      stage: "reviewer",
+      stage: "synx-qa-engineer",
       systemPrompt: "x",
       input: {},
       expectedJsonSchemaDescription: "{}",

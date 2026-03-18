@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { workers } from "./index.js";
+import { workerList } from "./index.js";
 
 const originalCwd = process.cwd();
 
@@ -20,21 +20,21 @@ describe.sequential("workers/index", () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("registers concrete workers in expected orchestration order", () => {
-    expect(workers.map((worker) => worker.agent)).toEqual([
+  // Dream Stack 2026 – Squad Factory
+  it("registers the Dream Stack 2026 squad in expected orchestration order", () => {
+    expect(workerList.map((worker) => worker.agent)).toEqual([
       "Dispatcher",
-      "Spec Planner",
-      "Bug Investigator",
-      "Bug Fixer",
-      "Feature Builder",
-      "Reviewer",
-      "QA Validator",
-      "PR Writer",
+      "Synx Front Expert",
+      "Synx Mobile Expert",
+      "Synx Back Expert",
+      "Synx QA Engineer",
+      "Synx SEO Specialist",
     ]);
   });
 
   it("returns false when no inbox request exists for a task", async () => {
-    const results = await Promise.all(workers.map((worker) => worker.tryProcess("missing-task")));
+    const results = await Promise.all(workerList.map((worker) => worker.tryProcess("missing-task")));
     expect(results.every((result) => result === false)).toBe(true);
   });
 });
+

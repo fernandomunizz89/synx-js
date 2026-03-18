@@ -1,149 +1,148 @@
-import os from "node:os";
-import path from "node:path";
-import { promises as fs } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const commandRunnerMocks = vi.hoisted(() => ({
-  readPackageScripts: vi.fn<() => Promise<Record<string, string>>>(),
-  selectPackageManager: vi.fn<() => "npm" | "pnpm" | "yarn" | "bun">(),
-  buildScriptCommand: vi.fn<(manager: string, script: string, extraArgs?: string[]) => { command: string; args: string[] }>(),
-  runCommand: vi.fn<() => Promise<{
-    exitCode: number | null;
-    timedOut: boolean;
-    durationMs: number;
-    stdout: string;
-    stderr: string;
-  }>>(),
-}));
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { 
+  detectTestCapabilities, 
+  runProjectChecks
+} from "./validation-checks.js";
+import { readPackageScripts, runCommand } from "./command-runner.js";
+import { existsSync, promises as fs } from "node:fs";
 
 vi.mock("./command-runner.js", () => ({
-  readPackageScripts: commandRunnerMocks.readPackageScripts,
-  selectPackageManager: commandRunnerMocks.selectPackageManager,
-  buildScriptCommand: commandRunnerMocks.buildScriptCommand,
-  runCommand: commandRunnerMocks.runCommand,
+  readPackageScripts: vi.fn(),
+  runCommand: vi.fn(),
+  selectPackageManager: vi.fn().mockReturnValue("npm"),
+  buildScriptCommand: vi.fn((mgr, script) => ({ command: mgr, args: ["run", script] })),
 }));
 
-import { detectTestCapabilities, runProjectChecks } from "./validation-checks.js";
-
-describe.sequential("validation-checks", () => {
-  let root = "";
-
-  beforeEach(async () => {
-    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-validation-checks-"));
-    commandRunnerMocks.readPackageScripts.mockReset();
-    commandRunnerMocks.selectPackageManager.mockReset();
-    commandRunnerMocks.buildScriptCommand.mockReset();
-    commandRunnerMocks.runCommand.mockReset();
-
-    commandRunnerMocks.selectPackageManager.mockReturnValue("npm");
-    commandRunnerMocks.buildScriptCommand.mockImplementation((_, script, extraArgs = []) => ({
-      command: "npm",
-      args: ["run", script, ...extraArgs],
-    }));
+vi.mock("node:fs", async () => {
+    const actual = await vi.importActual("node:fs");
+    return {
+      ...actual as any,
+      existsSync: vi.fn(),
+      promises: {
+        ...actual.promises as any,
+        readdir: vi.fn(),
+      },
+    };
   });
 
-  afterEach(async () => {
-    if (root) await fs.rm(root, { recursive: true, force: true });
+describe("validation-checks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it("detects test capabilities from package scripts and spec files", async () => {
-    await fs.mkdir(path.join(root, "e2e"), { recursive: true });
-    await fs.writeFile(path.join(root, "e2e", "main-flow.cy.ts"), "describe('x', () => {})", "utf8");
-    await fs.writeFile(path.join(root, "e2e", "timer.spec.ts"), "describe('y', () => {})", "utf8");
+  describe("detectTestCapabilities", () => {
+    it("should detect unit and e2e scripts", async () => {
+      vi.mocked(readPackageScripts).mockResolvedValue({
+        test: "vitest",
+        e2e: "playwright",
+      });
+      vi.mocked(fs.readdir).mockResolvedValue([]);
 
-    commandRunnerMocks.readPackageScripts.mockResolvedValue({
-      test: "vitest run",
-      "test:e2e": "playwright test",
+      const caps = await detectTestCapabilities("/root");
+      expect(caps.hasUnitTestScript).toBe(true);
+      expect(caps.hasE2EScript).toBe(true);
+      expect(caps.unitScripts).toContain("test");
+      expect(caps.e2eScripts).toContain("e2e");
+    });
+  });
+
+  describe("runProjectChecks", () => {
+    it("should return skipped if no checks available", async () => {
+      vi.mocked(readPackageScripts).mockResolvedValue({});
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const results = await runProjectChecks({ workspaceRoot: "/root" });
+      expect(results[0].status).toBe("skipped");
+      expect(results[0].command).toContain("no executable validation checks");
     });
 
-    const capabilities = await detectTestCapabilities(root);
-    expect(capabilities.hasUnitTestScript).toBe(true);
-    expect(capabilities.hasE2EScript).toBe(true);
-    expect(capabilities.hasE2ESpecFiles).toBe(true);
-    expect(capabilities.unitScripts).toContain("test");
-    expect(capabilities.e2eScripts).toContain("test:e2e");
-    expect(capabilities.e2eSpecFiles).toEqual(expect.arrayContaining(["e2e/main-flow.cy.ts", "e2e/timer.spec.ts"]));
-  });
-
-  it("runs scripted checks and returns diagnostics", async () => {
-    commandRunnerMocks.readPackageScripts.mockResolvedValue({
-      check: "tsc --noEmit",
-      "playwright:test": "playwright test",
-    });
-
-    commandRunnerMocks.runCommand
-      .mockResolvedValueOnce({
+    it("should run available scripts", async () => {
+      vi.mocked(readPackageScripts).mockResolvedValue({
+        test: "vitest",
+      });
+      vi.mocked(runCommand).mockResolvedValue({
+        command: "npm",
+        args: ["run", "test"],
         exitCode: 0,
         timedOut: false,
-        durationMs: 200,
-        stdout: "ok",
+        durationMs: 100,
+        stdout: "All tests passed",
         stderr: "",
-      })
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        timedOut: false,
-        durationMs: 400,
-        stdout: "",
-        stderr: "Timeout while running e2e",
       });
 
-    const results = await runProjectChecks({
-      workspaceRoot: root,
-      includeE2E: true,
+      const results = await runProjectChecks({ workspaceRoot: "/root" });
+      expect(results).toHaveLength(1);
+      expect(results[0].status).toBe("passed");
+      expect(results[0].command).toBe("npm run test");
     });
 
-    expect(results).toHaveLength(2);
-    expect(results[0]).toMatchObject({
-      status: "passed",
-      command: "npm run check",
-    });
-    expect(results[1]).toMatchObject({
-      status: "failed",
-      command: "npm run playwright:test",
-    });
-    expect(results[1]?.diagnostics?.join("\n")).toMatch(/e2e|timeout/i);
-  });
+    it("should handle failed scripts", async () => {
+        vi.mocked(readPackageScripts).mockResolvedValue({
+          test: "vitest",
+        });
+        vi.mocked(runCommand).mockResolvedValue({
+          command: "npm",
+          args: ["run", "test"],
+          exitCode: 1,
+          timedOut: false,
+          durationMs: 100,
+          stdout: "1 test failed",
+          stderr: "AssertionError",
+        });
+  
+        const results = await runProjectChecks({ workspaceRoot: "/root" });
+        expect(results[0].status).toBe("failed");
+        expect(results[0].diagnostics).toContain("AssertionError");
+      });
 
-  it("falls back to language-aware TypeScript checks when scripts are missing", async () => {
-    commandRunnerMocks.readPackageScripts.mockResolvedValue({});
-    commandRunnerMocks.runCommand.mockResolvedValue({
-      exitCode: 127,
-      timedOut: false,
-      durationMs: 12,
-      stdout: "",
-      stderr: "command not found",
-    });
-    await fs.writeFile(path.join(root, "tsconfig.json"), "{}", "utf8");
+      it("should use fallback commands if no scripts found but files changed", async () => {
+          vi.mocked(readPackageScripts).mockResolvedValue({});
+          vi.mocked(existsSync).mockImplementation((p: any) => p.toString().endsWith("tsconfig.json"));
+          vi.mocked(runCommand).mockResolvedValue({
+            command: "npx",
+            args: ["tsc", "--noEmit"],
+            exitCode: 0,
+            timedOut: false,
+            durationMs: 100,
+            stdout: "",
+            stderr: "",
+          });
 
-    const results = await runProjectChecks({
-      workspaceRoot: root,
-      changedFiles: ["src/app.ts"],
-      includeE2E: false,
-    });
+          const results = await runProjectChecks({ 
+              workspaceRoot: "/root", 
+              changedFiles: ["src/index.ts"] 
+          });
+          
+          expect(results).toHaveLength(1);
+          expect(results[0].command).toContain("tsc --noEmit");
+          expect(results[0].status).toBe("passed");
+      });
 
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({
-      command: "npx tsc --noEmit",
-      status: "skipped",
-    });
-    expect(results[0]?.stderrPreview).toContain("Fallback check skipped");
-    expect(results[0]?.qaConfigNotes?.[0]).toContain("TypeScript compile/type validation");
-  });
+      it("should handle language-aware fallbacks (Python, Go, Rust, Java)", async () => {
+          vi.mocked(readPackageScripts).mockResolvedValue({});
+          vi.mocked(existsSync).mockImplementation((p: any) => {
+              const pathStr = p.toString();
+              return pathStr.endsWith("go.mod") || pathStr.endsWith("Cargo.toml") || pathStr.endsWith("pom.xml");
+          });
+          vi.mocked(runCommand).mockResolvedValue({
+            command: "mock",
+            args: [],
+            exitCode: 0,
+            timedOut: false,
+            durationMs: 1,
+            stdout: "",
+            stderr: "",
+          });
 
-  it("returns a no-op skipped check when no script/fallback applies", async () => {
-    commandRunnerMocks.readPackageScripts.mockResolvedValue({});
-
-    const results = await runProjectChecks({
-      workspaceRoot: root,
-      changedFiles: ["README.md"],
-      includeE2E: false,
-    });
-
-    expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({
-      command: "[no executable validation checks]",
-      status: "skipped",
-      exitCode: 0,
-    });
+          const results = await runProjectChecks({ 
+              workspaceRoot: "/root", 
+              changedFiles: ["main.go", "lib.rs", "App.java"] 
+          });
+          
+          const commands = results.map(r => r.command);
+          expect(commands).toContain("go test ./... -run ^$");
+          expect(commands).toContain("cargo check");
+          expect(commands).toContain("mvn -q -DskipTests compile");
+      });
   });
 });

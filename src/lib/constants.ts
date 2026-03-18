@@ -18,6 +18,12 @@ export const STAGE_FILE_NAMES = {
   reviewer: "05-reviewer.request.json",
   qa: "06-qa.request.json",
   pr: "07-pr.request.json",
+  // Dream Stack 2026 – Expert Squad
+  synxFrontExpert: "04-synx-front-expert.request.json",
+  synxMobileExpert: "04-synx-mobile-expert.request.json",
+  synxBackExpert: "04-synx-back-expert.request.json",
+  synxQaEngineer: "06-synx-qa-engineer.request.json",
+  synxSeoSpecialist: "04-synx-seo-specialist.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -29,6 +35,12 @@ export const DONE_FILE_NAMES = {
   reviewer: "05-review.done.json",
   qa: "06-qa.done.json",
   pr: "07-pr.done.json",
+  // Dream Stack 2026 – Expert Squad
+  synxFrontExpert: "04-synx-front-expert.done.json",
+  synxMobileExpert: "04-synx-mobile-expert.done.json",
+  synxBackExpert: "04-synx-back-expert.done.json",
+  synxQaEngineer: "06-synx-qa-engineer.done.json",
+  synxSeoSpecialist: "04-synx-seo-specialist.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [
@@ -41,4 +53,10 @@ export const REQUIRED_PROMPT_FILES = [
   "reviewer.md",
   "qa-validator.md",
   "pr-writer.md",
+  // Dream Stack 2026 – Expert Squad
+  "synx-front-expert.md",
+  "synx-mobile-expert.md",
+  "synx-back-expert.md",
+  "synx-qa-engineer.md",
+  "synx-seo-specialist.md",
 ] as const;

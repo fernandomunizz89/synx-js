@@ -31,16 +31,16 @@ function remediationTarget(taskType: TaskType): {
 } {
   if (taskType === "Bug") {
     return {
-      agent: "Bug Fixer",
-      stage: "bug-fixer",
-      requestFileName: STAGE_FILE_NAMES.bugFixer,
+      agent: "Bug Investigator",
+      stage: "bug-investigator",
+      requestFileName: STAGE_FILE_NAMES.bugInvestigator,
     };
   }
 
   return {
-    agent: "Feature Builder",
-    stage: "builder",
-    requestFileName: STAGE_FILE_NAMES.builder,
+    agent: "Synx Front Expert",
+    stage: "synx-front-expert",
+    requestFileName: STAGE_FILE_NAMES.synxFrontExpert,
   };
 }
 

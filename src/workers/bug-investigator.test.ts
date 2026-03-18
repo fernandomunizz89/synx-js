@@ -30,7 +30,7 @@ vi.mock("../providers/factory.js", () => {
           },
           builderChecks: [],
           handoffNotes: [],
-          nextAgent: "Bug Fixer",
+          nextAgent: "Synx Back Expert",
         },
         provider: "mock",
         model: "static-mock",
@@ -50,8 +50,10 @@ vi.mock("../lib/config.js", () => {
       humanReviewer: "User",
       tasksDir: ".ai-agents/tasks",
       providers: { planner: { type: "mock", model: "static-mock" }, dispatcher: { type: "mock", model: "static-mock" } },
+      agentProviders: {},
     }),
     loadPromptFile: vi.fn().mockResolvedValue("Mock Prompt {{INPUT_JSON}}"),
+    resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.planner),
   };
 });
 
@@ -166,7 +168,7 @@ describe.sequential("workers/bug-investigator", () => {
     
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
-    expect(meta.nextAgent).toBe("Bug Fixer");
+    expect(meta.nextAgent).toBe("Synx Back Expert");
   });
 
   it("adjusts risk assessment on failing triage with syntax errors", async () => {

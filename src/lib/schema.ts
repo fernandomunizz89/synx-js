@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]);
-export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio"]);
+export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio", "google", "anthropic"]);
 export const taskStatusSchema = z.enum([
   "new",
   "in_progress",
@@ -13,16 +13,17 @@ export const taskStatusSchema = z.enum([
   "archived",
 ]);
 export const agentNameSchema = z.enum([
+  // Orchestration layer
   "Dispatcher",
   "Spec Planner",
   "Bug Investigator",
-  "Bug Fixer",
-  "Feature Builder",
-  "Researcher",
-  "Reviewer",
-  "QA Validator",
-  "PR Writer",
   "Human Review",
+  // Expert Squad
+  "Synx Front Expert",
+  "Synx Mobile Expert",
+  "Synx Back Expert",
+  "Synx QA Engineer",
+  "Synx SEO Specialist",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System")])
@@ -52,6 +53,7 @@ export const globalConfigSchema = z.object({
     dispatcher: providerStageConfigSchema,
     planner: providerStageConfigSchema,
   }),
+  agentProviders: z.record(agentNameSchema, providerStageConfigSchema).optional(),
   defaults: z.object({
     humanReviewer: z.string(),
   }),
@@ -66,6 +68,7 @@ export const localProjectConfigSchema = z.object({
   providerOverrides: z.object({
     dispatcher: providerStageConfigSchema.partial().optional(),
     planner: providerStageConfigSchema.partial().optional(),
+    agents: z.record(agentNameSchema, providerStageConfigSchema.partial()).optional(),
   }).optional(),
 });
 
@@ -143,7 +146,25 @@ export const dispatcherOutputSchema = z.object({
   constraints: z.array(z.string()),
   confidenceScore: z.number().min(0).max(1).optional(),
   requiresHumanInput: z.boolean(),
-  nextAgent: z.union([z.literal("Bug Investigator"), z.literal("Spec Planner")]),
+  // Conditional Planning – Dream Stack 2026
+  // When nextAgent === "Spec Planner", targetExpert tells the planner
+  // which domain expert to hand off to after decomposing the task.
+  targetExpert: z.union([
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
+  ]).optional(),
+  nextAgent: z.union([
+    z.literal("Bug Investigator"),
+    z.literal("Spec Planner"),
+    // Dream Stack 2026 – Expert Squad routing
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx QA Engineer"),
+    z.literal("Synx SEO Specialist"),
+  ]),
 });
 
 export const plannerOutputSchema = z.object({
@@ -157,7 +178,13 @@ export const plannerOutputSchema = z.object({
   edgeCases: z.array(z.string()),
   risks: z.array(z.string()),
   validationCriteria: z.array(z.string()),
-  nextAgent: z.literal("Feature Builder"),
+  // Planner routes to the specific expert identified by Dispatcher
+  nextAgent: z.union([
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
+  ]),
 });
 
 const riskLevelSchema = z.enum(["low", "medium", "high", "unknown"]);
@@ -209,7 +236,14 @@ export const bugInvestigatorOutputSchema = z.object({
   }),
   builderChecks: z.array(z.string()).optional().default([]),
   handoffNotes: z.array(z.string()).optional().default([]),
-  nextAgent: z.literal("Bug Fixer"),
+  nextAgent: z.union([
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
+    z.literal("Bug Investigator"),
+    z.literal("Human Review"),
+  ]),
 });
 
 export const researcherOutputSchema = z.object({
@@ -279,7 +313,7 @@ export const builderOutputSchema = z.object({
   verificationMode: z.enum(["static_review", "executed_checks", "mixed"]).optional().default("static_review"),
   risks: z.array(z.string()),
   edits: z.array(builderEditSchema).min(1),
-  nextAgent: z.literal("Reviewer"),
+  nextAgent: agentNameSchema,
 });
 
 export const bugFixerOutputSchema = z.object({
@@ -290,7 +324,7 @@ export const bugFixerOutputSchema = z.object({
   testsToRun: z.array(z.string()),
   risks: z.array(z.string()),
   edits: z.array(builderEditSchema).min(1),
-  nextAgent: z.literal("Reviewer"),
+  nextAgent: agentNameSchema,
 });
 
 export const reviewerOutputSchema = z.object({
@@ -317,12 +351,9 @@ export const validationCheckResultSchema = z.object({
 export const qaTestCaseSchema = z.object({
   id: z.string(),
   title: z.string(),
-  type: z.enum(["functional", "regression", "integration", "e2e", "unit", "config"]),
-  steps: z.array(z.string()).optional().default([]),
-  expectedResult: z.string(),
-  actualResult: z.string(),
-  status: z.enum(["pass", "fail", "blocked"]),
-  evidence: z.array(z.string()).optional().default([]),
+  scenario: z.string(),
+  expected: z.string(),
+  status: z.enum(["pending", "passed", "failed", "skipped"]),
 });
 
 export const qaReturnContextItemSchema = z.object({
@@ -330,13 +361,20 @@ export const qaReturnContextItemSchema = z.object({
   expectedResult: z.string(),
   receivedResult: z.string(),
   evidence: z.array(z.string()).optional().default([]),
-  recommendedAction: z.string().optional().default(""),
+  recommendedAction: z.string(),
 });
 
 export const qaReturnHistoryEntrySchema = z.object({
   attempt: z.number().int().positive(),
   returnedAt: z.string(),
-  returnedTo: z.union([z.literal("Feature Builder"), z.literal("Bug Fixer")]),
+  returnedTo: z.union([
+    // Expert Squad
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
+    z.literal("Bug Investigator"),
+  ]),
   summary: z.string(),
   failures: z.array(z.string()).optional().default([]),
   findings: z.array(qaReturnContextItemSchema).optional().default([]),
@@ -351,7 +389,15 @@ export const qaCumulativeFindingSchema = qaReturnContextItemSchema.extend({
 export const qaHandoffContextSchema = z.object({
   attempt: z.number().int().positive(),
   maxRetries: z.number().int().positive(),
-  returnedTo: z.union([z.literal("PR Writer"), z.literal("Feature Builder"), z.literal("Bug Fixer")]),
+  returnedTo: z.union([
+    z.literal("Human Review"),
+    // Expert Squad
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
+    z.literal("Bug Investigator"),
+  ]),
   summary: z.string(),
   latestFindings: z.array(qaReturnContextItemSchema).optional().default([]),
   cumulativeFindings: z.array(qaCumulativeFindingSchema).optional().default([]),
@@ -382,7 +428,15 @@ export const qaOutputSchema = z.object({
   executedChecks: z.array(validationCheckResultSchema).optional().default([]),
   returnContext: z.array(qaReturnContextItemSchema).optional().default([]),
   qaHandoffContext: qaHandoffContextSchema.optional(),
-  nextAgent: z.union([z.literal("PR Writer"), z.literal("Feature Builder"), z.literal("Bug Fixer")]),
+  nextAgent: z.union([
+    z.literal("Human Review"),
+    // Expert Squad return routing
+    z.literal("Synx Front Expert"),
+    z.literal("Synx Mobile Expert"),
+    z.literal("Synx Back Expert"),
+    z.literal("Synx SEO Specialist"),
+    z.literal("Bug Investigator"),
+  ]),
 });
 
 export const prWriterOutputSchema = z.object({

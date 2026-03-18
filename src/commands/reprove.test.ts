@@ -124,12 +124,12 @@ describe.sequential("commands/reprove", () => {
       status: "waiting_agent",
       currentStage: "reproved",
       currentAgent: "Human Review",
-      nextAgent: "Bug Fixer",
+      nextAgent: "Bug Investigator",
       humanApprovalRequired: false,
     });
 
     expect(mocks.writeJson).toHaveBeenCalled();
-    const requestCall = mocks.writeJson.mock.calls.find(([file]) => String(file).includes("04b-bug-fixer.request.json"));
+    const requestCall = mocks.writeJson.mock.calls.find(([file]) => String(file).includes("bug-investigator.request.json"));
     expect(requestCall).toBeTruthy();
 
     expect(mocks.runCommand).not.toHaveBeenCalled();

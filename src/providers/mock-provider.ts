@@ -43,7 +43,7 @@ export class MockProvider implements LlmProvider {
           edgeCases: ["Ambiguous scope", "Missing target file"],
           risks: ["Planning beyond confirmed facts"],
           validationCriteria: ["Change remains scoped to requested behavior"],
-          nextAgent: "Feature Builder",
+          nextAgent: "Synx Front Expert",
         };
         break;
       case "Bug Investigator":
@@ -53,33 +53,13 @@ export class MockProvider implements LlmProvider {
           likelyCauses: ["Implementation does not match expected behavior."],
           investigationSteps: ["Locate relevant files.", "Apply minimal correction.", "Validate changes."],
           unknowns: ["Precise root cause before file inspection."],
-          nextAgent: "Bug Fixer",
+          nextAgent: "Synx Back Expert",
         };
         break;
-      case "Bug Fixer":
-        parsed = {
-          implementationSummary: "Applied a minimal bug-fix mock change to prove end-to-end execution.",
-          filesChanged: ["mock-change.txt"],
-          changesMade: ["Wrote a marker file with bug-fix summary."],
-          unitTestsAdded: ["mock-change.test.txt"],
-          testsToRun: ["npm run --if-present check", "npm run --if-present test"],
-          risks: ["Mock provider does not reason over real code semantics."],
-          edits: [
-            {
-              path: "mock-change.txt",
-              action: "replace",
-              content: `mock bug fix generated at ${new Date().toISOString()}\n`,
-            },
-            {
-              path: "mock-change.test.txt",
-              action: "replace",
-              content: `mock unit test placeholder generated at ${new Date().toISOString()}\n`,
-            },
-          ],
-          nextAgent: "Reviewer",
-        };
-        break;
-      case "Feature Builder":
+      case "Synx Front Expert":
+      case "Synx Mobile Expert":
+      case "Synx Back Expert":
+      case "Synx SEO Specialist":
         parsed = {
           implementationSummary: "Applied a minimal mock change to prove end-to-end execution.",
           filesChanged: ["mock-change.txt"],
@@ -99,33 +79,10 @@ export class MockProvider implements LlmProvider {
               content: `mock unit test placeholder generated at ${new Date().toISOString()}\n`,
             },
           ],
-          nextAgent: "Reviewer",
+          nextAgent: "Synx QA Engineer",
         };
         break;
-      case "Researcher":
-        parsed = {
-          summary: "Synthesize official docs first, then apply a minimal, version-aware fix.",
-          sources: [
-            {
-              title: "Mock docs reference",
-              url: "https://example.com/mock-docs",
-            },
-          ],
-          confidence_score: 0.75,
-          recommended_action: "Inspect the referenced API contract and align implementation with the documented signature.",
-          is_breaking_change: false,
-        };
-        break;
-      case "Reviewer":
-        parsed = {
-          whatLooksGood: ["Change is minimal and scoped."],
-          issuesFound: [],
-          requiredChanges: [],
-          verdict: "approved",
-          nextAgent: "QA Validator",
-        };
-        break;
-      case "QA Validator":
+      case "Synx QA Engineer":
         parsed = {
           mainScenarios: ["Verify changed file is present and readable."],
           acceptanceChecklist: ["Change exists in git diff."],
@@ -134,15 +91,6 @@ export class MockProvider implements LlmProvider {
           e2ePlan: ["Run main user flow end-to-end if project has an e2e script."],
           changedFiles: ["mock-change.txt"],
           executedChecks: [],
-          nextAgent: "PR Writer",
-        };
-        break;
-      case "PR Writer":
-        parsed = {
-          summary: "Mock run completed with a minimal file edit.",
-          whatWasDone: ["Generated mock-change.txt to validate pipeline wiring."],
-          testPlan: ["Inspect git diff.", "Review file content."],
-          rolloutNotes: ["No production rollout required for mock provider output."],
           nextAgent: "Human Review",
         };
         break;

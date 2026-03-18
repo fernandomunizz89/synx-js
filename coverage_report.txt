@@ -1,0 +1,156 @@
+
+> synx@5.0.0 test
+> vitest run --coverage
+
+
+[1m[46m RUN [49m[22m [36mv4.1.0 [39m[90m/Users/fernandomuniz/Workspace/synx-js[39m
+      [2mCoverage enabled with [22m[33mv8[39m
+
+ [32m✓[39m src/lib/runtime.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+ [32m✓[39m src/lib/config.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 77[2mms[22m[39m
+ [32m✓[39m src/workers/qa.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 86[2mms[22m[39m
+ [32m✓[39m src/workers/experts/synx-front-expert.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 198[2mms[22m[39m
+ [32m✓[39m src/workers/experts/synx-mobile-expert.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 243[2mms[22m[39m
+ [32m✓[39m src/workers/experts/synx-seo-specialist.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 246[2mms[22m[39m
+ [32m✓[39m src/workers/dispatcher.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 75[2mms[22m[39m
+ [32m✓[39m src/workers/experts/synx-back-expert.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 272[2mms[22m[39m
+ [32m✓[39m src/workers/bug-investigator.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 84[2mms[22m[39m
+ [32m✓[39m src/workers/experts/synx-qa-engineer.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 351[2mms[22m[39m
+ [32m✓[39m src/lib/pipeline-integration.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 76[2mms[22m[39m
+ [32m✓[39m src/providers/mock-provider.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 508[2mms[22m[39m
+ [32m✓[39m src/providers/openai-compatible-provider.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 432[2mms[22m[39m
+ [32m✓[39m src/lib/task.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 55[2mms[22m[39m
+ [32m✓[39m src/lib/workspace-scanner.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 51[2mms[22m[39m
+ [32m✓[39m src/lib/fs.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m src/workers/planner.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 66[2mms[22m[39m
+ [32m✓[39m src/lib/e2e-selector-tools.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m src/lib/validation-checks.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/workers/pr-writer.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m src/lib/workspace-editor.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m src/lib/start-inline-command.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/workers/bug-fixer.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 68[2mms[22m[39m
+ [32m✓[39m src/lib/orchestrator.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/commands/reprove.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/lib/provider-error-meta.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/lib/post-edit-sanity.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m src/lib/schema.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/workers/researcher.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m src/lib/readiness.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/commands/setup.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 8[2mms[22m[39m
+[90mstdout[2m | src/lib/interactive.test.ts[2m > [22m[2minteractive prompts[2m > [22m[2mpromptRequiredText[2m > [22m[2muses inquirer input and forces a value
+[22m[39m[38;2;0;255;255mPlease enter a value to continue.[0m
+
+ [32m✓[39m src/commands/doctor.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/workers/index.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m src/lib/interactive.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/commands/new.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/lib/quality-retry-policy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/commands/status.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/lib/text-utils.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/providers/lmstudio-provider.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/lib/token-estimation.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/lib/env.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/lib/loop-action.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/lib/agent-role-contract.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/lib/risk.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/commands/start.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/workers/builder.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1866[2mms[22m[39m
+     [33m[2m✓[22m[39m processes a simple feature task [33m 1102[2mms[22m[39m
+     [33m[2m✓[22m[39m handles QA failures and missing E2E infrastructure [33m 762[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m46 passed[39m[22m[90m (46)[39m
+[2m      Tests [22m [1m[32m205 passed[39m[22m[90m (205)[39m
+[2m   Start at [22m 01:27:32
+[2m   Duration [22m 2.57s[2m (transform 2.21s, setup 0ms, import 4.81s, tests 5.10s, environment 2ms)[22m
+
+[34m % [39m[2mCoverage report from [22m[33mv8[39m
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |      54 |    43.64 |   59.29 |   56.52 |                   
+ commands          |   22.58 |    15.11 |   24.32 |   23.28 |                   
+  approve.ts       |       0 |        0 |       0 |       0 | 10-81             
+  cancel.ts        |       0 |        0 |       0 |       0 | 6-54              
+  doctor.ts        |   67.03 |    34.61 |    62.5 |   69.04 | ...12,195-198,211 
+  fix.ts           |       0 |        0 |       0 |       0 | 10-92             
+  metrics.ts       |       0 |        0 |       0 |       0 | 4-98              
+  new.ts           |   60.93 |    35.29 |     100 |   69.23 | ...,81-82,107-108 
+  reprove.ts       |   29.87 |    25.24 |      25 |   31.69 | ...66,279,332-338 
+  resume.ts        |       0 |        0 |       0 |       0 | 6-24              
+  setup.ts         |   25.45 |     6.92 |   42.85 |    25.6 | ...55,467,478-518 
+  show-config.ts   |       0 |      100 |       0 |       0 | 4-16              
+  start.ts         |    5.18 |     4.02 |    2.32 |    5.52 | ...84-287,299-827 
+  status.ts        |   70.83 |    40.62 |   78.57 |   73.13 | ...,82-84,122-127 
+ lib               |   53.36 |    45.66 |   59.68 |   57.12 |                   
+  ...e-contract.ts |     100 |      100 |     100 |     100 |                   
+  bootstrap.ts     |       0 |        0 |       0 |       0 | 8-364             
+  cli-command.ts   |   73.33 |    71.42 |     100 |   81.81 | 6,19              
+  ...-bootstrap.ts |      75 |    57.31 |      90 |      80 | ...73,200,227,231 
+  ...on-metrics.ts |       0 |        0 |       0 |       0 | 142-604           
+  ...and-runner.ts |   50.68 |    20.51 |      50 |   55.55 | ...35-143,155-178 
+  config.ts        |   97.77 |    94.44 |     100 |   97.72 | 106               
+  ...ctor-tools.ts |   92.59 |    58.33 |   78.57 |     100 | 25-64             
+  env.ts           |     100 |    98.18 |     100 |     100 | 44                
+  fs.ts            |   82.97 |    26.66 |   94.73 |      85 | 26-32             
+  ...n-messages.ts |      25 |     32.6 |      50 |      25 | ...21,25,29,36-74 
+  interactive.ts   |   97.05 |    96.15 |     100 |   96.29 | 82                
+  lmstudio.ts      |   60.37 |    47.54 |      75 |   68.18 | 14-16,32-48       
+  logging.ts       |   87.69 |    58.44 |   77.77 |   86.88 | ...95-212,334-335 
+  loop-action.ts   |     100 |      100 |     100 |     100 |                   
+  metrics.ts       |       0 |        0 |       0 |       0 | 17-44             
+  ...t-recovery.ts |   69.04 |    64.44 |     100 |   70.73 | ...43-49,59,70,76 
+  model-support.ts |       0 |        0 |       0 |       0 | 7-71              
+  orchestrator.ts  |   91.17 |    71.17 |      96 |   96.66 | 144,288,331,363   
+  paths.ts         |     100 |      100 |     100 |     100 |                   
+  ...dit-sanity.ts |   88.51 |    74.11 |    91.3 |   93.99 | ...10,528,537,586 
+  ...ct-handoff.ts |    1.55 |     6.04 |    6.81 |    1.89 | 113-569,585,593   
+  ...error-meta.ts |     100 |      100 |     100 |     100 |                   
+  ...der-health.ts |       0 |        0 |       0 |       0 | 25-234            
+  qa-context.ts    |   61.16 |    48.58 |   69.76 |   66.66 | ...19-382,413-445 
+  ...references.ts |   92.85 |     87.5 |     100 |   96.42 | 53                
+  ...emediation.ts |   30.43 |    15.06 |      50 |   33.81 | ...50,270-291,295 
+  ...try-policy.ts |   71.05 |    69.33 |     100 |      75 | ...97,134,164-172 
+  readiness.ts     |   78.57 |    72.72 |      75 |   81.48 | 95-100            
+  repo.ts          |   63.63 |    57.14 |     100 |   66.66 | 14-16             
+  risk.ts          |     100 |      100 |     100 |     100 |                   
+  ...telligence.ts |   78.57 |    66.66 |      80 |   78.57 | ...69,75-76,80-81 
+  runtime.ts       |   71.79 |     46.9 |    87.5 |   79.28 | ...18-423,428-433 
+  schema.ts        |     100 |      100 |     100 |     100 |                   
+  ...ne-command.ts |   76.11 |    65.28 |     100 |   83.33 | ...60,183,196,238 
+  ...t-progress.ts |       0 |        0 |       0 |       0 | 9-485             
+  synx-ui.ts       |   40.29 |    21.42 |   44.44 |   45.76 | ...7-81,89,99-160 
+  ...-artifacts.ts |   88.88 |      100 |     100 |    87.5 | 28                
+  task-cancel.ts   |      15 |        0 |   42.85 |   18.75 | 27-35,43-56       
+  task.ts          |   87.09 |    68.75 |     100 |     100 | 10-15,66-83       
+  text-utils.ts    |     100 |      100 |     100 |     100 |                   
+  ...estimation.ts |   97.05 |       85 |     100 |     100 | 14-19,57          
+  utils.ts         |   86.95 |    72.72 |    87.5 |   88.88 | 39,46             
+  ...ion-checks.ts |   81.14 |    60.91 |   90.47 |   83.33 | ...07,214,227-228 
+  ...ace-editor.ts |   78.57 |    74.46 |      75 |   80.88 | ...22-123,134-135 
+  ...ce-scanner.ts |   88.63 |    76.66 |   90.47 |   98.18 | 228,236           
+  ...pace-tools.ts |       0 |        0 |       0 |       0 |                   
+ providers         |   65.69 |     43.5 |   68.35 |   68.78 |                   
+  factory.ts       |    2.43 |        0 |       0 |     2.7 | 11-86             
+  ...o-provider.ts |   64.91 |    46.66 |      60 |   66.07 | ...44,162,170-184 
+  mock-provider.ts |   40.74 |     37.5 |     100 |   40.74 | 32-81,106-151     
+  ...e-provider.ts |   72.88 |    50.17 |   73.01 |   76.86 | ...1178,1194,1226 
+  provider.ts      |       0 |        0 |       0 |       0 |                   
+ workers           |   62.42 |    46.85 |   61.14 |   65.22 |                   
+  base.ts          |    85.6 |    65.26 |      75 |   87.28 | ...30-331,362,365 
+  bug-fixer.ts     |    44.9 |    39.77 |   39.68 |   46.71 | ...7-958,978-1002 
+  ...vestigator.ts |   80.35 |     43.9 |   84.61 |   85.29 | ...77,239,264,295 
+  builder.ts       |   51.84 |    43.62 |   53.16 |   53.17 | ...1091-1114,1136 
+  dispatcher.ts    |   89.28 |       50 |      50 |   89.28 | 91-97             
+  index.ts         |     100 |      100 |     100 |     100 |                   
+  planner.ts       |   72.34 |    36.06 |   30.76 |   72.34 | ...73,185-191,203 
+  pr-writer.ts     |   94.44 |       50 |      75 |   94.44 | 54                
+  qa.ts            |   66.78 |    49.77 |   71.12 |   70.47 | ...1513-1520,1529 
+  researcher.ts    |   72.46 |    55.04 |   84.21 |      80 | ...11-314,333-335 
+  reviewer.ts      |       0 |        0 |       0 |       0 | 11-59             
+ workers/experts   |   99.46 |     82.5 |   96.66 |     100 |                   
+  ...ack-expert.ts |     100 |    83.33 |     100 |     100 | ...61-169,188-194 
+  ...ont-expert.ts |     100 |    81.25 |     100 |     100 | ...53,164-172,197 
+  ...ile-expert.ts |     100 |    83.33 |     100 |     100 | ...60-168,187-193 
+  ...a-engineer.ts |   97.22 |    81.69 |    87.5 |     100 | ...23,161,209,246 
+  ...specialist.ts |     100 |    83.33 |     100 |     100 | ...61-169,188-194 
+-------------------|---------|----------|---------|---------|-------------------

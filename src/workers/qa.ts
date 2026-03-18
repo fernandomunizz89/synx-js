@@ -1,7 +1,7 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { DEFAULT_QA_MAX_RETRIES, DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadPromptFile, loadResolvedProjectConfig } from "../lib/config.js";
+import { loadPromptFile, loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib/config.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../lib/code-quality-bootstrap.js";
 import { exists, readJson, writeJson } from "../lib/fs.js";
@@ -10,20 +10,28 @@ import { qaOutputSchema } from "../lib/schema.js";
 import { loadTaskMeta } from "../lib/task.js";
 import type { AgentName, StageEnvelope } from "../lib/types.js";
 import {
-  buildFallbackQaReturnContextItems,
-  buildQaCumulativeFindings,
-  compactQaReturnContextItems,
-  compactQaReturnHistoryEntries,
-  normalizeQaReturnHistoryEntries,
   type QaHandoffContext,
+  type QaReturnContextItem,
   type QaReturnHistoryEntry,
-} from "../lib/qa-context.js";
+  type QaTestCase,
+  buildQaCumulativeFindings,
+  compactQaReturnHistoryEntries,
+  formatReturnContextForView,
+  formatReturnHistoryForView,
+  formatTestCasesForView,
+  normalizeRiskLevel,
+  raiseRisk,
+  trimText,
+  uniqueNormalized,
+  normalizeQaReturnHistoryEntries,
+  compactQaReturnContextItems,
+  buildFallbackQaReturnContextItems
+} from "../lib/qa-logic.js";
 import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { createProvider } from "../providers/factory.js";
 import { nowIso } from "../lib/utils.js";
-import { normalizeRiskLevel, raiseRisk, type RiskLevel } from "../lib/risk.js";
-import { normalizeIssueLine, trimText, unique, uniqueNormalized } from "../lib/text-utils.js";
+import { unique } from "../lib/text-utils.js";
 import { detectTestCapabilities, getGitChangedFiles, runE2ESelectorPreflight, runProjectChecks } from "../lib/workspace-tools.js";
 import { WorkerBase } from "./base.js";
 
@@ -162,36 +170,11 @@ async function saveQaReturnHistory(taskId: string, entries: QaReturnHistoryEntry
   });
 }
 
-function formatReturnContextForView(contextItems: Array<{
-  issue: string;
-  expectedResult: string;
-  receivedResult: string;
-  evidence: string[];
-  recommendedAction: string;
-}>): string {
-  if (!contextItems.length) return "- [none]";
-  return contextItems
-    .map((item, index) => {
-      const evidence = item.evidence.length ? item.evidence.join(" | ") : "[none]";
-      const action = item.recommendedAction || "[none]";
-      return `${index + 1}. ${item.issue}
-   Expected: ${item.expectedResult}
-   Received: ${item.receivedResult}
-   Evidence: ${evidence}
-   Recommended action: ${action}`;
-    })
-    .join("\n");
-}
+// No-op - removed local duplicated functions
 
-function formatReturnHistoryForView(history: QaReturnHistoryEntry[]): string {
-  if (!history.length) return "- [none]";
-  return history
-    .map((entry) => {
-      const summary = entry.summary || "[no summary]";
-      return `- Attempt ${entry.attempt} -> ${entry.returnedTo} | findings=${entry.findings.length} | ${summary}`;
-    })
-    .join("\n");
-}
+
+// No-op - removed local duplicated functions
+
 
 function compactChecksForModel(
   checks: Array<{
@@ -228,14 +211,10 @@ function compactChecksForModel(
   }));
 }
 
-interface QaTestCaseLike {
-  id: string;
-  title: string;
+interface QaTestCaseLike extends QaTestCase {
   type: "functional" | "regression" | "integration" | "e2e" | "unit" | "config";
   steps: string[];
-  expectedResult: string;
   actualResult: string;
-  status: "pass" | "fail" | "blocked";
   evidence: string[];
 }
 
@@ -244,21 +223,22 @@ function compactQaTestCases(testCases: QaTestCaseLike[]): QaTestCaseLike[] {
     .map((x, index) => ({
       id: x.id || `TC-${index + 1}`,
       title: trimText(x.title || `QA Test Case ${index + 1}`, 120),
+      scenario: (x as any).scenario || x.steps.join(". "),
+      expected: (x as any).expected || (x as any).expectedResult || "Success",
       type: x.type,
       steps: x.steps.map((step) => trimText(step, 140)).slice(0, 5),
-      expectedResult: trimText(x.expectedResult, 220),
       actualResult: trimText(x.actualResult, 220),
-      status: x.status,
+      status: (x.status === "passed" ? "passed" : x.status === "failed" ? "failed" : "skipped") as "pending" | "passed" | "failed" | "skipped",
       evidence: x.evidence.map((item) => trimText(item, 160)).slice(0, 3),
     }))
-    .filter((x) => Boolean(x.title && x.expectedResult && x.actualResult));
+    .filter((x) => Boolean(x.title && x.expected && x.actualResult));
 
   return normalized.slice(0, 6);
 }
 
 function buildFallbackQaTestCases(args: {
   failures: string[];
-  returnContext: Array<{ issue: string; expectedResult: string; receivedResult: string; evidence: string[] }>;
+  returnContext: Array<QaReturnContextItem>;
   executedChecks: Array<{
     command: string;
     status: "passed" | "failed" | "skipped";
@@ -274,13 +254,14 @@ function buildFallbackQaTestCases(args: {
       output.push({
         id: `CHK-${output.length + 1}`,
         title: `Run check: ${check.command}`,
+        scenario: `Execute project check: ${check.command}`,
+        expected: "Command should exit with code 0.",
         type: /e2e|playwright/i.test(check.command) ? "e2e" : "regression",
         steps: [`Execute ${check.command}`],
-        expectedResult: "Command exits with code 0.",
         actualResult: check.diagnostics?.[0]
           ? `status=${check.status}, exit=${check.exitCode ?? "null"} | ${trimText(check.diagnostics[0], 140)}`
           : `status=${check.status}, exit=${check.exitCode ?? "null"}`,
-        status: check.status === "passed" ? "pass" : "fail",
+        status: (check.status === "passed" ? "passed" : "failed"),
         evidence: [
           `${check.command} => ${check.status}`,
           ...(check.diagnostics || []).slice(0, 2),
@@ -293,11 +274,12 @@ function buildFallbackQaTestCases(args: {
     output.push({
       id: `RC-${output.length + 1}`,
       title: item.issue,
+      scenario: `Verify finding: ${item.issue}`,
+      expected: item.expectedResult,
       type: /e2e|playwright/i.test(item.issue) ? "e2e" : "functional",
       steps: ["Reproduce the issue using current workspace state."],
-      expectedResult: item.expectedResult,
       actualResult: item.receivedResult,
-      status: "fail",
+      status: "failed",
       evidence: item.evidence,
     });
   }
@@ -307,11 +289,12 @@ function buildFallbackQaTestCases(args: {
       output.push({
         id: `F-${output.length + 1}`,
         title: trimText(failure, 120),
+        scenario: `Verify failure message: ${trimText(failure, 120)}`,
+        expected: "Acceptance criteria should be satisfied.",
         type: /e2e|playwright/i.test(failure) ? "e2e" : "functional",
         steps: ["Reproduce the failure from QA report."],
-        expectedResult: "Acceptance criteria should pass.",
         actualResult: trimText(failure, 220),
-        status: "fail",
+        status: "failed",
         evidence: [],
       });
     }
@@ -320,14 +303,8 @@ function buildFallbackQaTestCases(args: {
   return compactQaTestCases(output);
 }
 
-function formatTestCasesForView(testCases: QaTestCaseLike[]): string {
-  if (!testCases.length) return "- [none]";
-  return testCases
-    .map((tc) => `- ${tc.id} | ${tc.type.toUpperCase()} | ${tc.status.toUpperCase()} | ${tc.title}
-  Expected: ${tc.expectedResult}
-  Actual: ${tc.actualResult}`)
-    .join("\n");
-}
+// Deleted duplicate formatTestCasesForView
+
 
 function isE2eCheckCommand(command: string): boolean {
   return /\be2e\b|playwright|e2e/i.test(command);
@@ -1067,7 +1044,7 @@ function deriveQaValidationMode(checks: Array<{ status: "passed" | "failed" | "s
 }
 
 export class QaWorker extends WorkerBase {
-  readonly agent = "QA Validator" as const;
+  readonly agent = "Synx QA Engineer" as const;
   readonly requestFileName = STAGE_FILE_NAMES.qa;
   readonly workingFileName = "06-qa.working.json";
 
@@ -1075,7 +1052,7 @@ export class QaWorker extends WorkerBase {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("qa-validator.md");
-    const provider = createProvider(config.providers.planner);
+    const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const baseInput = await this.buildAgentInput(taskId, request);
     const qaPreferences = resolveTaskQaPreferences(baseInput.task);
     const meta = await loadTaskMeta(taskId);
@@ -1190,7 +1167,7 @@ export class QaWorker extends WorkerBase {
       },
     });
 
-    const remediationAgent: AgentName = baseInput.task.typeHint === "Bug" ? "Bug Fixer" : "Feature Builder";
+    const remediationAgent: AgentName = baseInput.task.typeHint === "Bug" ? "Synx Back Expert" : "Synx Front Expert";
 
     const modelInput = {
       ...baseInput,
@@ -1247,26 +1224,26 @@ MANDATORY VALIDATION CONTRACT:
 - Explicitly fill filesReviewed, validationMode, technicalRiskSummary, recommendedChecks, manualValidationNeeded, and residualRisks.
 - Do not claim full certainty unless checks were truly executed.
 - If part of the conclusion is static analysis only, state it in residualRisks/manualValidationNeeded.
-- If verdict is "pass", set "nextAgent" to "PR Writer".
+- If verdict is "pass", set "nextAgent" to "Human Review".
 - This QA attempt is ${currentQaAttempt} of max ${maxQaRetriesHint} before forced human escalation.
 - Keep failures specific and actionable.
 `;
 
-    const roleContract = buildAgentRoleContract("QA Validator", {
+    const roleContract = buildAgentRoleContract("Synx QA Engineer", {
       stage: "qa",
       taskTypeHint: baseInput.task.typeHint,
       qaAttempt: currentQaAttempt,
     });
     const systemPrompt = `${prompt.replace("{{INPUT_JSON}}", JSON.stringify(modelInput, null, 2))}\n\n${roleContract}\n\n${strictContract}`;
     const result = await provider.generateStructured({
-      agent: "QA Validator",
+      agent: "Synx QA Engineer",
       taskId,
       stage: request.stage,
       taskType: baseInput.task.typeHint,
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "PR Writer | Feature Builder | Bug Fixer" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "Human Review | Synx Front Expert | Synx Back Expert" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
@@ -1308,7 +1285,8 @@ MANDATORY VALIDATION CONTRACT:
       config: retryConfig,
     });
 
-    output.nextAgent = output.verdict === "pass" ? "PR Writer" : remediationAgent;
+    const finalNextAgent: AgentName = output.verdict === "pass" ? "Human Review" : remediationAgent;
+    output.nextAgent = finalNextAgent;
     const escalatedToHuman = output.verdict === "fail" && currentQaAttempt >= maxQaRetries;
     if (escalatedToHuman) {
       output.failures = unique([
@@ -1387,7 +1365,7 @@ MANDATORY VALIDATION CONTRACT:
           diagnostics: x.diagnostics,
         })),
       }),
-    ]);
+    ] as any);
     output.validationMode = deriveQaValidationMode(output.executedChecks);
     output.recommendedChecks = uniqueNormalized([
       ...output.recommendedChecks,
@@ -1396,7 +1374,7 @@ MANDATORY VALIDATION CONTRACT:
         .map((check) => `Re-run and confirm: ${check.command}`),
       ...output.e2ePlan,
     ]).slice(0, 12);
-    const technicalRiskSummary = output.technicalRiskSummary;
+    const technicalRiskSummary = output.technicalRiskSummary as any;
     technicalRiskSummary.buildRisk = normalizeRiskLevel(technicalRiskSummary.buildRisk);
     technicalRiskSummary.syntaxRisk = normalizeRiskLevel(technicalRiskSummary.syntaxRisk);
     technicalRiskSummary.importExportRisk = normalizeRiskLevel(technicalRiskSummary.importExportRisk);
@@ -1444,7 +1422,7 @@ MANDATORY VALIDATION CONTRACT:
       const latestReturnEntry: QaReturnHistoryEntry = {
         attempt: currentQaAttempt,
         returnedAt: nowIso(),
-        returnedTo: remediationAgent,
+        returnedTo: remediationAgent as any,
         summary: output.failures[0] || "QA validation failed.",
         failures: [...output.failures],
         findings: output.returnContext,
@@ -1469,12 +1447,8 @@ MANDATORY VALIDATION CONTRACT:
     output.qaHandoffContext = qaHandoffContext;
 
     const queuedNextAgent = escalatedToHuman ? undefined : output.nextAgent;
-    const queuedNextStage = queuedNextAgent === "PR Writer" ? "pr" : queuedNextAgent === "Bug Fixer" ? "bug-fixer" : "builder";
-    const queuedNextRequestFileName = queuedNextAgent === "PR Writer"
-      ? STAGE_FILE_NAMES.pr
-      : queuedNextAgent === "Bug Fixer"
-        ? STAGE_FILE_NAMES.bugFixer
-        : STAGE_FILE_NAMES.builder;
+    const queuedNextStage = "builder";
+    const queuedNextRequestFileName = STAGE_FILE_NAMES.builder;
     const nextInputRef = `done/${DONE_FILE_NAMES.qa}`;
 
     const view = `# HANDOFF
@@ -1489,7 +1463,7 @@ ${output.mainScenarios.length ? output.mainScenarios.map((x, index) => `${index 
 ${output.acceptanceChecklist.length ? output.acceptanceChecklist.map((x) => `- [ ] ${x}`).join("\n") : "- [none]"}
 
 ## QA Test Cases
-${formatTestCasesForView(output.testCases)}
+${formatTestCasesForView(output.testCases as any)}
 
 ## Failures
 ${output.failures.length ? output.failures.map((x) => `- ${x}`).join("\n") : "- [none]"}

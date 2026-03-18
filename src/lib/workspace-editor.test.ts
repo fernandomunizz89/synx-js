@@ -95,4 +95,62 @@ describe("workspace-editor (hybrid)", () => {
       "src/dry-run.ts (replace_snippet skipped: target snippet not found)",
     ]));
   });
+
+  it("handles various skip conditions and errors", async () => {
+    const invalidPath = path.join(workspaceRoot, "src/invalid.ts");
+    await fs.writeFile(invalidPath, "some content", "utf8");
+
+    const result = await applyWorkspaceEdits({
+      workspaceRoot,
+      edits: [
+        {
+          path: "src/non-existent.ts",
+          action: "delete",
+        },
+        {
+          path: "src/non-existent.ts",
+          action: "replace_snippet",
+          find: "foo",
+          replace: "bar",
+        },
+        {
+          path: "src/invalid.ts",
+          action: "replace_snippet",
+          find: "",
+          replace: "bar",
+        },
+        {
+          path: "src/no-content.ts",
+          action: "create",
+        },
+      ],
+    });
+
+    expect(result.skippedEdits).toContain("src/non-existent.ts (delete skipped: file does not exist)");
+    expect(result.skippedEdits).toContain("src/non-existent.ts (replace_snippet skipped: file does not exist)");
+    expect(result.skippedEdits).toContain("src/invalid.ts (replace_snippet skipped: missing find/replace)");
+    expect(result.skippedEdits).toContain("src/no-content.ts (create skipped: missing content)");
+  });
+
+  it("skips if content is unchanged", async () => {
+    const filePath = path.join(workspaceRoot, "src/unchanged.ts");
+    await fs.writeFile(filePath, "same content", "utf8");
+
+    const result = await applyWorkspaceEdits({
+      workspaceRoot,
+      edits: [
+        {
+          path: "src/unchanged.ts",
+          action: "replace",
+          content: "same content",
+        },
+      ],
+    });
+
+    expect(result.skippedEdits).toContain("src/unchanged.ts (replace skipped: content unchanged)");
+  });
+
+  it("throws for invalid paths", () => {
+    expect(() => resolveWorkspacePath(workspaceRoot, "")).toThrow("Edit path is empty.");
+  });
 });

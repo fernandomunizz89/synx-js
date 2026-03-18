@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/ 
+.next/
+
+# Configuration
+.ai-agents/
+.vscode/
+
+# OS specific files
+.DS_Store
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Media and binaries
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.pdf
+*.zip
+
+# Logs and temporaries
+*.log
+.tmp/
+.cache/
+
+# Environment files
+.env
+.env.example
+.env.*
+
+# Coverage
+coverage/
+htmlcov/
+.nyc_output/
+*.lcov
+coverage_report.txt
+*.log
+
+# Local history
+.history/
+
+# Heavy docs images/base64
+docs/assets/

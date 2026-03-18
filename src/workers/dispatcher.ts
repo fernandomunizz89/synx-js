@@ -1,7 +1,7 @@
 import path from "node:path";
 import { readJson } from "../lib/fs.js";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadResolvedProjectConfig, loadPromptFile } from "../lib/config.js";
+import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../lib/config.js";
 import { taskDir } from "../lib/paths.js";
 import { collectProjectProfile, projectProfileFactLines } from "../lib/project-handoff.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
@@ -22,7 +22,7 @@ export class DispatcherWorker extends WorkerBase {
     const startedAt = nowIso();
     const config = await loadResolvedProjectConfig();
     const prompt = await loadPromptFile("dispatcher.md");
-    const provider = createProvider(config.providers.dispatcher);
+    const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const input = await readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
     const projectProfile = await collectProjectProfile({
       workspaceRoot: process.cwd(),
@@ -49,14 +49,26 @@ export class DispatcherWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner" }',
+        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Bug Investigator | Spec Planner | Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist", "targetExpert": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Feature Builder (only when nextAgent is Spec Planner, identifies the expert to use after planning)" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);
     output.knownFacts = unique([...output.knownFacts, ...projectProfileFactLines(projectProfile)]);
     const nextAgent = output.nextAgent;
-    const nextStage = nextAgent === "Bug Investigator" ? "bug-investigator" : "planner";
-    const nextFileName = nextAgent === "Bug Investigator" ? STAGE_FILE_NAMES.bugInvestigator : STAGE_FILE_NAMES.planner;
+
+    // Dream Stack 2026 routing
+    const stageMap: Record<string, { stage: string; fileName: string }> = {
+      "Bug Investigator":  { stage: "bug-investigator",  fileName: STAGE_FILE_NAMES.bugInvestigator },
+      "Spec Planner":      { stage: "planner",           fileName: STAGE_FILE_NAMES.planner },
+      "Synx Front Expert": { stage: "synx-front-expert",  fileName: STAGE_FILE_NAMES.synxFrontExpert },
+      "Synx Mobile Expert":{ stage: "synx-mobile-expert", fileName: STAGE_FILE_NAMES.synxMobileExpert },
+      "Synx Back Expert":  { stage: "synx-back-expert",   fileName: STAGE_FILE_NAMES.synxBackExpert },
+      "Synx QA Engineer":  { stage: "synx-qa-engineer",   fileName: STAGE_FILE_NAMES.synxQaEngineer },
+      "Synx SEO Specialist": { stage: "synx-seo-specialist", fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
+    };
+    const routing = stageMap[nextAgent] ?? { stage: "planner", fileName: STAGE_FILE_NAMES.planner };
+    const nextStage = routing.stage;
+    const nextFileName = routing.fileName;
 
     const view = `# HANDOFF
 

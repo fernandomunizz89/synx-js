@@ -2,10 +2,40 @@ import path from "node:path";
 import { readJson, readText, statSafe } from "./fs.js";
 import { configDir, globalConfigPath, promptsDir } from "./paths.js";
 import { globalConfigSchema, localProjectConfigSchema } from "./schema.js";
-import type { GlobalConfig, LocalProjectConfig, ResolvedProjectConfig, ProviderStageConfig } from "./types.js";
+import type {
+  AgentName,
+  GlobalConfig,
+  LocalProjectConfig,
+  ResolvedProjectConfig,
+  ProviderStageConfig,
+} from "./types.js";
 
 function mergeProvider(base: ProviderStageConfig, override?: Partial<ProviderStageConfig>): ProviderStageConfig {
   return { ...base, ...(override || {}) };
+}
+
+function mergeAgentProviders(args: {
+  baseProviders: { dispatcher: ProviderStageConfig; planner: ProviderStageConfig };
+  globalOverrides?: Partial<Record<AgentName, ProviderStageConfig>>;
+  localOverrides?: Partial<Record<AgentName, Partial<ProviderStageConfig>>>;
+}): Partial<Record<AgentName, ProviderStageConfig>> {
+  const merged: Partial<Record<AgentName, ProviderStageConfig>> = {};
+
+  if (args.globalOverrides) {
+    for (const [agentKey, config] of Object.entries(args.globalOverrides)) {
+      merged[agentKey as AgentName] = mergeProvider(config, undefined);
+    }
+  }
+
+  if (args.localOverrides) {
+    for (const [agentKey, override] of Object.entries(args.localOverrides)) {
+      const agent = agentKey as AgentName;
+      const base = merged[agent] ?? (agent === "Dispatcher" ? args.baseProviders.dispatcher : args.baseProviders.planner);
+      merged[agent] = mergeProvider(base, override);
+    }
+  }
+
+  return merged;
 }
 
 interface ResolvedConfigCacheEntry {
@@ -67,16 +97,24 @@ export async function loadResolvedProjectConfig(): Promise<ResolvedProjectConfig
 
   const globalConfig = await loadGlobalConfig();
   const localConfig = await loadLocalProjectConfig();
+  const dispatcherProvider = mergeProvider(globalConfig.providers.dispatcher, localConfig.providerOverrides?.dispatcher);
+  const plannerProvider = mergeProvider(globalConfig.providers.planner, localConfig.providerOverrides?.planner);
+  const baseProviders = {
+    dispatcher: dispatcherProvider,
+    planner: plannerProvider,
+  };
   const resolved: ResolvedProjectConfig = {
     projectName: localConfig.projectName,
     language: localConfig.language,
     framework: localConfig.framework,
     humanReviewer: localConfig.humanReviewer || globalConfig.defaults.humanReviewer,
     tasksDir: localConfig.tasksDir,
-    providers: {
-      dispatcher: mergeProvider(globalConfig.providers.dispatcher, localConfig.providerOverrides?.dispatcher),
-      planner: mergeProvider(globalConfig.providers.planner, localConfig.providerOverrides?.planner),
-    },
+    providers: baseProviders,
+    agentProviders: mergeAgentProviders({
+      baseProviders,
+      globalOverrides: globalConfig.agentProviders,
+      localOverrides: localConfig.providerOverrides?.agents,
+    }),
   };
 
   if (!cacheDisabled) {
@@ -94,6 +132,10 @@ export async function loadResolvedProjectConfig(): Promise<ResolvedProjectConfig
   }
 
   return resolved;
+}
+
+export function resolveProviderConfigForAgent(config: ResolvedProjectConfig, agent: AgentName): ProviderStageConfig {
+  return config.agentProviders[agent] ?? (agent === "Dispatcher" ? config.providers.dispatcher : config.providers.planner);
 }
 
 export async function loadPromptFile(fileName: string): Promise<string> {

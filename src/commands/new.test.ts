@@ -61,6 +61,8 @@ describe.sequential("commands/new", () => {
       e2eFramework: "playwright",
       objective: "Make Playwright E2E tests pass.",
     });
+    // @ts-ignore - reset options to avoid interference between tests
+    newCommand._optionValues = {};
     consoleSpy.mockClear();
   });
 
@@ -149,5 +151,125 @@ describe.sequential("commands/new", () => {
       title: "Alias type parsing",
       typeHint: "Feature",
     });
+  });
+
+  it("throws error on invalid --type", async () => {
+    await expect(newCommand.parseAsync([
+      "node",
+      "synx",
+      "Invalid type",
+      "--type",
+      "invalid-type"
+    ])).rejects.toThrow('Invalid --type value "invalid-type"');
+  });
+
+  it("handles interactive prompts when title or type is missing", async () => {
+    mocks.promptRequiredText.mockResolvedValue("Interactive Title");
+    mocks.selectOption
+      .mockResolvedValueOnce("Refactor") // type
+      .mockResolvedValueOnce("skip")    // e2ePolicy
+      .mockResolvedValueOnce("auto");    // e2eFramework
+
+    await newCommand.parseAsync(["node", "synx"]);
+
+    expect(mocks.promptRequiredText).toHaveBeenCalledWith(expect.stringContaining("Task title"));
+    expect(mocks.selectOption).toHaveBeenCalledWith(expect.stringContaining("Choose task type"), expect.anything(), "Feature");
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Interactive Title",
+      typeHint: "Refactor"
+    }));
+  });
+
+  it("handles different E2E policy aliases", async () => {
+    const scenarios = [
+      { input: "yes", expected: "required" },
+      { input: "no", expected: "skip" },
+      { input: "auto", expected: "auto" }
+    ];
+
+    for (const { input, expected } of scenarios) {
+      mocks.createTask.mockClear();
+      await newCommand.parseAsync([
+        "node",
+        "synx",
+        "Test E2E",
+        "--type",
+        "Feature",
+        "--e2e",
+        input,
+        "--e2e-framework",
+        "auto"
+      ]);
+      expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        extraContext: expect.objectContaining({
+          qaPreferences: expect.objectContaining({
+            e2ePolicy: expected
+          })
+        })
+      }));
+    }
+  });
+
+  it("throws error on invalid --e2e", async () => {
+    await expect(newCommand.parseAsync([
+      "node",
+      "synx",
+      "Invalid E2E",
+      "--e2e",
+      "maybe"
+    ])).rejects.toThrow('Invalid --e2e value "maybe"');
+  });
+
+  it("handles different E2E frameworks", async () => {
+    await newCommand.parseAsync([
+      "node",
+      "synx",
+      "Test Framework",
+      "--type",
+      "Feature",
+      "--e2e",
+      "required",
+      "--e2e-framework",
+      "other"
+    ]);
+    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      extraContext: expect.objectContaining({
+        qaPreferences: expect.objectContaining({
+          e2eFramework: "other"
+        })
+      })
+    }));
+  });
+
+  it("throws error on invalid --e2e-framework", async () => {
+    await expect(newCommand.parseAsync([
+      "node",
+      "synx",
+      "Invalid Framework",
+      "--e2e-framework",
+      "selenium"
+    ])).rejects.toThrow('Invalid --e2e-framework value "selenium"');
+  });
+
+  it("handles mixed/research/docs types", async () => {
+    const types = ["Mixed", "Research", "Docs"];
+    for (const type of types) {
+      mocks.createTask.mockClear();
+      await newCommand.parseAsync([
+        "node", "synx", "Test " + type, "--type", type, "--e2e", "skip", "--e2e-framework", "auto"
+      ]);
+      const expectedType = type === "Docs" ? "Documentation" : type;
+      expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+        typeHint: expectedType
+      }));
+    }
+  });
+
+  it("shows warning when readiness is not ok", async () => {
+    mocks.collectReadinessReport.mockResolvedValue({ ok: false, issues: [] });
+    await newCommand.parseAsync([
+        "node", "synx", "Warning test", "--type", "Bug", "--e2e", "skip", "--e2e-framework", "auto"
+    ]);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("processing may fail until setup is fixed"));
   });
 });

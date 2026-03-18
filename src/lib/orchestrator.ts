@@ -204,7 +204,7 @@ async function withResearcherMeta(taskId: string, stage: string, run: () => Prom
     humanApprovalRequired: before.humanApprovalRequired,
   };
 
-  before.currentAgent = "Researcher";
+  before.currentAgent = "Dispatcher";  // Temporary identity during research sub-invocation
   before.currentStage = `${stage}:research`;
   before.status = "in_progress";
   await saveTaskMeta(taskId, before);

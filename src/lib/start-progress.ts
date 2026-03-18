@@ -8,14 +8,14 @@ import { formatSynxStatus, renderSynxLogo, renderSynxPanel, synxControlFlowDiagr
 
 const BAR_WIDTH = 22;
 
-function formatDuration(ms: number): string {
+export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function stageRoute(meta: TaskMeta): string[] {
+export function stageRoute(meta: TaskMeta): string[] {
   const stagesInHistory = new Set(meta.history.map((x) => x.stage));
   if (stagesInHistory.has("bug-fixer")) {
     return ["dispatcher", "bug-investigator", "bug-fixer", "reviewer", "qa", "pr"];
@@ -32,7 +32,7 @@ function stageRoute(meta: TaskMeta): string[] {
   return ["dispatcher", "planner", "builder", "reviewer", "qa", "pr"];
 }
 
-function stageLabel(stage: string): string {
+export function stageLabel(stage: string): string {
   switch (stage) {
     case "dispatcher":
       return "Dispatcher";
@@ -67,7 +67,7 @@ function stageLabel(stage: string): string {
   }
 }
 
-function progressForMeta(meta: TaskMeta): { done: number; total: number; ratio: number } {
+export function progressForMeta(meta: TaskMeta): { done: number; total: number; ratio: number } {
   const total = stageRoute(meta).length;
   let done = Math.min(meta.history.length, total);
   let ratio = done / total;
@@ -84,7 +84,7 @@ function progressForMeta(meta: TaskMeta): { done: number; total: number; ratio: 
   return { done, total, ratio };
 }
 
-function progressBar(ratio: number): string {
+export function progressBar(ratio: number): string {
   const bounded = Math.max(0, Math.min(1, ratio));
   const filled = Math.round(bounded * BAR_WIDTH);
   const empty = BAR_WIDTH - filled;
@@ -152,7 +152,7 @@ function addBlockPadding(text: string, padding: { top: number; right: number; bo
   return [...top, ...paddedLines, ...bottom].join("\n");
 }
 
-function buildUserInputLines(args: {
+export function buildUserInputLines(args: {
   width: number;
   promptIndicator: string;
   promptCursor: string;
@@ -343,7 +343,7 @@ class TtyStartProgressRenderer implements StartProgressRenderer {
       ? (snapshot.consoleLogLines.length ? snapshot.consoleLogLines.slice(-5) : [synxMuted("No console messages yet.")])
       : (snapshot.eventLogLines.length ? snapshot.eventLogLines.slice(-5) : [synxMuted("No events yet. Waiting for activity...")]);
     const researcherActive = snapshot.metas.some((meta) =>
-      (meta.currentAgent === "Researcher" || meta.currentStage.endsWith(":research"))
+      meta.currentStage.endsWith(":research")
       && ["new", "in_progress", "waiting_agent"].includes(meta.status),
     );
     if (!isConsoleView && researcherActive) {

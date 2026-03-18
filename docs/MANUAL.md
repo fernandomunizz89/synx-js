@@ -1,19 +1,17 @@
-# SYNX - Human-friendly manual
+# SYNX – Operations Manual
 
 ## What this tool does
-It runs a local agents pipeline inside your repository.
+It runs a local AI agent pipeline inside your repository using a specialized **Dream Stack 2026** expert squad.
 
 The system:
 - creates a safe hidden work area in `.ai-agents/`
-- creates tasks
-- moves tasks through stages automatically
-- routes bug tasks through `Bug Investigator -> Bug Fixer`
+- creates tasks and moves them through stages automatically
+- routes tasks to the right domain expert (Front, Mobile, Back, SEO Specialist)
+- validates results via the QA Engineer (Playwright E2E + Vitest unit)
 - stops at the final human approval step
 - logs how long every stage took
 - can recover unfinished work after interruptions
-- runs all pipeline agents with provider-backed structured outputs
-- sends failed QA back to the right implementation agent automatically
-- can invoke an on-demand `Researcher` service for external technical context
+- invokes an on-demand `Researcher` for external technical context
 
 ## The 4 commands you will use most
 
@@ -51,7 +49,7 @@ synx setup
 
 When running in an interactive terminal, `start` also shows a live progress panel:
 - SYNX cyber logo + tagline
-- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Planner]`
+- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Expert] ➔ [QA Engineer]`
 - double-line cards for control/config/task states
 - `USER INPUT` card (boxed prompt with visible cursor indicator)
 - inline event stream card (clean runtime updates without terminal pollution)
@@ -116,21 +114,23 @@ Supported task types:
 - `Mixed`
 
 Routing summary:
-- `Bug`: Dispatcher -> Bug Investigator -> Bug Fixer -> Reviewer -> QA -> PR Writer -> Human approval
-- Other types: Dispatcher -> Spec Planner -> Feature Builder -> Reviewer -> QA -> PR Writer -> Human approval
-- QA fail: loops back to Bug Fixer (bug tasks) or Feature Builder (other task types)
-- On-demand `Researcher` (non-linear): can be called from `Spec Planner`, `Feature Builder`, or `Bug Fixer`
-  - trigger 1: upstream confidence signal `< 0.6`
-  - trigger 2: QA detects same issue on the 2nd consecutive cycle
-  - output only: structured knowledge JSON (no code edits)
-  - anti-loop: if recommendation repeats and issue persists, task escalates to `waiting_human`
-- QA captures compact diagnostics from failed checks (including E2E) and sends expected-vs-received evidence in the handoff
-- QA/implementation now follow human per-task E2E preferences (`--e2e`, `--e2e-framework`, `--qa-objective`)
-- QA fail handoff includes structured context per blocker: expected result, received result, evidence, and recommended action
-- QA return context is cumulative and updated on each loop so the next implementation attempt sees prior QA findings
-- QA now emits explicit test cases with expected vs actual results (real QA mindset)
-- In repeated QA loops, implementation agents are instructed to change strategy, not repeat the same failed approach
-- QA retry loop is capped (default 3 fails). After the cap, the task is escalated to human review (`waiting_human`).
+- **Bug tasks:** `Dispatcher → Bug Investigator → Bug Fixer → Synx QA Engineer → Human Review`
+- **Simple/clear tasks:** `Dispatcher → Expert → Synx QA Engineer → Human Review`
+- **Complex/ambiguous tasks:** `Dispatcher → Spec Planner (targetExpert hint) → Expert → Synx QA Engineer → Human Review`
+
+Expert Squad:
+- `Synx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
+- `Synx Mobile Expert` – Expo, React Native, Reanimated, EAS
+- `Synx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
+- `Synx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API, Lighthouse ≥ 90
+- `Synx QA Engineer` – Playwright E2E + Vitest unit; auto-routes failures to originating expert
+
+QA failure behavior:
+- QA failure context is cumulative across retries
+- QA retry loop is capped (default 3). Exceeded cap → escalates to `waiting_human`
+- On-demand `Researcher` triggers when confidence < 0.6 or the same QA failure repeats twice
+- Research anti-loop: if recommendation repeats while issue persists, task escalates to `waiting_human`
+- QA captures evidence per finding: `issue`, `expectedResult`, `receivedResult`, `evidence[]`, `recommendedAction`
 
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).
 
@@ -285,6 +285,25 @@ synx start
 - Cloud: `openai-compatible` preset for OpenAI/OpenRouter/custom gateways.
 - In preset env mode, setup keeps the provider base URL in config and usually requires only the API key env variable.
 - You can switch models/providers per machine without changing pipeline stages.
+- Anthropic Claude Code (`anthropic`) for Claude-oriented workloads using `AI_AGENTS_ANTHROPIC_API_KEY`.
+
+### Environment files
+SYNX reads a `.env` file from the current working directory before any command runs, so API keys can live in that file instead of being typed manually in every shell. Copy `.env.example` to `.env` and replace the placeholder values with your real secrets. Each provider already knows which environment names to look for:
+
+- `AI_AGENTS_OPENAI_BASE_URL` and `AI_AGENTS_OPENAI_API_KEY` (OpenAI-compatible endpoints)
+- `AI_AGENTS_GOOGLE_API_KEY` (Google Cloud generative AI)
+- `AI_AGENTS_LMSTUDIO_API_KEY` (LM Studio when you host local models)
+- `AI_AGENTS_ANTHROPIC_API_KEY` (Claude Code / Anthropic models)
+
+Use the usual `KEY=VALUE` or `export KEY=VALUE` syntax and wrap values in quotes if they contain spaces. The repository also provides a `.env.example` stub with the provider keys defined; copy it to `.env` before editing. Example `.env`:
+
+```
+AI_AGENTS_OPENAI_BASE_URL=https://api.openai.com/v1
+AI_AGENTS_OPENAI_API_KEY=sk-us-east-123
+AI_AGENTS_GOOGLE_API_KEY=AIza...
+```
+
+Keep that file in the repo root, add it to `.gitignore`, and reload `synx` (or reopen your terminal) after editing to make the new secrets available.
 
 ## Where files live
 
@@ -417,6 +436,11 @@ Agent defaults:
 - `QA Validator`: `0.05`
 - `PR Writer`: `0.3`
 - `Human Review`: `0.1`
+- `Synx Front Expert`: `0.05`
+- `Synx Mobile Expert`: `0.05`
+- `Synx Back Expert`: `0.05`
+- `Synx QA Engineer`: `0.05`
+- `Synx SEO Specialist`: `0.10`
 
 Task-type defaults:
 - `Feature`: `0.1`
