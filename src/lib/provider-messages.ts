@@ -1,6 +1,11 @@
 import { envNumber } from "./env.js";
 import type { ProviderRequest } from "./types.js";
 import { estimateTokensFromChars } from "./token-estimation.js";
+import {
+  encodeInputJson,
+  resolveInputEncodingModeFromEnv,
+  type InputEncodingMode,
+} from "./input-encoding.js";
 
 function resolveContextBudgetChars(): number {
   return envNumber("AI_AGENTS_PROVIDER_MAX_CONTEXT_CHARS", 120_000, {
@@ -69,24 +74,60 @@ function shortenText(value: string, maxChars: number): string {
   return `${next.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
+function normalizeForEmbedding(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function isInputEmbeddedInSystemPrompt(systemPrompt: string, inputJson: string): boolean {
-  const maybeEmbeddedSample = inputJson.slice(0, Math.min(240, inputJson.length));
-  return maybeEmbeddedSample.length > 32 && systemPrompt.includes(maybeEmbeddedSample);
+  // Normaliza espaços para funcionar mesmo quando mudamos de JSON "pretty" para "minified".
+  const normalizedSystem = normalizeForEmbedding(systemPrompt);
+  const normalizedSample = normalizeForEmbedding(inputJson).slice(0, Math.min(240, inputJson.length));
+  return normalizedSample.length > 32 && normalizedSystem.includes(normalizedSample);
+}
+
+function resolveInputEncodingMode(): InputEncodingMode {
+  return resolveInputEncodingModeFromEnv();
 }
 
 function buildStatelessUserMessage(request: ProviderRequest): string {
-  const inputJsonRaw = JSON.stringify(request.input, null, 2);
+  const inputEncodingMode = resolveInputEncodingMode();
+  const encoding = encodeInputJson(request.input, { mode: inputEncodingMode });
+  const inputJsonRaw = encoding.json;
   const inputBudget = resolveInputPayloadBudgetChars();
-  const inputJson = truncateTextForBudget(inputJsonRaw, inputBudget, "input_json").text;
+  const inputLabel = inputEncodingMode === "pretty"
+    ? "input_json"
+    : `input_json_${inputEncodingMode}`;
+  const inputJson = truncateTextForBudget(inputJsonRaw, inputBudget, inputLabel).text;
   const userParts = [
     "Return ONLY valid JSON.",
     `Expected shape: ${request.expectedJsonSchemaDescription}`,
   ];
 
+  if (inputEncodingMode !== "pretty") {
+    const prettyTokens = encoding.meta.prettyTokensEstimate;
+    const encodedTokens = encoding.meta.encodedTokensEstimate;
+    const savingsChars = encoding.meta.savingsChars;
+    const savingsTokens = encoding.meta.savingsTokensEstimate;
+
+    userParts.push(
+      `Input encoding=${encoding.meta.actualMode} (pre-trunc estimate): ` +
+      `pretty=${encoding.meta.prettyChars} chars (~${prettyTokens} tokens) -> ` +
+      `encoded=${encoding.meta.encodedChars} chars (~${encodedTokens} tokens), ` +
+      `savings=~${Math.max(0, savingsChars)} chars (~${Math.max(0, savingsTokens)} tokens).`,
+    );
+  }
+
   if (!isInputEmbeddedInSystemPrompt(request.systemPrompt, inputJson)) {
     userParts.push("Input:", inputJson);
   } else {
     userParts.push("Input is already included in the system instructions.");
+  }
+
+  if (inputEncodingMode === "toon") {
+    // Instrução curta para o modelo interpretar o TOON-like: ignorar wrapper e reconstruir chaves.
+    userParts.push(
+      "TOONv1 decode: ignore __toonV/__toonKeysMap; use __toonData; for each object key code (like k0), replace it with __toonKeysMap[code].",
+    );
   }
 
   if (inputJsonRaw.length > inputJson.length) {
