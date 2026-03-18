@@ -15,7 +15,7 @@
 SYNX is a CLI orchestrator for a multi-agent AI pipeline. It manages autonomous software development tasks inside local repositories using a file-driven, stage-based approach.
 
 **Dream Stack 2026 – Active Architecture:**
-The engine runs a specialized squad of domain experts. The Dispatcher triages each task and routes it — either directly to the right expert (simple/clear tasks) or through the Spec Planner first (complex/ambiguous tasks).
+The engine runs a specialized squad of domain experts. The Dispatcher triages each task and routes it directly to the right expert.
 
 Expert Squad:
 - `Synx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
@@ -24,8 +24,6 @@ Expert Squad:
 - `Synx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API
 - `Synx QA Engineer` – Playwright E2E + Vitest; auto-routes failures back to the originating expert
 
-**Conditional Planning:**
-The Dispatcher sets `nextAgent: "Spec Planner"` with a `targetExpert` hint for complex tasks. The Spec Planner decomposes the task and routes directly to the correct expert.
 
 **Key architectural points:**
 - Core orchestrator lives in `src/` (TypeScript, ESM)
@@ -52,7 +50,6 @@ The pipeline is file-driven: every stage writes a JSON handoff to `.ai-agents/ta
 ## ✨ Features
 
 - **Domain Expert Squad:** Specialized agents for web (Next.js), mobile (Expo/RN), backend (NestJS/Fastify), and SEO (Core Web Vitals / JSON-LD).
-- **Conditional Planning:** The Dispatcher routes simple tasks directly to experts; complex tasks go through the Spec Planner first with a `targetExpert` hint.
 - **Smart QA Loop:** QA Engineer runs Playwright (E2E) or Vitest (unit) and automatically routes failures back to the originating expert, capped at 3 retries.
 - **Root Cause Intelligence:** QA carries structured failure context (`issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction`) in every handoff.
 - **Provider Agnostic:** Supports LM Studio (local) and any OpenAI-compatible cloud endpoint.
@@ -148,25 +145,13 @@ synx metrics --since 2026-03-16T00:00:00Z
 
 ## 🧠 Architecture — Dream Stack 2026
 
-SYNX uses a **Conditional Planning** model: the Dispatcher decides in real time whether a task needs decomposition or can flow directly to an expert.
+SYNX uses a direct triage model: the Dispatcher decides in real time which expert should handle the task.
 
 ### Routing
 
 ```
-Simple / clear tasks:
+Triage and Execution:
   Dispatcher ──────────────────────────────► Expert ──► QA Engineer ──► Human Review
-
-Complex / ambiguous tasks:
-  Dispatcher (targetExpert hint)
-      │
-      ▼
-  Spec Planner (decomposes → routes to targetExpert)
-      │
-      ▼
-  Expert ──► QA Engineer ──► Human Review
-
-Bug tasks:
-  Dispatcher ──► Bug Investigator ──► Bug Fixer ──► QA Engineer ──► Human Review
 ```
 
 ### Expert Squad

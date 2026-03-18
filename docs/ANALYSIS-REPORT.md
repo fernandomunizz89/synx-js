@@ -38,7 +38,7 @@ Complex/ambiguous tasks:
   Spec Planner ──► Expert ──► QA Engineer ──► Human Review
 
 Bug tasks:
-  Dispatcher ──► Bug Investigator ──► Bug Fixer ──► QA Engineer ──► Human Review
+  Dispatcher ──► Bug Investigator ──► QA Engineer ──► Human Review
 ```
 
 ### 2.2 Technical Stack
@@ -100,15 +100,7 @@ thresholds: {
 
 ### 4.3 Legacy Naming in Types
 
-The `AgentName` type still includes discontinued agents:
-
-```ts
-| "Feature Builder"
-| "QA Validator"
-| "PR Writer"
-```
-
-This may cause confusion and unnecessary coupling.
+Os nomes de agentes legados foram removidos do `AgentName` (mantemos apenas os agentes ativos do Expert Squad).
 
 ### 4.4 External Researcher Dependencies
 
@@ -121,7 +113,6 @@ Some workers have too many lines and responsibilities:
 
 - `qa.ts` (~1500 lines)
 - `builder.ts` (~1100 lines)
-- `bug-fixer.ts` (~1000 lines)
 
 Maintenance and unit testing are more difficult.
 
@@ -149,7 +140,7 @@ The current workflow does not execute:
 
 ### 5.3 Type Cleanup
 
-- Mark `Feature Builder`, `QA Validator`, and `PR Writer` as deprecated or remove if no longer used.
+- Remove or deprecate any remaining legacy agent naming so Zod schema and workers use only active agents.
 - Ensure Zod schema and workers use only active agents.
 
 ### 5.4 Researcher Documentation
@@ -169,7 +160,7 @@ The current workflow does not execute:
 ### 5.6 Decomposition of Large Modules
 
 - Extract helpers from `qa.ts` into smaller modules (e.g., `qa-runner.ts`, `qa-verdict.ts`).
-- Apply a similar pattern in `builder.ts` and `bug-fixer.ts`.
+- Apply a similar pattern in `builder.ts`.
 
 ### 5.7 Security and Secrets
 
@@ -203,7 +194,7 @@ SYNX is a mature and well-documented project with a clear architecture and robus
 
 1. **Short term:** Adjust CI (lint + check) and coverage thresholds.
 2. **Medium term:** Tests for `provider-health`, `workspace-tools`, and Researcher documentation.
-3. **Long term:** Refactor `qa.ts`, `builder.ts`, and `bug-fixer.ts` into smaller modules.
+3. **Long term:** Refactor `qa.ts` and `builder.ts` into smaller modules.
 
 ---
 

@@ -20,8 +20,8 @@ The analysis revealed 8 (+1 research) instances of generic workers, all attempti
 4. **Feature Builder**
    - **Original:** Generator of generic code mutations. Receives massive contexts and attempts to rewrite files (`create`, `replace`, `replace_snippet`).
    - **Tools:** Interactive static reading of the workspace, Batch mutation (Workspace Edits).
-5. **Bug Fixer**
-   - **Original:** Similar to the Builder, but biased towards fixing problems after "Investigator" triage.
+5. **Bug Remediator**
+   - **Original:** Similar to the Builder, but biased towards applying fixes after "Investigator" triage.
    - **Tools:** Interactive static reading, Batch mutation.
 6. **Bug Investigator**
    - **Original:** Triage based on hypotheses even before sending for correction.
@@ -29,8 +29,8 @@ The analysis revealed 8 (+1 research) instances of generic workers, all attempti
 7. **QA Validator**
    - **Original:** Executor of test suites (e2e, generic regressions, syntax checks).
    - **Tools:** Deep asynchronous `exec()`, process manipulation, and hooks.
-8. **Reviewer / PR Writer**
-   - **Original:** Final diff validators and creators of release notes/documentation. They review without hyper-specialized context.
+8. **Release & Diff Validation**
+   - **Original:** Final diff validators and creators of release notes/documentation.
    - **Tools:** Diff analysis.
 
 ---
@@ -43,10 +43,10 @@ It is time to retire the centralized `builder` and agnostic figures. The redirec
 | :--- | :--- | :--- | :--- |
 | *Dispatcher + Planner + Builder* | **Synx-Front-Expert** | Next.js (App Router), TailwindCSS | Accessibility Rendering (a11y), Storybook |
 | *Dispatcher + Planner + Builder* | **Synx-Mobile-Expert** | React Native, Expo | Native Tests, Memory Management, UI Performance |
-| *Dispatcher + Planner + BugFixer*| **Synx-Back-Expert** | Node (NestJS / Fastify), Prisma ORM | Security, Type Safety, Vitest (Integration) |
+| *Dispatcher + Planner + Bug Investigation*| **Synx-Back-Expert** | Node (NestJS / Fastify), Prisma ORM | Security, Type Safety, Vitest (Integration) |
 | *QA Validator + Bug Investigator* | **Synx-QA-Engineer** | Playwright, Vitest (E2E/Unit) | Regression automation, Mutation Coverage |
-| *Reviewer + PR Writer* | **Synx-SEO-Specialist** | Web Vitals, JSON-LD | Core Web Vitals, Schema.org, Lighthouse |
-| *PR Writer + Reviewer* | **(Retired in their individual form - absorbed into peer review and native QA outputs)** | - | - |
+| *Final Diff Validation* | **Synx-SEO-Specialist** | Web Vitals, JSON-LD | Core Web Vitals, Schema.org, Lighthouse |
+| *Legacy diff writer/reviewer responsibilities* | **(Retired in their individual form - absorbed into peer review and native QA outputs)** | - | - |
 
 ---
 

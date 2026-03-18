@@ -114,7 +114,7 @@ Supported task types:
 - `Mixed`
 
 Routing summary:
-- **Bug tasks:** `Dispatcher → Bug Investigator → Bug Fixer → Synx QA Engineer → Human Review`
+- **Bug tasks:** `Dispatcher → Bug Investigator → Synx QA Engineer → Human Review`
 - **Simple/clear tasks:** `Dispatcher → Expert → Synx QA Engineer → Human Review`
 - **Complex/ambiguous tasks:** `Dispatcher → Spec Planner (targetExpert hint) → Expert → Synx QA Engineer → Human Review`
 
@@ -199,7 +199,7 @@ It checks:
 - stale locks
 - orphan working files
 - interrupted tasks
-- required prompt files (including `bug-fixer.md`)
+- required prompt files
 
 When issues are found, doctor can run safe fixes immediately.
 
@@ -429,12 +429,7 @@ Agent defaults:
 - `Dispatcher`: `0.1`
 - `Spec Planner`: `0.1`
 - `Bug Investigator`: `0.1`
-- `Bug Fixer`: `0.05`
-- `Feature Builder`: `0.05`
 - `Researcher`: `0.2`
-- `Reviewer`: `0.05`
-- `QA Validator`: `0.05`
-- `PR Writer`: `0.3`
 - `Human Review`: `0.1`
 - `Synx Front Expert`: `0.05`
 - `Synx Mobile Expert`: `0.05`
@@ -452,9 +447,6 @@ Task-type defaults:
 
 Environment variable examples:
 - `AI_AGENTS_TEMPERATURE_DISPATCHER=0.1`
-- `AI_AGENTS_TEMPERATURE_BUG_FIXER=0.05`
-- `AI_AGENTS_TEMPERATURE_QA_VALIDATOR=0.05`
-- `AI_AGENTS_TEMPERATURE_PR_WRITER=0.3`
 - `AI_AGENTS_TEMPERATURE_DISPATCHER_FEATURE=0.1`
 - `AI_AGENTS_TEMPERATURE_DISPATCHER_BUG=0.1`
 - `AI_AGENTS_TEMPERATURE_FEATURE=0.1`
