@@ -19,7 +19,7 @@ import {
   type OpenAiCompatiblePreset,
 } from "./setup-helpers.js";
 
-export type LmStudioConnectionMode = "saved-recommended" | "saved-custom" | "env";
+export type LmStudioConnectionMode = "saved-recommended" | "saved-remote" | "saved-custom" | "env";
 export type LmStudioModelMode = "auto" | "fixed";
 export type ConnectionMode = "saved" | "env";
 
@@ -36,6 +36,11 @@ export async function configureLmStudio(currentGlobal: GlobalConfig): Promise<Pr
         value: "saved-recommended",
         label: "Use recommended local connection and save it in config",
         description: `${DEFAULT_LM_STUDIO_BASE_URL} + ${DEFAULT_LM_STUDIO_API_KEY}`,
+      },
+      {
+        value: "saved-remote",
+        label: "Use remote LM Studio on local network",
+        description: "e.g., http://192.168.31.112:1234",
       },
       {
         value: "saved-custom",
@@ -64,6 +69,16 @@ export async function configureLmStudio(currentGlobal: GlobalConfig): Promise<Pr
     lmStudioConfig = {
       ...lmStudioConfig,
       baseUrl: DEFAULT_LM_STUDIO_BASE_URL,
+      apiKey: DEFAULT_LM_STUDIO_API_KEY,
+      baseUrlEnv: DEFAULT_LM_STUDIO_BASE_URL_ENV,
+      apiKeyEnv: DEFAULT_LM_STUDIO_API_KEY_ENV,
+    };
+  } else if (connectionMode === "saved-remote") {
+    const existingBaseUrl = currentGlobal.providers.dispatcher.baseUrl || "http://192.168.31.112:1234";
+    const baseUrl = await promptTextWithDefault("Remote LM Studio base URL:", existingBaseUrl);
+    lmStudioConfig = {
+      ...lmStudioConfig,
+      baseUrl,
       apiKey: DEFAULT_LM_STUDIO_API_KEY,
       baseUrlEnv: DEFAULT_LM_STUDIO_BASE_URL_ENV,
       apiKeyEnv: DEFAULT_LM_STUDIO_API_KEY_ENV,
@@ -307,6 +322,11 @@ export async function configureOpenAiCompatible(currentGlobal: GlobalConfig): Pr
         value: "openrouter",
         label: "OpenRouter (cloud multi-model)",
         description: "Use OpenRouter for models like Claude/Qwen and others",
+      },
+      {
+        value: "remote-lmstudio",
+        label: "Remote LM Studio (local network)",
+        description: "Use LM Studio running on another computer in your network",
       },
       {
         value: "custom",

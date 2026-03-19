@@ -5,7 +5,7 @@ import { providerHealthToHuman } from "./human-messages.js";
 import { isAutoModelToken } from "./lmstudio.js";
 import type { ProviderHealth, ProviderStageConfig } from "./types.js";
 
-export type OpenAiCompatiblePreset = "openai" | "openrouter" | "custom";
+export type OpenAiCompatiblePreset = "openai" | "openrouter" | "remote-lmstudio" | "custom";
 
 export const DEFAULT_LM_STUDIO_BASE_URL_ENV = "AI_AGENTS_LMSTUDIO_BASE_URL";
 export const DEFAULT_LM_STUDIO_API_KEY_ENV = "AI_AGENTS_LMSTUDIO_API_KEY";
@@ -51,6 +51,15 @@ export function resolveOpenAiCompatiblePreset(preset: OpenAiCompatiblePreset): O
         defaultApiKeyEnv: "OPENROUTER_API_KEY",
         apiKeyLabel: "OpenRouter API key",
         modelExamples: ["anthropic/claude-sonnet-4.6", "anthropic/claude-opus-4.6", "qwen/qwen3.5-plus"],
+      };
+    case "remote-lmstudio":
+      return {
+        label: "Remote LM Studio (local network)",
+        baseUrl: "http://192.168.31.112:1234/v1",
+        defaultBaseUrlEnv: DEFAULT_BASE_URL_ENV,
+        defaultApiKeyEnv: DEFAULT_API_KEY_ENV,
+        apiKeyLabel: "API key (dummy value is fine)",
+        modelExamples: [],
       };
     case "custom":
     default:
