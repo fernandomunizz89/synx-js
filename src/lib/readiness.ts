@@ -4,7 +4,7 @@ import { checkProviderHealth } from "./provider-health.js";
 import { commandExample } from "./cli-command.js";
 import { exists } from "./fs.js";
 import { promptsDir } from "./paths.js";
-import { STAGE_FILE_NAMES } from "./constants.js";
+import { REQUIRED_PROMPT_FILES } from "./constants.js";
 import { isAutoModelToken } from "./lmstudio.js";
 import path from "node:path";
 
@@ -33,21 +33,13 @@ export async function collectReadinessReport(options: ReadinessOptions): Promise
   const config = await loadResolvedProjectConfig();
 
   const promptsDirValue = promptsDir();
-  const promptFilesToCheck = [
-    { label: "Dispatcher Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.dispatcher) },
-    { label: "Front-end Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxFrontExpert) },
-    { label: "Mobile-end Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxMobileExpert) },
-    { label: "Back-end Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxBackExpert) },
-    { label: "SEO Specialist Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxSeoSpecialist) },
-    { label: "QA Engineer Prompt", path: path.join(promptsDirValue, STAGE_FILE_NAMES.synxQaEngineer) },
-  ];
-
-  for (const { label, path: promptPath } of promptFilesToCheck) {
+  for (const promptFile of REQUIRED_PROMPT_FILES) {
+    const promptPath = path.join(promptsDirValue, promptFile);
     if (!(await exists(promptPath))) {
       pushIssue(
         issues,
         "error",
-        `${label} file missing: ${path.basename(promptPath)}. Run \`${commandExample("setup")}\` to recreate defaults.`
+        `Prompt file missing: ${promptFile}. Run \`${commandExample("setup")}\` to recreate defaults.`
       );
     }
   }
