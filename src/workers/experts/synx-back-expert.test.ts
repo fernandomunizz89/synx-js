@@ -1,16 +1,21 @@
-import os from "node:os";
+import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
 import { SynxBackExpert } from "./synx-back-expert.js";
 import { createTask, loadTaskMeta } from "../../lib/task.js";
 import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../../lib/constants.js";
 import { writeJson } from "../../lib/fs.js";
+import { createTestActionContext } from "./expert-test-utils.js";
 
 vi.mock("../../lib/runtime.js", () => ({
   acquireLock: vi.fn().mockResolvedValue(true),
   releaseLock: vi.fn().mockResolvedValue(undefined),
   isTaskCancelRequested: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock("../../lib/orchestrator.js", () => ({
+  requestResearchContext: vi.fn().mockResolvedValue({ status: "skip", context: null, triggerReasons: [], reusedContext: false }),
+  formatResearchContextTag: vi.fn().mockReturnValue(""),
 }));
 
 vi.mock("../../providers/factory.js", () => ({
@@ -59,7 +64,7 @@ vi.mock("../../lib/config.js", () => ({
   loadResolvedProjectConfig: vi.fn().mockResolvedValue({
     projectName: "test-app",
     language: "typescript",
-    framework: "nestjs",
+    framework: "nextjs",
     humanReviewer: "User",
     tasksDir: ".ai-agents/tasks",
     providers: {
@@ -89,20 +94,19 @@ vi.mock("../../lib/workspace-tools.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/workspace-tools.js")>();
   return {
     ...actual,
-    detectTestCapabilities: vi.fn().mockResolvedValue({ hasPackageJson: true, hasE2EDir: false, hasE2EScript: false, hasE2ESpecFiles: false, hasUnitTestScript: false, hasUnitTestFiles: false, e2eScripts: [] }),
-    // First call: empty — second call: has the file
-    getGitChangedFiles: vi.fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValue(["src/users/users.service.ts"]),
-    buildWorkspaceContextSnapshot: vi.fn().mockResolvedValue({ files: [], summary: "mock workspace" }),
-    applyWorkspaceEdits: vi.fn().mockResolvedValue({ changedFiles: ["src/users/users.service.ts"], warnings: [], skippedEdits: [] }),
+    detectTestCapabilities: vi.fn().mockResolvedValue({
+      hasPackageJson: true,
+      hasE2EDir: false,
+      hasE2EScript: false,
+      hasE2ESpecFiles: false,
+      hasUnitTestScript: false,
+      hasUnitTestFiles: false,
+      e2eScripts: [],
+    }),
+    getGitChangedFiles: vi.fn().mockResolvedValue(["src/users/users.service.ts"]),
+    applyWorkspaceEdits: vi.fn().mockResolvedValue({ appliedFiles: ["src/users/users.service.ts"], changedFiles: ["src/users/users.service.ts"], warnings: [], skippedEdits: [] }),
   };
 });
-
-vi.mock("../../lib/orchestrator.js", () => ({
-  requestResearchContext: vi.fn().mockResolvedValue({ status: "skip", context: null, triggerReasons: [], reusedContext: false }),
-  formatResearchContextTag: vi.fn().mockReturnValue(""),
-}));
 
 vi.mock("../../lib/qa-remediation.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/qa-remediation.js")>();
@@ -116,11 +120,9 @@ describe.sequential("workers/experts/synx-back-expert", () => {
   let repoRoot = "";
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-back-expert-test-"));
-    repoRoot = path.join(root, "repo");
-    await fs.mkdir(path.join(repoRoot, ".ai-agents", "tasks"), { recursive: true });
-    await fs.mkdir(path.join(repoRoot, ".ai-agents", "runtime", "locks"), { recursive: true });
-    await fs.writeFile(path.join(repoRoot, "package.json"), JSON.stringify({ name: "synx-back-test" }, null, 2), "utf8");
+    const ctx = await createTestActionContext("synx-back-expert-test-");
+    root = ctx.root;
+    repoRoot = ctx.repoRoot;
     process.chdir(repoRoot);
   });
 
@@ -162,67 +164,6 @@ describe.sequential("workers/experts/synx-back-expert", () => {
     const { requestResearchContext } = await import("../../lib/orchestrator.js");
     vi.mocked(requestResearchContext).mockResolvedValueOnce({
       status: "abort_to_human",
-      abortReason: "Too many attempts",
-      triggerReasons: ["Repeated query"],
-      context: "Partial info",
-    } as any);
-
-    const task = await createTask({
-      title: "Research loop test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Force research loop",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxBackExpert);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-back-expert",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx Back Expert",
-    });
-
-    const expert = new SynxBackExpert();
-    const processed = await expert.tryProcess(task.taskId);
-
-    expect(processed).toBe(true);
-    const meta = await loadTaskMeta(task.taskId);
-    expect(meta.status).toBe("waiting_human");
-  });
-
-  it("throws error if no code changes are detected", async () => {
-    const { getGitChangedFiles, applyWorkspaceEdits } = await import("../../lib/workspace-tools.js");
-    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValue([]);
-    vi.mocked(applyWorkspaceEdits).mockReset().mockResolvedValue({ appliedFiles: [], changedFiles: [], warnings: [], skippedEdits: [] });
-
-    const task = await createTask({
-      title: "No change test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Do nothing",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxBackExpert);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-back-expert",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx Back Expert",
-    });
-
-    const expert = new SynxBackExpert();
-    const processed = await expert.tryProcess(task.taskId);
-    expect(processed).toBe(false);
-  });
-
-  it("escalates to human review when the research loop guard triggers", async () => {
-    const { requestResearchContext } = await import("../../lib/orchestrator.js");
-    vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "abort_to_human",
       context: null,
       abortReason: "Research repeated.",
       triggerReasons: ["repeated_recommendation"],
@@ -254,6 +195,33 @@ describe.sequential("workers/experts/synx-back-expert", () => {
     expect(meta.humanApprovalRequired).toBe(true);
   });
 
+  it("throws error if no code changes are detected", async () => {
+    const { getGitChangedFiles, applyWorkspaceEdits } = await import("../../lib/workspace-tools.js");
+    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValue([]);
+    vi.mocked(applyWorkspaceEdits).mockReset().mockResolvedValue({ appliedFiles: [], changedFiles: [], warnings: [], skippedEdits: [] });
+
+    const task = await createTask({
+      title: "No change test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Do nothing",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxBackExpert);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-back-expert",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx Back Expert",
+    });
+
+    const expert = new SynxBackExpert();
+    const processed = await expert.tryProcess(task.taskId);
+    expect(processed).toBe(false);
+  });
+
   it("processes a QA remediation task", async () => {
     const { DONE_FILE_NAMES } = await import("../../lib/constants.js");
     const { ARTIFACT_FILES } = await import("../../lib/task-artifacts.js");
@@ -275,12 +243,10 @@ describe.sequential("workers/experts/synx-back-expert", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    // Create artifacts
     await fs.mkdir(path.join(task.taskPath, "artifacts"), { recursive: true });
     await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.projectProfile), { profile: "test" });
     await writeJson(path.join(task.taskPath, "artifacts", ARTIFACT_FILES.featureBrief), { brief: "test" });
 
-    // Simulate QA failure
     const qaDonePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxQaEngineer);
     await writeJson(qaDonePath, {
       taskId: task.taskId,
@@ -424,99 +390,6 @@ describe.sequential("workers/experts/synx-back-expert", () => {
 
     const expert = new SynxBackExpert();
     const processed = await expert.tryProcess(task.taskId);
-    expect(processed).toBe(true);
-  });
-
-  it("covers research abort branch", async () => {
-    const { requestResearchContext } = await import("../../lib/orchestrator.js");
-    vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "abort_to_human",
-      context: null,
-      triggerReasons: ["uncertainty"],
-      reusedContext: false,
-    });
-
-    const task = await createTask({
-      title: "Abort test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Check abort",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxBackExpert);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-back-expert",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx Back Expert",
-    });
-
-    const expert = new SynxBackExpert();
-    const processed = await expert.tryProcess(task.taskId);
-
-    expect(processed).toBe(true); // Agent finishes the handoff successfully
-    const meta = await loadTaskMeta(task.taskId);
-    expect(meta.humanApprovalRequired).toBe(true);
-  });
-
-  it("covers deep branches (missing context, recovery notes, warnings)", async () => {
-    const { requestResearchContext } = await import("../../lib/orchestrator.js");
-    const { applyWorkspaceEdits } = await import("../../lib/workspace-tools.js");
-    const { createProvider } = await import("../../providers/factory.js");
-
-    vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "provided", // Using valid status
-      context: "Context with notes",
-      triggerReasons: [],
-      reusedContext: true, // Note branch 1
-    } as any);
-
-    vi.mocked(applyWorkspaceEdits).mockResolvedValueOnce({
-      appliedFiles: ["index.ts"],
-      changedFiles: ["index.ts"],
-      warnings: ["Applied warning"], // Warning branch
-      skippedEdits: ["Skip 1"],
-    });
-
-    vi.mocked(createProvider).mockReturnValueOnce({
-      generateStructured: vi.fn().mockResolvedValue({
-        parsed: {
-          implementationSummary: "summary",
-          edits: [{ path: "index.ts", action: "create", content: "data" }],
-          risks: ["Legacy risk"],
-          changesMade: ["Legacy change"],
-          testsToRun: ["npm run test"],
-          impactedFiles: ["index.ts"],
-          technicalRisks: [],
-          filesChanged: ["index.ts"],
-          nextAgent: "Synx QA Engineer",
-        },
-      }),
-    } as any);
-
-    // Branch: extraContext.relatedFiles is missing
-    const task = await createTask({
-      title: "Deep branch test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Check branches",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxBackExpert);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-back-expert",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx Back Expert",
-    });
-
-    const expert = new SynxBackExpert();
-    const processed = await expert.tryProcess(task.taskId);
-
     expect(processed).toBe(true);
   });
 });

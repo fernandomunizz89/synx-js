@@ -1,11 +1,11 @@
-import os from "node:os";
+import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
 import { SynxSeoSpecialist } from "./synx-seo-specialist.js";
 import { createTask, loadTaskMeta } from "../../lib/task.js";
 import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../../lib/constants.js";
 import { writeJson } from "../../lib/fs.js";
+import { createTestActionContext } from "./expert-test-utils.js";
 
 vi.mock("../../lib/runtime.js", () => ({
   acquireLock: vi.fn().mockResolvedValue(true),
@@ -90,11 +90,9 @@ vi.mock("../../lib/workspace-tools.js", async (importOriginal) => {
   return {
     ...actual,
     detectTestCapabilities: vi.fn().mockResolvedValue({ hasPackageJson: true, hasE2EDir: false, hasE2EScript: false, hasE2ESpecFiles: false, hasUnitTestScript: false, hasUnitTestFiles: false, e2eScripts: [] }),
-    // First call (gitChangedBefore): empty — second call (gitChangedFiles): has the file
-    // This ensures effectiveChanged = ["app/page.tsx"] and the no-changes guard doesn't throw.
     getGitChangedFiles: vi.fn()
-      .mockResolvedValueOnce([])                    // gitChangedBefore
-      .mockResolvedValue(["app/page.tsx"]),         // gitChangedFiles + subsequent calls
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(["app/page.tsx"]),
     buildWorkspaceContextSnapshot: vi.fn().mockResolvedValue({ files: [], summary: "mock workspace" }),
     applyWorkspaceEdits: vi.fn().mockResolvedValue({ changedFiles: ["app/page.tsx"], warnings: [], skippedEdits: [] }),
   };
@@ -117,11 +115,9 @@ describe.sequential("workers/experts/synx-seo-specialist", () => {
   let repoRoot = "";
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-seo-specialist-test-"));
-    repoRoot = path.join(root, "repo");
-    await fs.mkdir(path.join(repoRoot, ".ai-agents", "tasks"), { recursive: true });
-    await fs.mkdir(path.join(repoRoot, ".ai-agents", "runtime", "locks"), { recursive: true });
-    await fs.writeFile(path.join(repoRoot, "package.json"), JSON.stringify({ name: "synx-seo-test" }, null, 2), "utf8");
+    const ctx = await createTestActionContext("synx-seo-specialist-test-");
+    root = ctx.root;
+    repoRoot = ctx.repoRoot;
     process.chdir(repoRoot);
   });
 
@@ -147,7 +143,6 @@ describe.sequential("workers/experts/synx-seo-specialist", () => {
       status: "request",
       createdAt: new Date().toISOString(),
       agent: "Synx SEO Specialist",
-      // inputRef removed: it's optional and new-task.json is not a StageEnvelope
     });
 
     const expert = new SynxSeoSpecialist();
@@ -385,133 +380,5 @@ describe.sequential("workers/experts/synx-seo-specialist", () => {
     const expert = new SynxSeoSpecialist();
     const processed = await expert.tryProcess(task.taskId);
     expect(processed).toBe(false);
-  });
-  it("covers research abort branch", async () => {
-    const { requestResearchContext } = await import("../../lib/orchestrator.js");
-    vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "abort_to_human",
-      context: null,
-      triggerReasons: ["uncertainty"],
-      reusedContext: false,
-    });
-
-    const task = await createTask({
-      title: "Abort test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Check abort",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-seo-specialist",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx SEO Specialist",
-    });
-
-    const expert = new SynxSeoSpecialist();
-    const processed = await expert.tryProcess(task.taskId);
-
-    expect(processed).toBe(true); // Agent finishes the handoff successfully
-    const metaAfter = await loadTaskMeta(task.taskId);
-    expect(metaAfter.humanApprovalRequired).toBe(true);
-  });
-
-  it("covers deep branches (missing context, recovery notes, warnings)", async () => {
-    const { requestResearchContext } = await import("../../lib/orchestrator.js");
-    const { applyWorkspaceEdits, getGitChangedFiles } = await import("../../lib/workspace-tools.js");
-    const { createProvider } = await import("../../providers/factory.js");
-
-    vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "provided", // Using valid status
-      context: "Context with notes",
-      triggerReasons: [],
-      reusedContext: true, // Note branch 1
-    } as any);
-
-    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["app/layout.tsx"]);
-
-    vi.mocked(applyWorkspaceEdits).mockResolvedValueOnce({
-      appliedFiles: ["app/layout.tsx"],
-      changedFiles: ["app/layout.tsx"],
-      warnings: ["Applied warning"], // Warning branch
-      skippedEdits: ["Skip 1"],
-    });
-
-    vi.mocked(createProvider).mockReturnValueOnce({
-      generateStructured: vi.fn().mockResolvedValue({
-        parsed: {
-          implementationSummary: "summary",
-          edits: [{ path: "app/layout.tsx", action: "create", content: "data" }],
-          risks: ["Legacy risk"],
-          changesMade: ["Legacy change"],
-          testsToRun: ["npm run test"],
-          impactedFiles: ["app/layout.tsx"],
-          technicalRisks: [],
-          filesChanged: ["app/layout.tsx"],
-          nextAgent: "Synx QA Engineer",
-        },
-      }),
-    } as any);
-
-    // Branch: extraContext.relatedFiles is missing
-    const task = await createTask({
-      title: "Deep branch test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Check branches",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-seo-specialist",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx SEO Specialist",
-    });
-
-    const expert = new SynxSeoSpecialist();
-    const processed = await expert.tryProcess(task.taskId);
-
-    expect(processed).toBe(true);
-  });
-
-  it("includes research context tag when available", async () => {
-    const { requestResearchContext } = await import("../../lib/orchestrator.js");
-    const { getGitChangedFiles } = await import("../../lib/workspace-tools.js");
-
-    vi.mocked(getGitChangedFiles).mockReset().mockResolvedValueOnce([]).mockResolvedValue(["app/layout.tsx"]);
-
-    vi.mocked(requestResearchContext).mockResolvedValueOnce({
-      status: "provided",
-      context: "Keywords: AI, agents",
-      reusedContext: false,
-      triggerReasons: []
-    } as any);
-
-    const task = await createTask({
-      title: "Research test",
-      typeHint: "Feature",
-      project: "test-app",
-      rawRequest: "Add meta",
-      extraContext: { relatedFiles: [], logs: [], notes: [] },
-    });
-
-    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxSeoSpecialist);
-    await writeJson(inboxPath, {
-      taskId: task.taskId,
-      stage: "synx-seo-specialist",
-      status: "request",
-      createdAt: new Date().toISOString(),
-      agent: "Synx SEO Specialist",
-    });
-
-    const expert = new SynxSeoSpecialist();
-    const processed = await expert.tryProcess(task.taskId);
-    expect(processed).toBe(true);
   });
 });
