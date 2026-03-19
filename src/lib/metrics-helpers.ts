@@ -43,7 +43,7 @@ export interface JsonlLoadResult<T> {
 }
 
 export interface CollaborationMetricsReport {
-  timeWindow: {
+  window: {
     sinceMs?: number;
     untilMs?: number;
   };
