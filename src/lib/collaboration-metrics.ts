@@ -1,348 +1,39 @@
 import path from "node:path";
-import { promises as fs } from "node:fs";
-import { exists, listDirectories, listFiles, readJson } from "./fs.js";
-import { logsDir, tasksDir } from "./paths.js";
-import type { TaskMeta, TimingEntry } from "./types.js";
+import { logsDir } from "./paths.js";
+import type { TimingEntry } from "./types.js";
+import {
+  asNumber,
+  avg,
+  classifyFailure,
+  isUsefulLog,
+  normalizeStage,
+  percentile,
+  toMs,
+  type AgentAuditEntry,
+  type CollaborationMetricsReport,
+  type MetricsWindow,
+  type PollingEntry,
+  type ProviderThrottleEntry,
+  type QueueLatencyEntry,
+  type StageSummaryRow,
+  type TaskComputedMetrics,
+} from "./metrics-helpers.js";
+import { loadAgentAudit, loadJsonlByPath, loadTaskMetaMap } from "./metrics-loader.js";
 
-export interface MetricsWindow {
-  sinceMs?: number;
-  untilMs?: number;
-}
+export { type CollaborationMetricsReport, type MetricsWindow, parseMetricsTimestamp } from "./metrics-helpers.js";
 
-interface AgentAuditEntry {
-  at?: string;
-  taskId?: string;
-  stage?: string;
-  agent?: string;
-  event?: string;
-  nextAgent?: string;
-  status?: string;
-  error?: string;
-  note?: string;
-  outputSummary?: Record<string, unknown>;
-}
-
-interface QueueLatencyEntry {
-  at?: string;
-  taskId?: string;
-  stage?: string;
-  queueLatencyMs?: number;
-}
-
-interface PollingEntry {
-  at?: string;
-  action?: string;
-  sleepMs?: number;
-  loopDurationMs?: number;
-  processedStages?: number;
-}
-
-interface ProviderThrottleEntry {
-  at?: string;
-  event?: string;
-}
-
-interface JsonlLoadResult<T> {
-  rows: T[];
-  lineCount: number;
-  byteCount: number;
-}
-
-interface StageSummaryRow {
-  stage: string;
-  count: number;
-  totalMs: number;
-  avgMs: number;
-  minMs: number;
-  maxMs: number;
-}
-
-interface TaskComputedMetrics {
-  taskId: string;
-  totalMs: number;
-  stageCount: number;
-  handoffs: number;
-  qaReturns: number;
-  qualityRepairRetries: number;
-  loops: number;
-  retryCount: number;
-  parseRetries: number;
-  providerBackoffRetries: number;
-  providerBackoffWaitMs: number;
-  providerRateLimitWaitMs: number;
-  implementerMs: number;
-  fullBuildChecks: number;
-  estimatedInputTokens: number;
-  estimatedOutputTokens: number;
-  estimatedTotalTokens: number;
-  estimatedCostUsd: number;
-  firstDiagnosisMs?: number;
-  status: "success" | "failed" | "in_progress";
-}
-
-export interface CollaborationMetricsReport {
-  window: {
-    sinceMs?: number;
-    untilMs?: number;
-  };
-  taskMetrics: {
-    totalTasks: number;
-    terminalTasks: number;
-    successfulTasks: number;
-    failedTasks: number;
-    inProgressTasks: number;
-    successRate: number;
-    avgTotalMs: number;
-    p95TotalMs: number;
-    avgRetriesPerTask: number;
-    avgHandoffsPerTask: number;
-    avgLoopsPerTask: number;
-    qaReturnRate: number;
-    timeToFirstDiagnosisAvgMs: number;
-    timeToFirstDiagnosisP95Ms: number;
-    avgQueueLatencyMs: number;
-    queueLatencyP95Ms: number;
-    fullBuildChecksPerTask: number;
-    estimatedInputTokensTotal: number;
-    estimatedOutputTokensTotal: number;
-    estimatedTotalTokens: number;
-    avgEstimatedTokensPerTask: number;
-    estimatedCostUsdTotal: number;
-    avgEstimatedCostUsdPerTask: number;
-  };
-  stageSummary: StageSummaryRow[];
-  failuresByCategory: Array<{ category: string; count: number }>;
-  collaboration: {
-    logsUseful: number;
-    logsInformative: number;
-    usefulLogRatio: number;
-    loopsByType: {
-      qaReturnsTotal: number;
-      qualityRepairRetriesTotal: number;
-    };
-  };
-  bottlenecks: {
-    topStage: string;
-    topStageAvgMs: number;
-    implementerShare: number;
-    implementerAvgMsPerTask: number;
-    implementerLikelyBottleneck: boolean;
-  };
-  operationalCost: {
-    retryWaitMs: number;
-    pollingSleepMs: number;
-    pollingLoops: number;
-    pollingProcessedStages: number;
-    throttleEvents: number;
-    logLines: number;
-    logBytes: number;
-  };
-}
-
-const usefulDiagnosisNotes = new Set([
-  "investigation_summary",
-  "quality_gate_initial",
-  "quality_repair_attempt_started",
-  "quality_repair_attempt_result",
-  "quality_repair_aborted_early",
-  "quality_gate_blocked",
-  "qa_decision",
-  "qa_validation_summary",
-]);
-
-function toMs(value: string | undefined): number | null {
-  if (!value) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function inWindow(ms: number | null, window: MetricsWindow): boolean {
-  if (ms === null) return false;
-  if (typeof window.sinceMs === "number" && ms < window.sinceMs) return false;
-  if (typeof window.untilMs === "number" && ms > window.untilMs) return false;
-  return true;
-}
-
-function normalizeStage(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return "";
-  if (normalized.includes("dispatcher")) return "dispatcher";
-  if (normalized === "qa" || normalized.includes("qa")) return "qa";
-  return normalized
-    .replace(/^0+\w?-/, "")
-    .replace(/^0+\w?/, "")
-    .replace(/^\d+[a-z]?[-_]?/, "")
-    .trim();
-}
-
-function percentile(values: number[], ratio: number): number {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * ratio)));
-  return sorted[index];
-}
-
-function avg(values: number[]): number {
-  if (!values.length) return 0;
-  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
-}
-
-function asNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function classifyFailure(message: string): string {
-  const lower = message.toLowerCase();
-  if (!lower) return "unknown";
-  if (lower.includes("429") || lower.includes("rate limit") || lower.includes("quota")) return "provider_rate_limit";
-  if (lower.includes("timed out")) return "provider_timeout";
-  if (lower.includes("fetch failed") || lower.includes("econnrefused")) return "provider_unreachable";
-  if (lower.includes("could not extract json") || lower.includes("json parsing failed")) return "provider_json_format";
-  if (lower.includes("quality gate")) return "quality_gate";
-  if (lower.includes("lint") || lower.includes("no-unused-vars")) return "lint";
-  if (lower.includes("typescript") || lower.includes("ts")) return "typecheck";
-  if (lower.includes("e2e") || lower.includes("playwright")) return "e2e";
-  if (lower.includes("test")) return "tests";
-  return "other";
-}
-
-function isUsefulLog(entry: AgentAuditEntry): boolean {
-  if (entry.event === "stage_failed") return true;
-  if (entry.event === "stage_note") {
-    const note = (entry.note || "").trim();
-    if (usefulDiagnosisNotes.has(note)) return true;
-    const output = entry.outputSummary || {};
-    const blockingFailures = asNumber(output.blockingFailures);
-    const failuresCount = asNumber(output.failuresCount);
-    if (blockingFailures > 0 || failuresCount > 0) return true;
-  }
-  return false;
-}
-
-async function loadJsonlByPath<T>(filePath: string, window: MetricsWindow, getTime: (row: T) => number | null): Promise<JsonlLoadResult<T>> {
-  if (!(await exists(filePath))) {
-    return {
-      rows: [],
-      lineCount: 0,
-      byteCount: 0,
-    };
-  }
-
-  const raw = await fs.readFile(filePath, "utf8");
-  let lineCount = 0;
-  let byteCount = 0;
-  const rows: T[] = [];
-
-  for (const line of raw.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    let parsed: T;
-    try {
-      parsed = JSON.parse(line) as T;
-    } catch {
-      continue;
-    }
-    const atMs = getTime(parsed);
-    if (!inWindow(atMs, window)) continue;
-    lineCount += 1;
-    byteCount += Buffer.byteLength(line, "utf8");
-    rows.push(parsed);
-  }
-
-  return {
-    rows,
-    lineCount,
-    byteCount,
-  };
-}
-
-async function loadAgentAudit(window: MetricsWindow): Promise<JsonlLoadResult<AgentAuditEntry>> {
-  const dir = path.join(logsDir(), "agent-audit");
-  if (!(await exists(dir))) {
-    return { rows: [], lineCount: 0, byteCount: 0 };
-  }
-
-  const files = await listFiles(dir);
-  const entries: AgentAuditEntry[] = [];
-  let lineCount = 0;
-  let byteCount = 0;
-
-  for (const file of files) {
-    const loaded = await loadJsonlByPath<AgentAuditEntry>(
-      path.join(dir, file),
-      window,
-      (row) => toMs(row.at),
-    );
-    entries.push(...loaded.rows);
-    lineCount += loaded.lineCount;
-    byteCount += loaded.byteCount;
-  }
-
-  return {
-    rows: entries,
-    lineCount,
-    byteCount,
-  };
-}
-
-async function loadTaskMetaMap(): Promise<Map<string, TaskMeta>> {
-  const map = new Map<string, TaskMeta>();
-  const root = tasksDir();
-  if (!(await exists(root))) return map;
-
-  const ids = await listDirectories(root);
-  for (const taskId of ids) {
-    const metaPath = path.join(root, taskId, "meta.json");
-    if (!(await exists(metaPath))) continue;
-    try {
-      const meta = await readJson<TaskMeta>(metaPath);
-      map.set(taskId, meta);
-    } catch {
-      continue;
-    }
-  }
-  return map;
-}
-
-export function parseMetricsTimestamp(raw: string | undefined): number | null {
-  if (!raw) return null;
-  const value = raw.trim();
-  if (!value) return null;
-
-  if (/^\d{13}$/.test(value)) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  if (/^\d{10}$/.test(value)) {
-    const parsed = Number(value) * 1000;
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  if (/^\d{8}-\d{6}$/.test(value)) {
-    const year = Number(value.slice(0, 4));
-    const month = Number(value.slice(4, 6));
-    const day = Number(value.slice(6, 8));
-    const hour = Number(value.slice(9, 11));
-    const minute = Number(value.slice(11, 13));
-    const second = Number(value.slice(13, 15));
-    const parsed = Date.UTC(year, month - 1, day, hour, minute, second);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  const iso = Date.parse(value);
-  return Number.isFinite(iso) ? iso : null;
-}
-
-export async function buildCollaborationMetricsReport(window: MetricsWindow): Promise<CollaborationMetricsReport> {
+export async function buildCollaborationMetricsReport(timeWindow: MetricsWindow): Promise<CollaborationMetricsReport> {
   const stageMetricsFile = path.join(logsDir(), "stage-metrics.jsonl");
   const queueLatencyFile = path.join(logsDir(), "queue-latency.jsonl");
   const pollingFile = path.join(logsDir(), "polling-metrics.jsonl");
   const providerThrottleFile = path.join(logsDir(), "provider-throttle.jsonl");
 
   const [stageRowsLoaded, auditLoaded, queueLoaded, pollingLoaded, throttleLoaded, taskMetaMap] = await Promise.all([
-    loadJsonlByPath<TimingEntry>(stageMetricsFile, window, (row) => toMs(row.startedAt)),
-    loadAgentAudit(window),
-    loadJsonlByPath<QueueLatencyEntry>(queueLatencyFile, window, (row) => toMs(row.at)),
-    loadJsonlByPath<PollingEntry>(pollingFile, window, (row) => toMs(row.at)),
-    loadJsonlByPath<ProviderThrottleEntry>(providerThrottleFile, window, (row) => toMs(row.at)),
+    loadJsonlByPath<TimingEntry>(stageMetricsFile, timeWindow, (row) => toMs(row.startedAt)),
+    loadAgentAudit(timeWindow),
+    loadJsonlByPath<QueueLatencyEntry>(queueLatencyFile, timeWindow, (row) => toMs(row.at)),
+    loadJsonlByPath<PollingEntry>(pollingFile, timeWindow, (row) => toMs(row.at)),
+    loadJsonlByPath<ProviderThrottleEntry>(providerThrottleFile, timeWindow, (row) => toMs(row.at)),
     loadTaskMetaMap(),
   ]);
 
@@ -583,8 +274,8 @@ export async function buildCollaborationMetricsReport(window: MetricsWindow): Pr
 
   return {
     window: {
-      sinceMs: window.sinceMs,
-      untilMs: window.untilMs,
+      sinceMs: timeWindow.sinceMs,
+      untilMs: timeWindow.untilMs,
     },
     taskMetrics: {
       totalTasks: taskMetrics.length,
