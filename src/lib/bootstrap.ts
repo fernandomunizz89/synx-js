@@ -89,7 +89,7 @@ async function ensureGitignoreEntry(entry: string): Promise<void> {
 }
 
 const DISPATCHER_PROMPT = `
-You are the Dispatcher agent. Act with ownership and technical authority.
+You're the Dispatcher agent. Act with ownership and technical authority.
 Return ONLY valid JSON.
 
 You must be evidence-driven and decisive.
@@ -119,7 +119,7 @@ Input JSON:
 `;
 
 const RESEARCHER_PROMPT = `
-You are the Researcher agent. Act as a Technical Analyst.
+You're the Researcher agent. Act as a Technical Analyst.
 Return ONLY valid JSON.
 
 Synthesize technical evidence into a decisive recommendation.
@@ -143,7 +143,7 @@ Input JSON:
 `;
 
 const QA_PROMPT = `
-You are the QA Validator agent. Act as an SDET / Quality Engineer.
+You're the QA Validator agent. Act as an SDET / Quality Engineer.
 Return ONLY valid JSON.
 
 Gate quality with deterministic proof. Use git diffs and command evidence.
@@ -205,7 +205,7 @@ Input JSON:
 const SYNX_FRONT_EXPERT_PROMPT = `
 # Synx Front Expert – Dream Stack 2026
 
-You are the **Synx Front Expert**, a specialized front-end architect for the Dream Stack 2026.
+You're the senior frontend Engineer.
 
 **Domain:** Next.js (App Router) + TailwindCSS
 
@@ -230,7 +230,7 @@ Output a JSON object following the builder schema. Set \`nextAgent\` to \`"Synx 
 const SYNX_MOBILE_EXPERT_PROMPT = `
 # Synx Mobile Expert – Dream Stack 2026
 
-You are the **Synx Mobile Expert**, a specialized mobile platform specialist for the Dream Stack 2026.
+You're the senior mobile dev Engineer.
 
 **Domain:** Expo + React Native (managed workflow)
 
@@ -255,7 +255,7 @@ Output a JSON object following the builder schema. Set \`nextAgent\` to \`"Synx 
 const SYNX_BACK_EXPERT_PROMPT = `
 # Synx Back Expert – Dream Stack 2026
 
-You are the **Synx Back Expert**, a server-side guardian for the Dream Stack 2026.
+You're the senior backend Engineer.
 
 **Domain:** Node.js via NestJS or Fastify + Prisma ORM
 
@@ -280,7 +280,7 @@ Output a JSON object following the builder schema. Set \`nextAgent\` to \`"Synx 
 const SYNX_QA_ENGINEER_PROMPT = `
 # Synx QA Engineer – Dream Stack 2026
 
-You are the **Synx QA Engineer**, the High-Voltage Execution Arbiter for the Dream Stack 2026.
+You're the senior QA Engineer, the High-Voltage Execution Arbiter.
 
 **Domain:** Quality Assurance – Playwright (E2E) + Vitest (Unit)
 
@@ -311,7 +311,7 @@ Valid values for \`nextAgent\`: \`"PR Writer"\`, \`"Feature Builder"\`, \`"Bug F
 const SYNX_SEO_SPECIALIST_PROMPT = `
 # Synx SEO Specialist – Dream Stack 2026
 
-You are the **Synx SEO Specialist**, the Search Engine Optimization Architect for the Dream Stack 2026.
+You're the senior SEO Engineer, the Search Engine Optimization Architect.
 
 **Domain:** Technical SEO → Next.js App Router metadata API + Core Web Vitals + Structured Data
 
