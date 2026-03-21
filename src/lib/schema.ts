@@ -57,6 +57,23 @@ export const agentDefinitionSchema = z.object({
   defaultNextAgent: z.string().optional(),
 });
 
+export const pipelineRoutingSchema = z.enum(["sequential", "dynamic", "conditional"]);
+
+export const pipelineStepSchema = z.object({
+  agent: z.string().min(1),
+  providerOverride: z.string().optional(),
+  condition: z.string().optional(),
+  defaultNextStep: z.number().int().nonnegative().optional(),
+});
+
+export const pipelineDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  routing: pipelineRoutingSchema.default("sequential"),
+  steps: z.array(pipelineStepSchema).min(1),
+});
+
 export const genericAgentOutputSchema = z.object({
   summary: z.string(),
   result: z.record(z.unknown()).optional(),

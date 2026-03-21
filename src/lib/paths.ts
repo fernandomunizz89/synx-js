@@ -1,6 +1,6 @@
 import path from "node:path";
 import os from "node:os";
-import { AGENTS_DIR, AI_ROOT, CONFIG_DIR, LOCKS_DIR, LOGS_DIR, PROMPTS_DIR, RUNTIME_DIR, TASKS_DIR } from "./constants.js";
+import { AGENTS_DIR, AI_ROOT, CONFIG_DIR, LOCKS_DIR, LOGS_DIR, PIPELINES_DIR, PROMPTS_DIR, RUNTIME_DIR, TASKS_DIR } from "./constants.js";
 import { findRepoRoot } from "./repo.js";
 
 export function repoRoot(): string {
@@ -21,6 +21,10 @@ export function promptsDir(): string {
 
 export function agentsDir(): string {
   return path.join(repoRoot(), AGENTS_DIR);
+}
+
+export function pipelinesDir(): string {
+  return path.join(repoRoot(), PIPELINES_DIR);
 }
 
 export function runtimeDir(): string {
