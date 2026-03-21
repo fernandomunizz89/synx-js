@@ -52,6 +52,18 @@ export interface PipelineDefinition {
   steps: PipelineStep[];
 }
 
+export interface PipelineStepResult {
+  stepIndex: number;
+  agent: string;
+  output: Record<string, unknown>;
+}
+
+export interface PipelineState {
+  pipelineId: string;
+  currentStep: number;
+  completedSteps: PipelineStepResult[];
+}
+
 export interface ProviderStageConfig {
   type: ProviderType;
   model: string;

@@ -5,6 +5,7 @@ import { SynxBackExpert } from "./experts/synx-back-expert.js";
 import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
 import { SynxSeoSpecialist } from "./experts/synx-seo-specialist.js";
 import { GenericAgent } from "./generic-agent.js";
+import { PipelineExecutor } from "./pipeline-executor.js";
 import { loadAgentDefinitions } from "../lib/agent-registry.js";
 import type { WorkerBase } from "./base.js";
 
@@ -15,6 +16,7 @@ export const workers = {
   back: new SynxBackExpert(),
   qa: new SynxQAEngineer(),
   seo: new SynxSeoSpecialist(),
+  pipelineExecutor: new PipelineExecutor(),
 };
 
 export const workerList: WorkerBase[] = Object.values(workers);
