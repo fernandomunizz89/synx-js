@@ -35,6 +35,23 @@ export interface AgentDefinition {
   defaultNextAgent?: string;
 }
 
+export type PipelineRouting = "sequential" | "dynamic" | "conditional";
+
+export interface PipelineStep {
+  agent: string;                    // agent name or custom agent id
+  providerOverride?: string;        // shorthand "provider/model" e.g. "openai/gpt-4o"
+  condition?: string;               // optional condition expression (evaluated in Phase 3)
+  defaultNextStep?: number;         // index of default next step (for conditional routing)
+}
+
+export interface PipelineDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  routing: PipelineRouting;
+  steps: PipelineStep[];
+}
+
 export interface ProviderStageConfig {
   type: ProviderType;
   model: string;

@@ -14,6 +14,7 @@ import { metricsCommand } from "./commands/metrics.js";
 import { showConfigCommand } from "./commands/show-config.js";
 import { cancelCommand } from "./commands/cancel.js";
 import { reproveCommand } from "./commands/reprove.js";
+import { pipelineCommand } from "./commands/pipeline.js";
 
 loadDotEnvFile();
 
@@ -32,6 +33,7 @@ program.addCommand(metricsCommand);
 program.addCommand(showConfigCommand);
 program.addCommand(cancelCommand);
 program.addCommand(reproveCommand);
+program.addCommand(pipelineCommand);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error("\nError:", error instanceof Error ? error.message : String(error));

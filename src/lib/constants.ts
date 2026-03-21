@@ -6,6 +6,7 @@ export const PROMPTS_DIR = ".ai-agents/prompts";
 export const RUNTIME_DIR = ".ai-agents/runtime";
 export const LOCKS_DIR = ".ai-agents/runtime/locks";
 export const AGENTS_DIR = ".ai-agents/agents";
+export const PIPELINES_DIR = ".ai-agents/pipelines";
 export const POLL_INTERVAL_MS = 1200;
 export const STALE_LOCK_MINUTES = 10;
 export const DEFAULT_QA_MAX_RETRIES = 3;
