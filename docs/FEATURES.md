@@ -52,6 +52,22 @@
 - Anti-loop guard: if recommendation repeats while the issue persists, task escalates to `waiting_human`.
 - Max 2 web searches per stage (default, configurable).
 
+## Custom Agents & Pipelines
+
+- **`synx agent list/show/create`** — manage custom agent definitions stored in `.ai-agents/agents/*.json`.
+- **Interactive wizard** (`synx agent create`) or fully non-interactive via `--id`, `--name`, `--provider`, `--model`, `--output-schema`, `--default-next-agent`, `--no-prompt-file` flags.
+- **Starter prompt generation** — `create` writes a pre-structured `.md` prompt to `.ai-agents/prompts/<id>.md` with role, responsibilities, context, and output format sections.
+- **Output schemas**: `generic` (`summary`, `result`, `nextAgent`) or `builder` (`implementationSummary`, `filesChanged`, `edits`, `nextAgent`).
+- **Provider defaults per type** — `anthropic`, `openai-compatible`, `google`, `lmstudio`, `mock` each get smart defaults (apiKeyEnv, baseUrl, autoDiscoverModel).
+- **`synx pipeline list/show`** — browse pipeline definitions in `.ai-agents/pipelines/*.json`.
+- **`synx pipeline run <id> <input>`** — start a pipeline; creates a task and queues the Pipeline Executor worker.
+- **Pipeline Executor** — built-in worker that runs each step in order, accumulates outputs in `pipelineContext.previousSteps`, and re-queues itself until done.
+- **Routing modes**: `sequential` (ordered), `dynamic` (output-driven), `conditional` (expression + defaultNextStep).
+- **Mixed agent steps** — pipelines can reference both built-in agents (`Synx Back Expert`, `Synx QA Engineer`, etc.) and custom agents by ID in the same pipeline.
+- **Per-step provider override** via shorthand `provider/model?apiKeyEnv=...&baseUrl=...`.
+- **Provider fallback chain** — `providerFallbacks` array; executor tries each in order on failure before raising.
+- **Step output persistence** — each completed step is saved to `done/pipeline-step-<N>.done.json` for audit and resume.
+
 ## Provider & LLM
 
 - Supports LM Studio (local, runtime model auto-discovery), OpenAI-compatible endpoints, Google Generative AI, and Anthropic Claude Code.

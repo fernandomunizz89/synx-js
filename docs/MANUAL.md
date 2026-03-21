@@ -305,6 +305,313 @@ AI_AGENTS_GOOGLE_API_KEY=AIza...
 
 Keep that file in the repo root, add it to `.gitignore`, and reload `synx` (or reopen your terminal) after editing to make the new secrets available.
 
+---
+
+## Custom Agents & Pipelines
+
+Beyond the built-in Dream Stack expert squad, you can define your own agents and chain them into multi-step pipelines with any provider (Anthropic, OpenAI, Google, LM Studio, or any OpenAI-compatible endpoint).
+
+### Concepts
+
+| Term | What it is |
+|---|---|
+| **Custom Agent** | A JSON definition in `.ai-agents/agents/` that pairs an ID, a prompt file, and a provider config. |
+| **Pipeline** | A JSON definition in `.ai-agents/pipelines/` that describes an ordered sequence of agent steps. |
+| **Pipeline Executor** | The built-in worker that reads the pipeline definition, runs each step in order, and passes accumulated output to the next step. |
+
+---
+
+### Managing Custom Agents
+
+#### List all custom agents
+
+```bash
+synx agent list
+```
+
+#### Show full details of one agent
+
+```bash
+synx agent show <id>
+```
+
+#### Create a new agent (interactive)
+
+```bash
+synx agent create
+```
+
+The wizard asks for: ID, display name, provider, model, output schema (`generic` or `builder`), and an optional default next agent.
+It also creates a starter `.md` prompt file at `.ai-agents/prompts/<id>.md` that you edit to define the agent's behavior.
+
+#### Create a new agent (non-interactive, all flags)
+
+```bash
+synx agent create \
+  --id my-analyst \
+  --name "My Analyst" \
+  --provider anthropic \
+  --model claude-sonnet-4-6 \
+  --output-schema generic \
+  --default-next-agent "Synx QA Engineer"
+```
+
+Supported providers and what each flag sets automatically:
+
+| `--provider` | API key env var | Base URL |
+|---|---|---|
+| `anthropic` | `AI_AGENTS_ANTHROPIC_API_KEY` | — |
+| `openai-compatible` | `AI_AGENTS_OPENAI_API_KEY` | `https://api.openai.com/v1` |
+| `google` | `AI_AGENTS_GOOGLE_API_KEY` | — |
+| `lmstudio` | — | `http://localhost:1234/v1` (auto-discover) |
+| `mock` | — | — (deterministic, for testing) |
+
+#### Skip creating the prompt file
+
+```bash
+synx agent create --id my-analyst --name "My Analyst" --provider anthropic --model claude-sonnet-4-6 --no-prompt-file
+```
+
+#### Output schemas
+
+- **`generic`** — the agent returns `{ summary, result?, nextAgent? }`. Best for research, analysis, planning.
+- **`builder`** — the agent returns `{ implementationSummary, filesChanged, changesMade, testsToRun, risks, edits, nextAgent }`. Best for coding agents that write files.
+
+---
+
+#### Agent definition file (`.ai-agents/agents/<id>.json`)
+
+What the file looks like after `synx agent create`:
+
+```json
+{
+  "id": "my-analyst",
+  "name": "My Analyst",
+  "prompt": ".ai-agents/prompts/my-analyst.md",
+  "provider": {
+    "type": "anthropic",
+    "model": "claude-sonnet-4-6",
+    "apiKeyEnv": "AI_AGENTS_ANTHROPIC_API_KEY"
+  },
+  "outputSchema": "generic",
+  "defaultNextAgent": "Synx QA Engineer"
+}
+```
+
+You can edit this file directly after creation to change any field.
+
+#### Prompt file (`.ai-agents/prompts/<id>.md`)
+
+The wizard generates a starter prompt. Open it and fill in the `Role` and `Responsibilities` sections.
+The `Output Format` section is pre-filled based on the output schema you chose — do not remove it, as the executor validates against it.
+
+```markdown
+# My Analyst
+
+You are My Analyst, a specialized AI agent in the Synx pipeline.
+
+## Role
+<!-- Describe what this agent does -->
+
+## Responsibilities
+<!-- List specific responsibilities -->
+
+## Context
+You will receive:
+- `task`: title, rawRequest, extraContext
+- `pipelineContext`: step index, pipeline name, outputs from previous steps
+
+## Output Format
+Return a JSON object with:
+- `summary` (string): Brief description of what you did
+- `result` (object, optional): Your structured output data
+- `nextAgent` (string, optional): Agent to hand off to next
+```
+
+---
+
+### Managing Pipelines
+
+#### List all pipelines
+
+```bash
+synx pipeline list
+```
+
+#### Show full details of one pipeline
+
+```bash
+synx pipeline show <id>
+```
+
+#### Run a pipeline
+
+```bash
+synx pipeline run <id> "Your detailed input here"
+```
+
+This creates a task, writes an initial `pipeline-state.json`, and queues the Pipeline Executor. The engine must be running (`synx start`) for it to process.
+
+---
+
+#### Pipeline definition file (`.ai-agents/pipelines/<id>.json`)
+
+Create this file manually. Example:
+
+```json
+{
+  "id": "research-and-build",
+  "name": "Research then Build",
+  "description": "Analyst researches, then the back expert implements",
+  "routing": "sequential",
+  "steps": [
+    { "agent": "my-analyst" },
+    { "agent": "Synx Back Expert" },
+    { "agent": "Synx QA Engineer" }
+  ]
+}
+```
+
+Steps can mix built-in agents (`Synx Back Expert`, `Synx QA Engineer`, etc.) and custom agents (by their `id`).
+
+#### Routing modes
+
+| `routing` | Behavior |
+|---|---|
+| `sequential` | Steps run in order, one after the other. |
+| `dynamic` | Each step's output `nextAgent` field decides the next step. |
+| `conditional` | Each step has an optional `condition` expression and a `defaultNextStep` index. |
+
+#### Per-step provider override
+
+Override the provider for a single step using shorthand syntax `provider/model`:
+
+```json
+{ "agent": "my-analyst", "providerOverride": "anthropic/claude-opus-4-6" }
+```
+
+With extra parameters (query string format):
+
+```json
+{ "agent": "my-analyst", "providerOverride": "openai/gpt-4o?baseUrl=https://my-gateway.com/v1&apiKeyEnv=MY_KEY" }
+```
+
+Supported query params: `apiKeyEnv`, `baseUrl`, `baseUrlEnv`, `apiKey`, `fallbackModel`.
+
+#### Provider fallback chain
+
+If the primary provider fails, the executor tries each fallback in order:
+
+```json
+{
+  "agent": "my-analyst",
+  "providerFallbacks": [
+    "anthropic/claude-sonnet-4-6",
+    "openai/gpt-4o"
+  ]
+}
+```
+
+---
+
+### End-to-end example: create and run a custom pipeline
+
+```bash
+# 1. Create two custom agents
+synx agent create \
+  --id requirements-analyst \
+  --name "Requirements Analyst" \
+  --provider anthropic \
+  --model claude-sonnet-4-6 \
+  --output-schema generic
+
+synx agent create \
+  --id api-builder \
+  --name "API Builder" \
+  --provider anthropic \
+  --model claude-opus-4-6 \
+  --output-schema builder
+
+# 2. Edit each prompt file to define behavior
+# .ai-agents/prompts/requirements-analyst.md
+# .ai-agents/prompts/api-builder.md
+
+# 3. Create the pipeline definition
+cat > .ai-agents/pipelines/requirements-to-api.json <<'EOF'
+{
+  "id": "requirements-to-api",
+  "name": "Requirements to API",
+  "routing": "sequential",
+  "steps": [
+    { "agent": "requirements-analyst" },
+    { "agent": "api-builder" },
+    { "agent": "Synx QA Engineer" }
+  ]
+}
+EOF
+
+# 4. Start the engine
+synx start
+
+# 5. Run the pipeline (in another terminal or via the inline prompt)
+synx pipeline run requirements-to-api \
+  "Build a REST endpoint that returns paginated user activity logs filtered by date range"
+
+# 6. Monitor progress
+synx status
+
+# 7. Approve final result
+synx approve
+```
+
+---
+
+### How context flows between steps
+
+Each step receives:
+
+```json
+{
+  "task": {
+    "title": "...",
+    "rawRequest": "The input you passed to pipeline run",
+    "extraContext": {}
+  },
+  "pipelineContext": {
+    "pipelineId": "requirements-to-api",
+    "pipelineName": "Requirements to API",
+    "currentStep": 1,
+    "previousSteps": [
+      {
+        "stepIndex": 0,
+        "agent": "requirements-analyst",
+        "output": { "summary": "...", "result": { ... } }
+      }
+    ]
+  }
+}
+```
+
+Use `pipelineContext.previousSteps` in your prompt to instruct the agent to build on prior work instead of starting from scratch.
+
+---
+
+### Where pipeline and agent files live
+
+```
+.ai-agents/
+├── agents/
+│   ├── requirements-analyst.json
+│   └── api-builder.json
+├── pipelines/
+│   └── requirements-to-api.json
+└── prompts/
+    ├── requirements-analyst.md
+    └── api-builder.md
+```
+
+---
+
 ## Where files live
 
 ### Global config
