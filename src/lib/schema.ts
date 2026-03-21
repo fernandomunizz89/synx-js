@@ -62,6 +62,7 @@ export const pipelineRoutingSchema = z.enum(["sequential", "dynamic", "condition
 export const pipelineStepSchema = z.object({
   agent: z.string().min(1),
   providerOverride: z.string().optional(),
+  providerFallbacks: z.array(z.string()).optional(),
   condition: z.string().optional(),
   defaultNextStep: z.number().int().nonnegative().optional(),
 });

@@ -2,7 +2,7 @@ import path from "node:path";
 import { writeJson } from "../lib/fs.js";
 import { loadPipelineDefinition } from "../lib/pipeline-registry.js";
 import { loadPipelineState, savePipelineState, advancePipelineState, PIPELINE_STATE_FILE } from "../lib/pipeline-state.js";
-import { resolveStepProvider } from "../lib/pipeline-provider.js";
+import { resolveStepProviderChain } from "../lib/pipeline-provider.js";
 import { resolveStepPrompt } from "../lib/pipeline-prompt.js";
 import { genericAgentOutputSchema } from "../lib/schema.js";
 import type { PipelineStepResult, StageEnvelope } from "../lib/types.js";
@@ -46,12 +46,10 @@ export class PipelineExecutor extends WorkerBase {
 
     const currentStep = pipeline.steps[currentStepIndex];
 
-    const [prompt, providerConfig] = await Promise.all([
+    const [prompt, providerChain] = await Promise.all([
       resolveStepPrompt(currentStep.agent),
-      resolveStepProvider(currentStep),
+      resolveStepProviderChain(currentStep),
     ]);
-
-    const provider = createProvider(providerConfig);
 
     const input = {
       task: baseInput,
@@ -66,8 +64,8 @@ export class PipelineExecutor extends WorkerBase {
       },
     };
 
-    const result = await provider.generateStructured({
-      agent: this.agent,
+    const request = {
+      agent: this.agent as any,
       taskType: baseInput.typeHint,
       taskId,
       stage: `${stage}-step-${currentStepIndex}`,
@@ -75,7 +73,19 @@ export class PipelineExecutor extends WorkerBase {
       input,
       expectedJsonSchemaDescription:
         'JSON object with: summary (string), result (optional object with any fields), nextAgent (optional string)',
-    });
+    };
+
+    let result = null;
+    let lastError: unknown = null;
+    for (const config of providerChain) {
+      try {
+        result = await createProvider(config).generateStructured(request);
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    if (!result) throw lastError;
 
     const parsed = genericAgentOutputSchema.parse(result.parsed);
 

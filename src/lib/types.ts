@@ -40,7 +40,8 @@ export type PipelineRouting = "sequential" | "dynamic" | "conditional";
 export interface PipelineStep {
   agent: string;                    // agent name or custom agent id
   providerOverride?: string;        // shorthand "provider/model" e.g. "openai/gpt-4o"
-  condition?: string;               // optional condition expression (evaluated in Phase 3)
+  providerFallbacks?: string[];     // fallback chain e.g. ["anthropic/claude-sonnet-4-6", "openai/gpt-4o"]
+  condition?: string;               // optional condition expression
   defaultNextStep?: number;         // index of default next step (for conditional routing)
 }
 
