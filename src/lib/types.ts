@@ -24,6 +24,17 @@ export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" 
 export type E2EPolicy = "auto" | "required" | "skip";
 export type E2EFramework = "auto" | "playwright" | "other";
 
+export type AgentOutputSchema = "generic" | "builder";
+
+export interface AgentDefinition {
+  id: string;
+  name: string;
+  prompt: string;
+  provider: ProviderStageConfig;
+  outputSchema: AgentOutputSchema;
+  defaultNextAgent?: string;
+}
+
 export interface ProviderStageConfig {
   type: ProviderType;
   model: string;
@@ -94,7 +105,7 @@ export interface StageEnvelope<T = unknown> {
   stage: string;
   status: "request" | "done" | "failed";
   createdAt: string;
-  agent: AgentName;
+  agent: AgentName | string;
   inputRef?: string;
   output?: T;
   error?: string;
@@ -102,7 +113,7 @@ export interface StageEnvelope<T = unknown> {
 
 export interface TaskMetaHistoryItem {
   stage: string;
-  agent: AgentName;
+  agent: AgentName | string;
   startedAt: string;
   endedAt: string;
   durationMs: number;
@@ -128,8 +139,8 @@ export interface TaskMeta {
   project: string;
   status: TaskStatus;
   currentStage: string;
-  currentAgent: AgentName | "";
-  nextAgent: AgentName | "";
+  currentAgent: AgentName | string;
+  nextAgent: AgentName | string;
   humanApprovalRequired: boolean;
   createdAt: string;
   updatedAt: string;
@@ -139,7 +150,7 @@ export interface TaskMeta {
 export interface TimingEntry {
   taskId: string;
   stage: string;
-  agent: AgentName;
+  agent: AgentName | string;
   provider?: string;
   model?: string;
   startedAt: string;
@@ -159,7 +170,7 @@ export interface TimingEntry {
 }
 
 export interface ProviderRequest {
-  agent: AgentName;
+  agent: AgentName | string;
   taskType?: TaskType;
   taskId?: string;
   stage?: string;

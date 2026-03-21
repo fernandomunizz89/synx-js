@@ -24,11 +24,11 @@ export const agentNameSchema = z.enum([
   "Synx SEO Specialist",
 ]);
 const legacyHistoryAgentSchema = z
-  .union([agentNameSchema, z.literal("System")])
-  .transform<z.infer<typeof agentNameSchema>>((value) => (value === "System" ? "Human Review" : value));
+  .union([agentNameSchema, z.literal("System"), z.string()])
+  .transform<z.infer<typeof agentNameSchema> | string>((value) => (value === "System" ? "Human Review" : value));
 const taskMetaCurrentAgentSchema = z
-  .union([agentNameSchema, z.literal(""), z.literal("System"), z.literal("[none]")])
-  .transform<z.infer<typeof agentNameSchema> | "">((value) => {
+  .union([agentNameSchema, z.literal(""), z.literal("System"), z.literal("[none]"), z.string()])
+  .transform<z.infer<typeof agentNameSchema> | string>((value) => {
     if (value === "System" || value === "[none]") return "";
     return value;
   });
@@ -44,6 +44,23 @@ export const providerStageConfigSchema = z.object({
   apiKey: z.string().optional(),
   fallbackModel: z.string().optional(),
   autoDiscoverModel: z.boolean().optional(),
+});
+
+export const agentOutputSchemaSchema = z.enum(["generic", "builder"]);
+
+export const agentDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  prompt: z.string().min(1),
+  provider: providerStageConfigSchema,
+  outputSchema: agentOutputSchemaSchema,
+  defaultNextAgent: z.string().optional(),
+});
+
+export const genericAgentOutputSchema = z.object({
+  summary: z.string(),
+  result: z.record(z.unknown()).optional(),
+  nextAgent: z.string().optional(),
 });
 
 export const globalConfigSchema = z.object({
@@ -92,7 +109,7 @@ export const stageEnvelopeSchema = z.object({
   stage: z.string(),
   status: z.enum(["request", "done", "failed"]),
   createdAt: z.string(),
-  agent: agentNameSchema,
+  agent: z.string(),
   inputRef: z.string().optional(),
   output: z.unknown().optional(),
   error: z.string().optional(),
