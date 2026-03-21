@@ -1,15 +1,13 @@
-// Dream Stack 2026 – Squad Factory
-// Replaces the generic worker array with a squad of Domain Experts.
-// The Dispatcher still runs first and routes each task to the right expert.
-
 import { DispatcherWorker } from "./dispatcher.js";
 import { SynxFrontExpert } from "./experts/synx-front-expert.js";
 import { SynxMobileExpert } from "./experts/synx-mobile-expert.js";
 import { SynxBackExpert } from "./experts/synx-back-expert.js";
 import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
 import { SynxSeoSpecialist } from "./experts/synx-seo-specialist.js";
+import { GenericAgent } from "./generic-agent.js";
+import { loadAgentDefinitions } from "../lib/agent-registry.js";
+import type { WorkerBase } from "./base.js";
 
-/** Domain-keyed squad map (Dispatcher → Expert → QA loop). */
 export const workers = {
   dispatcher: new DispatcherWorker(),
   front: new SynxFrontExpert(),
@@ -19,5 +17,11 @@ export const workers = {
   seo: new SynxSeoSpecialist(),
 };
 
-/** Flat list used by the daemon polling loop (start command). */
-export const workerList = Object.values(workers);
+export const workerList: WorkerBase[] = Object.values(workers);
+
+export async function registerCustomAgents(): Promise<void> {
+  const definitions = await loadAgentDefinitions();
+  for (const def of definitions) {
+    workerList.push(new GenericAgent(def));
+  }
+}

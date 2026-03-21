@@ -29,7 +29,7 @@ function emitRuntimeStreamLog(message: string): void {
 }
 
 export abstract class WorkerBase {
-  abstract readonly agent: AgentName;
+  abstract readonly agent: AgentName | string;
   abstract readonly requestFileName: string;
   abstract readonly workingFileName: string;
   protected abstract processTask(taskId: string, request: StageEnvelope): Promise<void>;
@@ -201,7 +201,7 @@ export abstract class WorkerBase {
     viewFileName: string;
     viewContent: string;
     output: unknown;
-    nextAgent?: AgentName;
+    nextAgent?: AgentName | string;
     nextStage?: string;
     nextRequestFileName?: string;
     nextInputRef?: string;
