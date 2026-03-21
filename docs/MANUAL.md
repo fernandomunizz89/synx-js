@@ -580,12 +580,23 @@ Each step receives:
   "pipelineContext": {
     "pipelineId": "requirements-to-api",
     "pipelineName": "Requirements to API",
+    "routing": "sequential",
     "currentStep": 1,
+    "totalSteps": 3,
+    "currentAgent": "api-builder",
     "previousSteps": [
       {
         "stepIndex": 0,
         "agent": "requirements-analyst",
-        "output": { "summary": "...", "result": { ... } }
+        "summary": "Identified 3 key requirements: pagination, date filtering, auth.",
+        "keyOutputs": {
+          "summary": "Identified 3 key requirements: pagination, date filtering, auth.",
+          "result": { "requirements": ["pagination", "date filtering", "auth"] },
+          "nextAgent": "api-builder"
+        },
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-6",
+        "durationMs": 4200
       }
     ]
   }
@@ -593,6 +604,8 @@ Each step receives:
 ```
 
 Use `pipelineContext.previousSteps` in your prompt to instruct the agent to build on prior work instead of starting from scratch.
+
+**Note on context size:** The executor automatically strips verbose fields (e.g. the `edits` array from builder agents) from `previousSteps` before passing them to the next agent — this prevents token bloat in long pipelines. The full output including `edits` is always preserved in `.ai-agents/tasks/<id>/done/pipeline-step-N.done.json` for audit purposes.
 
 ---
 

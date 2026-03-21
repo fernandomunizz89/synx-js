@@ -12,10 +12,17 @@ import type { PipelineDefinition, PipelineState } from "../lib/types.js";
 vi.mock("../lib/pipeline-state.js", () => ({
   loadPipelineState: vi.fn(),
   savePipelineState: vi.fn().mockResolvedValue(undefined),
-  advancePipelineState: vi.fn((state: PipelineState, nextStep: number, stepResult: unknown) => ({
+  advancePipelineState: vi.fn((state: PipelineState, nextStep: number, stepContext: unknown) => ({
     ...state,
     currentStep: nextStep,
-    completedSteps: [...state.completedSteps, stepResult],
+    completedSteps: [...state.completedSteps, stepContext],
+  })),
+  buildStepContext: vi.fn((stepIndex: number, agent: string, output: Record<string, unknown>, opts?: Record<string, unknown>) => ({
+    stepIndex,
+    agent,
+    summary: typeof output.summary === "string" ? output.summary : "",
+    keyOutputs: output,
+    ...opts,
   })),
   PIPELINE_STATE_FILE: "input/pipeline-state.json",
 }));
@@ -190,7 +197,7 @@ describe.sequential("workers/pipeline-executor", () => {
       pipelineId: "test-pipeline",
       currentStep: 1, // last step (index 1 of 2)
       completedSteps: [
-        { stepIndex: 0, agent: "Agent 0", output: { summary: "step 0 done" } },
+        { stepIndex: 0, agent: "Agent 0", summary: "step 0 done", keyOutputs: { summary: "step 0 done" } },
       ],
     });
 
@@ -376,8 +383,8 @@ describe.sequential("workers/pipeline-executor", () => {
       pipelineId: "test-pipeline",
       currentStep: 2, // beyond last step index (max is 1)
       completedSteps: [
-        { stepIndex: 0, agent: "Agent 0", output: { summary: "done" } },
-        { stepIndex: 1, agent: "Agent 1", output: { summary: "done" } },
+        { stepIndex: 0, agent: "Agent 0", summary: "done", keyOutputs: { summary: "done" } },
+        { stepIndex: 1, agent: "Agent 1", summary: "done", keyOutputs: { summary: "done" } },
       ],
     });
 
