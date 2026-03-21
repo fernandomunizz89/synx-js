@@ -16,17 +16,30 @@ const PROVIDER_SHORTHAND_MAP: Record<string, ProviderType> = {
 };
 
 export function parseProviderShorthand(shorthand: string): ProviderStageConfig {
-  const slashIndex = shorthand.indexOf("/");
+  const [providerModel, queryString] = shorthand.split("?", 2) as [string, string | undefined];
+  const slashIndex = providerModel.indexOf("/");
   if (slashIndex === -1) {
     throw new Error(`Invalid providerOverride shorthand "${shorthand}". Expected "provider/model" e.g. "openai/gpt-4o"`);
   }
-  const providerKey = shorthand.slice(0, slashIndex).toLowerCase();
-  const model = shorthand.slice(slashIndex + 1);
+  const providerKey = providerModel.slice(0, slashIndex).toLowerCase();
+  const model = providerModel.slice(slashIndex + 1);
   const type = PROVIDER_SHORTHAND_MAP[providerKey];
   if (!type) {
     throw new Error(`Unknown provider "${providerKey}" in shorthand "${shorthand}". Supported: ${Object.keys(PROVIDER_SHORTHAND_MAP).join(", ")}`);
   }
-  return { type, model };
+
+  const config: ProviderStageConfig = { type, model };
+
+  if (queryString) {
+    const params = new URLSearchParams(queryString);
+    if (params.has("apiKeyEnv")) config.apiKeyEnv = params.get("apiKeyEnv")!;
+    if (params.has("baseUrl")) config.baseUrl = params.get("baseUrl")!;
+    if (params.has("baseUrlEnv")) config.baseUrlEnv = params.get("baseUrlEnv")!;
+    if (params.has("apiKey")) config.apiKey = params.get("apiKey")!;
+    if (params.has("fallbackModel")) config.fallbackModel = params.get("fallbackModel")!;
+  }
+
+  return config;
 }
 
 export async function resolveStepProvider(step: PipelineStep): Promise<ProviderStageConfig> {
@@ -44,4 +57,10 @@ export async function resolveStepProvider(step: PipelineStep): Promise<ProviderS
   // Fall back to project default (dispatcher provider)
   const config = await loadResolvedProjectConfig();
   return config.providers.dispatcher;
+}
+
+export async function resolveStepProviderChain(step: PipelineStep): Promise<ProviderStageConfig[]> {
+  const primary = await resolveStepProvider(step);
+  const fallbacks = (step.providerFallbacks ?? []).map(parseProviderShorthand);
+  return [primary, ...fallbacks];
 }

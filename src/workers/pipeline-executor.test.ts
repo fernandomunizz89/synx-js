@@ -26,6 +26,7 @@ vi.mock("../lib/pipeline-registry.js", () => ({
 
 vi.mock("../lib/pipeline-provider.js", () => ({
   resolveStepProvider: vi.fn().mockResolvedValue({ type: "mock", model: "static-mock" }),
+  resolveStepProviderChain: vi.fn().mockResolvedValue([{ type: "mock", model: "static-mock" }]),
 }));
 
 vi.mock("../lib/pipeline-prompt.js", () => ({
@@ -415,5 +416,72 @@ describe.sequential("workers/pipeline-executor", () => {
       status: "done",
       agent: "Pipeline Executor",
     });
+  });
+
+  it("uses fallback provider when primary provider fails", async () => {
+    const { loadPipelineState } = await import("../lib/pipeline-state.js");
+    const { loadPipelineDefinition } = await import("../lib/pipeline-registry.js");
+    const { resolveStepProviderChain } = await import("../lib/pipeline-provider.js");
+    const { createProvider } = await import("../providers/factory.js");
+
+    const pipeline = makeSequentialPipeline(2);
+    vi.mocked(loadPipelineDefinition).mockResolvedValue(pipeline);
+    vi.mocked(loadPipelineState).mockResolvedValue({
+      pipelineId: "test-pipeline",
+      currentStep: 0,
+      completedSteps: [],
+    });
+
+    // Primary fails, fallback succeeds
+    vi.mocked(resolveStepProviderChain).mockResolvedValue([
+      { type: "anthropic", model: "claude-opus-4-6" },
+      { type: "mock", model: "fallback-mock" },
+    ]);
+
+    const successResult = {
+      parsed: { summary: "Fallback succeeded", result: {}, nextAgent: undefined },
+      provider: "mock",
+      model: "fallback-mock",
+      parseRetries: 0,
+      validationPassed: true,
+      providerAttempts: 1,
+      providerBackoffRetries: 0,
+      providerBackoffWaitMs: 0,
+      estimatedInputTokens: 10,
+      estimatedOutputTokens: 10,
+      estimatedTotalTokens: 20,
+      estimatedCostUsd: 0,
+    };
+
+    vi.mocked(createProvider)
+      .mockReturnValueOnce({ generateStructured: vi.fn().mockRejectedValue(new Error("Provider unavailable")) })
+      .mockReturnValueOnce({ generateStructured: vi.fn().mockResolvedValue(successResult) });
+
+    const task = await createTask({
+      title: "Fallback test",
+      typeHint: "Feature",
+      project: "test",
+      rawRequest: "Test fallback",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    await writeJson(path.join(task.taskPath, "inbox", PIPELINE_EXECUTOR_REQUEST_FILE), {
+      taskId: task.taskId,
+      stage: "pipeline-executor",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Pipeline Executor",
+      inputRef: "input/pipeline-state.json",
+    });
+
+    const executor = new PipelineExecutor();
+    const processed = await executor.tryProcess(task.taskId);
+    expect(processed).toBe(true);
+    // primary provider + fallback provider both instantiated
+    const calls = vi.mocked(createProvider).mock.calls;
+    const primaryCall = calls.find((c) => (c[0] as { model?: string }).model === "claude-opus-4-6");
+    const fallbackCall = calls.find((c) => (c[0] as { model?: string }).model === "fallback-mock");
+    expect(primaryCall).toBeDefined();
+    expect(fallbackCall).toBeDefined();
   });
 });

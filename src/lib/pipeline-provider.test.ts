@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseProviderShorthand, resolveStepProvider } from "./pipeline-provider.js";
+import { parseProviderShorthand, resolveStepProvider, resolveStepProviderChain } from "./pipeline-provider.js";
 import type { PipelineStep } from "./types.js";
 
 vi.mock("./agent-registry.js", () => ({
@@ -57,6 +57,37 @@ describe("pipeline-provider", () => {
       expect(() => parseProviderShorthand("unknown/model")).toThrow(/Unknown provider "unknown"/);
       expect(() => parseProviderShorthand("unknown/model")).toThrow(/Supported:/);
     });
+
+    it("parses apiKeyEnv query param from shorthand", () => {
+      const result = parseProviderShorthand("anthropic/claude-opus-4-6?apiKeyEnv=MY_ANTHROPIC_KEY");
+      expect(result).toEqual({ type: "anthropic", model: "claude-opus-4-6", apiKeyEnv: "MY_ANTHROPIC_KEY" });
+    });
+
+    it("parses baseUrl query param from shorthand", () => {
+      const result = parseProviderShorthand("openai/gpt-4o?baseUrl=https://my-proxy.com/v1");
+      expect(result).toEqual({ type: "openai-compatible", model: "gpt-4o", baseUrl: "https://my-proxy.com/v1" });
+    });
+
+    it("parses multiple query params from shorthand", () => {
+      const result = parseProviderShorthand("openai/gpt-4o?apiKeyEnv=MY_KEY&baseUrl=https://proxy.com/v1&fallbackModel=gpt-3.5-turbo");
+      expect(result).toEqual({
+        type: "openai-compatible",
+        model: "gpt-4o",
+        apiKeyEnv: "MY_KEY",
+        baseUrl: "https://proxy.com/v1",
+        fallbackModel: "gpt-3.5-turbo",
+      });
+    });
+
+    it("parses baseUrlEnv and apiKey query params", () => {
+      const result = parseProviderShorthand("google/gemini-2.0-flash?baseUrlEnv=MY_BASE_URL&apiKey=direct-key");
+      expect(result).toEqual({
+        type: "google",
+        model: "gemini-2.0-flash",
+        baseUrlEnv: "MY_BASE_URL",
+        apiKey: "direct-key",
+      });
+    });
   });
 
   describe("resolveStepProvider", () => {
@@ -113,6 +144,41 @@ describe("pipeline-provider", () => {
 
       const result = await resolveStepProvider(step);
       expect(result).toEqual({ type: "mock", model: "dispatcher-model" });
+    });
+  });
+
+  describe("resolveStepProviderChain", () => {
+    it("returns array with only primary provider when no fallbacks defined", async () => {
+      const step: PipelineStep = {
+        agent: "Synx Front Expert",
+        providerOverride: "anthropic/claude-opus-4-6",
+      };
+      const chain = await resolveStepProviderChain(step);
+      expect(chain).toHaveLength(1);
+      expect(chain[0]).toEqual({ type: "anthropic", model: "claude-opus-4-6" });
+    });
+
+    it("returns primary + fallback providers in order", async () => {
+      const step: PipelineStep = {
+        agent: "Synx Front Expert",
+        providerOverride: "anthropic/claude-opus-4-6",
+        providerFallbacks: ["openai/gpt-4o", "google/gemini-2.0-flash"],
+      };
+      const chain = await resolveStepProviderChain(step);
+      expect(chain).toHaveLength(3);
+      expect(chain[0]).toEqual({ type: "anthropic", model: "claude-opus-4-6" });
+      expect(chain[1]).toEqual({ type: "openai-compatible", model: "gpt-4o" });
+      expect(chain[2]).toEqual({ type: "google", model: "gemini-2.0-flash" });
+    });
+
+    it("fallbacks support query params", async () => {
+      const step: PipelineStep = {
+        agent: "Synx Front Expert",
+        providerOverride: "anthropic/claude-opus-4-6",
+        providerFallbacks: ["openai/gpt-4o?apiKeyEnv=BACKUP_KEY"],
+      };
+      const chain = await resolveStepProviderChain(step);
+      expect(chain[1]).toEqual({ type: "openai-compatible", model: "gpt-4o", apiKeyEnv: "BACKUP_KEY" });
     });
   });
 });
