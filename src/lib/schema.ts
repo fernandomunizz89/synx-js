@@ -74,6 +74,18 @@ export const pipelineDefinitionSchema = z.object({
   steps: z.array(pipelineStepSchema).min(1),
 });
 
+export const pipelineStepResultSchema = z.object({
+  stepIndex: z.number().int().nonnegative(),
+  agent: z.string(),
+  output: z.record(z.unknown()),
+});
+
+export const pipelineStateSchema = z.object({
+  pipelineId: z.string().min(1),
+  currentStep: z.number().int().nonnegative(),
+  completedSteps: z.array(pipelineStepResultSchema),
+});
+
 export const genericAgentOutputSchema = z.object({
   summary: z.string(),
   result: z.record(z.unknown()).optional(),
