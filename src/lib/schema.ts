@@ -81,10 +81,20 @@ export const pipelineStepResultSchema = z.object({
   output: z.record(z.unknown()),
 });
 
+export const pipelineStepContextSchema = z.object({
+  stepIndex: z.number().int().nonnegative(),
+  agent: z.string(),
+  summary: z.string(),
+  keyOutputs: z.record(z.unknown()),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  durationMs: z.number().nonnegative().optional(),
+});
+
 export const pipelineStateSchema = z.object({
   pipelineId: z.string().min(1),
   currentStep: z.number().int().nonnegative(),
-  completedSteps: z.array(pipelineStepResultSchema),
+  completedSteps: z.array(pipelineStepContextSchema),
 });
 
 export const genericAgentOutputSchema = z.object({

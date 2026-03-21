@@ -1,11 +1,11 @@
 import path from "node:path";
 import { writeJson } from "../lib/fs.js";
 import { loadPipelineDefinition } from "../lib/pipeline-registry.js";
-import { loadPipelineState, savePipelineState, advancePipelineState, PIPELINE_STATE_FILE } from "../lib/pipeline-state.js";
+import { loadPipelineState, savePipelineState, advancePipelineState, buildStepContext, PIPELINE_STATE_FILE } from "../lib/pipeline-state.js";
 import { resolveStepProviderChain } from "../lib/pipeline-provider.js";
 import { resolveStepPrompt } from "../lib/pipeline-prompt.js";
 import { genericAgentOutputSchema } from "../lib/schema.js";
-import type { PipelineStepResult, StageEnvelope } from "../lib/types.js";
+import type { StageEnvelope } from "../lib/types.js";
 import { nowIso } from "../lib/utils.js";
 import { taskDir } from "../lib/paths.js";
 import { createProvider } from "../providers/factory.js";
@@ -75,6 +75,7 @@ export class PipelineExecutor extends WorkerBase {
         'JSON object with: summary (string), result (optional object with any fields), nextAgent (optional string)',
     };
 
+    const stepStartedAt = Date.now();
     let result = null;
     let lastError: unknown = null;
     for (const config of providerChain) {
@@ -88,8 +89,9 @@ export class PipelineExecutor extends WorkerBase {
     if (!result) throw lastError;
 
     const parsed = genericAgentOutputSchema.parse(result.parsed);
+    const stepEndedAt = Date.now();
 
-    // Save individual step output
+    // Save full step output for audit (done file keeps everything including edits)
     const stepDoneFile = `pipeline-step-${currentStepIndex}.done.json`;
     await writeJson(path.join(taskDir(taskId), "done", stepDoneFile), {
       taskId,
@@ -98,13 +100,21 @@ export class PipelineExecutor extends WorkerBase {
       createdAt: nowIso(),
       agent: currentStep.agent,
       output: parsed,
+      provider: result.provider,
+      model: result.model,
     });
 
-    const stepResult: PipelineStepResult = {
-      stepIndex: currentStepIndex,
-      agent: currentStep.agent,
-      output: parsed as Record<string, unknown>,
-    };
+    // Build compact context (strips verbose fields like edits) for pipeline state
+    const stepContext = buildStepContext(
+      currentStepIndex,
+      currentStep.agent,
+      parsed as Record<string, unknown>,
+      {
+        provider: result.provider,
+        model: result.model,
+        durationMs: stepEndedAt - stepStartedAt,
+      },
+    );
 
     // Resolve next step index
     const nextStepIndex = resolveNextStep({
@@ -114,7 +124,7 @@ export class PipelineExecutor extends WorkerBase {
       routing: pipeline.routing,
     });
 
-    const updatedState = advancePipelineState(state, nextStepIndex, stepResult);
+    const updatedState = advancePipelineState(state, nextStepIndex, stepContext);
     await savePipelineState(taskId, updatedState);
 
     const moreSteps = nextStepIndex < pipeline.steps.length;

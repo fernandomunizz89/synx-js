@@ -59,10 +59,26 @@ export interface PipelineStepResult {
   output: Record<string, unknown>;
 }
 
+/**
+ * Compact context stored in pipeline-state.json and forwarded to subsequent steps.
+ * Verbose fields (e.g. `edits` from builder agents) are stripped to avoid token bloat.
+ */
+export interface PipelineStepContext {
+  stepIndex: number;
+  agent: string;
+  /** Extracted from output.summary or output.implementationSummary */
+  summary: string;
+  /** Full output minus stripped verbose fields (e.g. edits) */
+  keyOutputs: Record<string, unknown>;
+  provider?: string;
+  model?: string;
+  durationMs?: number;
+}
+
 export interface PipelineState {
   pipelineId: string;
   currentStep: number;
-  completedSteps: PipelineStepResult[];
+  completedSteps: PipelineStepContext[];
 }
 
 export interface ProviderStageConfig {
