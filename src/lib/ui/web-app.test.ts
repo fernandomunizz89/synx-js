@@ -4,9 +4,10 @@ import { buildWebUiHtml } from "./web-app.js";
 describe("lib/ui/web-app", () => {
   it("renders core dashboard sections and actions", () => {
     const html = buildWebUiHtml();
-    expect(html).toContain("SYNX Web Observability");
+    expect(html).toContain("SYNX.js - Mission Control");
     expect(html).toContain('data-view="overview"');
     expect(html).toContain('data-view="tasks"');
+    expect(html).toContain('data-view="board"');
     expect(html).toContain('data-view="review"');
     expect(html).toContain('data-view="detail"');
     expect(html).toContain('data-view="live"');
@@ -53,6 +54,10 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('target.closest("[data-runtime-action]")');
     expect(html).toContain("Task moved to waiting_human and needs your decision (");
     expect(html).toContain("Task state changed (");
+    expect(html).toContain("boardColumnForTask(");
+    expect(html).toContain("renderBoard()");
+    expect(html).toContain("board-columns");
+    expect(html).toContain("Loading agent board...");
     expect(html).toContain('data-theme-option="light"');
     expect(html).toContain('data-theme-option="system"');
     expect(html).toContain('data-theme-option="dark"');
@@ -60,7 +65,7 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("loadThemePreference(");
     expect(html).toContain("bindSystemThemeSync(");
     expect(html).toContain('class="logo-ascii"');
-    expect(html).toContain("SYNX Mission Control");
+    expect(html).toContain("SYNX.js - Mission Control");
     expect(html).toContain("--synx-cyan");
     expect(html).toContain('html[data-theme="dark"]');
   });

@@ -4,7 +4,7 @@ export function buildWebUiHtml(): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SYNX Web UI</title>
+    <title>SYNX.js - Mission Control</title>
     <style>
       :root {
         color-scheme: light;
@@ -215,7 +215,7 @@ export function buildWebUiHtml(): string {
       }
       nav {
         display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(7, minmax(0, 1fr));
         gap: 8px;
         margin-bottom: 16px;
       }
@@ -486,6 +486,68 @@ export function buildWebUiHtml(): string {
         display: grid;
         gap: 10px;
       }
+      .board-columns {
+        display: flex;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+      }
+      .board-column {
+        min-width: 270px;
+        max-width: 320px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface-soft);
+        padding: 10px;
+      }
+      .board-column h3 {
+        margin: 0 0 6px;
+        font-size: 0.97rem;
+      }
+      .board-column .meta {
+        margin-bottom: 10px;
+      }
+      .board-stack {
+        display: grid;
+        gap: 8px;
+      }
+      .board-card {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 9px 10px;
+        transition: transform 0.16s ease, border-color 0.16s ease;
+      }
+      .board-card:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, var(--synx-cyan) 24%, var(--border));
+      }
+      .board-card .head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .board-card .id {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+      .board-card .summary {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .board-card.waiting_human {
+        border-color: color-mix(in srgb, var(--status-waiting-fg) 36%, var(--border));
+      }
+      .board-card.done {
+        border-color: color-mix(in srgb, var(--status-done-fg) 32%, var(--border));
+      }
+      .board-card.failed,
+      .board-card.blocked,
+      .board-card.archived {
+        border-color: color-mix(in srgb, var(--status-failed-fg) 34%, var(--border));
+      }
       .event-card {
         border: 1px solid var(--border);
         border-radius: 12px;
@@ -566,7 +628,7 @@ export function buildWebUiHtml(): string {
           justify-items: start;
         }
         nav {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+          grid-template-columns: repeat(4, minmax(0, 1fr));
         }
         .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -584,7 +646,7 @@ export function buildWebUiHtml(): string {
           grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         nav {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .theme-switch {
           width: 100%;
@@ -610,7 +672,7 @@ export function buildWebUiHtml(): string {
             <div class="logo-tag">[ Synthetic Agent Orchestrator v5.0 ]</div>
           </div>
           <div class="title-wrap">
-            <h1>SYNX Mission Control</h1>
+            <h1>SYNX.js - Mission Control</h1>
             <p>SYNX Web Observability: runtime, human review e analytics em tempo real</p>
           </div>
         </div>
@@ -627,6 +689,7 @@ export function buildWebUiHtml(): string {
       <nav aria-label="SYNX Web UI sections">
         <button type="button" data-view="overview" class="active" aria-current="page">Overview</button>
         <button type="button" data-view="tasks">Tasks</button>
+        <button type="button" data-view="board">Agent Board</button>
         <button type="button" data-view="review">Review Queue</button>
         <button type="button" data-view="detail">Task Detail</button>
         <button type="button" data-view="live">Live Stream</button>
@@ -648,6 +711,7 @@ export function buildWebUiHtml(): string {
         reviewDraftReason: "",
         reviewRollbackMode: "none",
         reviewRenderedKey: "",
+        boardRenderedKey: "",
         liveRenderedCount: -1,
         liveRenderedConnected: null,
         themePreference: "system",
@@ -1072,6 +1136,102 @@ export function buildWebUiHtml(): string {
         ].join("");
       }
 
+      function boardColumnForTask(task) {
+        const status = String(task.status || "");
+        const currentAgent = String(task.currentAgent || "").toLowerCase();
+        const nextAgent = String(task.nextAgent || "").toLowerCase();
+        const stage = String(task.currentStage || "").toLowerCase();
+        const context = [currentAgent, nextAgent, stage].join(" ");
+
+        if (status === "done") return "done";
+        if (status === "failed" || status === "blocked" || status === "archived") return "failed";
+        if (task.humanApprovalRequired || status === "waiting_human" || context.includes("human review")) return "human";
+        if (context.includes("dispatcher")) return "dispatcher";
+        if (context.includes("planner")) return "planner";
+        if (context.includes("research")) return "research";
+        if (context.includes("qa")) return "qa";
+        if (
+          context.includes("expert")
+          || context.includes("specialist")
+          || context.includes("engineer")
+          || context.includes("front")
+          || context.includes("back")
+          || context.includes("mobile")
+          || context.includes("seo")
+          || status === "waiting_agent"
+          || status === "in_progress"
+        ) {
+          return "experts";
+        }
+        return "new";
+      }
+
+      async function renderBoard() {
+        const tasks = await api("/api/tasks");
+        const key = tasks
+          .map((task) => [task.taskId, task.status, task.currentAgent, task.nextAgent, task.currentStage, task.updatedAt].join("|"))
+          .join(";");
+        if (state.boardRenderedKey === key && document.getElementById("board-root")) return;
+
+        const columns = [
+          { id: "new", title: "New Queue", hint: "Newly created or not yet assigned" },
+          { id: "dispatcher", title: "Dispatcher", hint: "Task routing and orchestration" },
+          { id: "planner", title: "Planner", hint: "Plan decomposition and sequencing" },
+          { id: "research", title: "Researcher", hint: "External discovery and grounding" },
+          { id: "experts", title: "Experts", hint: "Implementation by SYNX specialists" },
+          { id: "qa", title: "QA", hint: "Validation and retry loops" },
+          { id: "human", title: "Human Review", hint: "Waiting for approve/reprove" },
+          { id: "done", title: "Done", hint: "Completed successfully" },
+          { id: "failed", title: "Failed/Blocked", hint: "Needs intervention" },
+        ];
+
+        const byColumn = {};
+        for (const column of columns) byColumn[column.id] = [];
+        for (const task of tasks) {
+          const columnId = boardColumnForTask(task);
+          if (!Array.isArray(byColumn[columnId])) byColumn[columnId] = [];
+          byColumn[columnId].push(task);
+        }
+        for (const column of columns) {
+          byColumn[column.id].sort((a, b) => Date.parse(String(b.updatedAt || "")) - Date.parse(String(a.updatedAt || "")));
+        }
+
+        contentEl.innerHTML = [
+          '<div id="board-root">',
+          '<div class="toolbar"><div class="muted">Auto-updating board: cards move by agent/stage on each poll and realtime event.</div><div class="muted">' + fmtNumber(tasks.length) + " tasks</div></div>",
+          '<div class="board-columns">',
+          columns.map((column) => {
+            const cards = byColumn[column.id] || [];
+            const cardHtml = cards.length
+              ? cards.map((task) => {
+                const stage = String(task.currentStage || "[none]");
+                const currentAgent = String(task.currentAgent || "[none]");
+                const nextAgent = String(task.nextAgent || "[none]");
+                return [
+                  '<article class="board-card ' + escapeHtml(task.status) + '">',
+                  '<div class="head"><div><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + '</button><div class="id">' + escapeHtml(task.taskId) + '</div></div>' + taskStatusBadge(task.status) + "</div>",
+                  '<div class="summary">Current: ' + escapeHtml(currentAgent) + " | Next: " + escapeHtml(nextAgent) + "</div>",
+                  '<div class="summary">Stage: ' + escapeHtml(stage) + " | Tokens: " + fmtNumber(task.consumption && task.consumption.estimatedTotalTokens) + "</div>",
+                  "</article>",
+                ].join("");
+              }).join("")
+              : '<div class="empty">No tasks in this lane.</div>';
+            return [
+              '<section class="board-column">',
+              "<h3>" + escapeHtml(column.title) + "</h3>",
+              '<div class="meta muted">' + escapeHtml(column.hint) + " • " + fmtNumber(cards.length) + "</div>",
+              '<div class="board-stack">',
+              cardHtml,
+              "</div>",
+              "</section>",
+            ].join("");
+          }).join(""),
+          "</div>",
+          "</div>",
+        ].join("");
+        state.boardRenderedKey = key;
+      }
+
       async function renderReviewQueue() {
         const queue = await api("/api/review-queue");
         const queueKey = queue.map((task) => [task.taskId, task.status, task.updatedAt, task.currentStage].join("|")).join(";");
@@ -1171,6 +1331,8 @@ export function buildWebUiHtml(): string {
       async function render() {
         const loadingMessage = state.view === "tasks"
           ? "Loading task list..."
+          : state.view === "board"
+          ? "Loading agent board..."
           : state.view === "review"
           ? "Loading review queue..."
           : state.view === "detail"
@@ -1186,6 +1348,7 @@ export function buildWebUiHtml(): string {
         try {
           if (state.view === "overview") await renderOverview();
           if (state.view === "tasks") await renderTasks();
+          if (state.view === "board") await renderBoard();
           if (state.view === "review") await renderReviewQueue();
           if (state.view === "detail") await renderDetail();
           if (state.view === "live") renderLive();
@@ -1500,6 +1663,9 @@ export function buildWebUiHtml(): string {
                 }
                 if (state.view === "review" && (type === "task.review_required" || type === "task.decision_recorded" || type === "task.updated")) {
                   void renderReviewQueue();
+                }
+                if (state.view === "board" && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
+                  void renderBoard();
                 }
                 if (state.view === "analytics" && (type === "task.updated" || type === "task.decision_recorded" || type === "metrics.updated")) {
                   void renderAnalytics();
