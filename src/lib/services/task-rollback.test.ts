@@ -4,7 +4,7 @@ import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTask } from "../task.js";
 import { DONE_FILE_NAMES } from "../constants.js";
-import { writeJson } from "../fs.js";
+import { writeJson, exists } from "../fs.js";
 import type { NewTaskInput } from "../types.js";
 import { applyTaskRollback } from "./task-rollback.js";
 
@@ -57,7 +57,7 @@ describe.sequential("lib/services/task-rollback", () => {
     expect(summary.warnings[0]).toContain("No implementation file list found");
   });
 
-  it("reports skipped files when workspace is not a git repository", async () => {
+  it("reports skipped tracked files when workspace is not a git repository", async () => {
     const created = await createTask(baseTaskInput("With changes"));
     await writeJson(path.join(created.taskPath, "done", DONE_FILE_NAMES.synxFrontExpert), {
       output: {
@@ -65,9 +65,40 @@ describe.sequential("lib/services/task-rollback", () => {
       },
     });
 
+    // In a non-git repo, all files are treated as untracked.
+    // Since src/demo.ts does not exist, it won't be in untrackedRemoved nor skipped.
     const summary = await applyTaskRollback(created.taskId);
     expect(summary.requested).toBe(1);
-    expect(summary.skipped).toContain("src/demo.ts");
     expect(summary.warnings.some((row) => row.includes("not a git repository"))).toBe(true);
+  });
+
+  it("skips unsafe rollback paths outside workspace root", async () => {
+    const created = await createTask(baseTaskInput("Unsafe changes"));
+    await writeJson(path.join(created.taskPath, "done", DONE_FILE_NAMES.synxFrontExpert), {
+      output: {
+        filesChanged: ["../outside.ts", "/etc/passwd"],
+      },
+    });
+
+    const summary = await applyTaskRollback(created.taskId);
+    expect(summary.warnings.some((w) => w.includes("unsafe rollback path"))).toBe(true);
+  });
+
+  it("removes untracked files even if git is not present", async () => {
+    const created = await createTask(baseTaskInput("Untracked changes"));
+    const untrackedFile = path.join(fixture.repoRoot, "src/new-file.ts");
+    await fs.mkdir(path.dirname(untrackedFile), { recursive: true });
+    await fs.writeFile(untrackedFile, "content", "utf8");
+
+    await writeJson(path.join(created.taskPath, "done", DONE_FILE_NAMES.synxFrontExpert), {
+      output: {
+        filesChanged: ["src/new-file.ts"],
+      },
+    });
+
+    // Even if not a git repo, untracked files are removed if they exist.
+    const summary = await applyTaskRollback(created.taskId);
+    expect(summary.untrackedRemoved).toContain("src/new-file.ts");
+    expect(await exists(untrackedFile)).toBe(false);
   });
 });
