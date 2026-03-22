@@ -11,10 +11,10 @@ export interface AgentAuditEntry {
   at?: string;
   taskId: string;
   stage: string;
-  agent: AgentName;
+  agent: AgentName | string;
   event: AgentAuditEvent;
   inputRef?: string;
-  nextAgent?: AgentName | "";
+  nextAgent?: AgentName | string | "";
   nextStage?: string;
   durationMs?: number;
   status?: string;
@@ -23,7 +23,7 @@ export interface AgentAuditEntry {
   note?: string;
 }
 
-export function normalizeAgentSlug(agent: AgentName): string {
+export function normalizeAgentSlug(agent: AgentName | string): string {
   return agent.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
