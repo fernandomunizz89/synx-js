@@ -11,7 +11,7 @@ import type { AgentDefinition, AgentOutputSchema, ProviderStageConfig, ProviderT
 const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   anthropic: "claude-sonnet-4-6",
   "openai-compatible": "gpt-4o",
-  google: "gemini-2.0-flash",
+  google: "gemini-3.0-flash",
   lmstudio: "auto",
   mock: "static-mock",
 };
