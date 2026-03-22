@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildWebUiHtml } from "./web-app.js";
 
 describe("lib/ui/web-app", () => {
-  it("renders phase 1 dashboard sections", () => {
+  it("renders core dashboard sections and actions", () => {
     const html = buildWebUiHtml();
     expect(html).toContain("SYNX Web Observability");
     expect(html).toContain('data-view="overview"');
@@ -19,5 +19,19 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("/reprove");
     expect(html).toContain("/cancel");
     expect(html).toContain("/api/runtime/");
+  });
+
+  it("includes phase 5 UX hardening markers for loading, accessibility, and retries", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('class="skip-link"');
+    expect(html).toContain('id="content" role="region" aria-live="polite" aria-busy="false"');
+    expect(html).toContain('id="feedback" class="feedback" role="status" aria-live="polite"');
+    expect(html).toContain("showLoading(");
+    expect(html).toContain("Loading task list...");
+    expect(html).toContain('data-retry-render');
+    expect(html).toContain('class="table-wrap"');
+    expect(html).toContain('caption class="sr-only"');
+    expect(html).toContain("@media (max-width: 940px)");
+    expect(html).toContain("@media (max-width: 640px)");
   });
 });

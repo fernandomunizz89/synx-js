@@ -15,12 +15,37 @@ export function buildWebUiHtml(): string {
         --muted: #4e6278;
         --danger: #b2272d;
         --border: #d7e3ea;
+        --focus: #0f5fcc;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      :focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 2px;
       }
       body {
         margin: 0;
         font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
         background: radial-gradient(circle at 8% 12%, #dff2ea 0%, var(--bg) 56%);
         color: var(--fg);
+        line-height: 1.45;
+      }
+      .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 12px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        color: var(--fg);
+        text-decoration: none;
+        font-weight: 700;
+      }
+      .skip-link:focus {
+        top: 12px;
+        z-index: 20;
       }
       main {
         max-width: 1160px;
@@ -51,7 +76,7 @@ export function buildWebUiHtml(): string {
       }
       nav {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(6, minmax(0, 1fr));
         gap: 8px;
         margin-bottom: 16px;
       }
@@ -63,6 +88,7 @@ export function buildWebUiHtml(): string {
         color: var(--fg);
         font-weight: 600;
         cursor: pointer;
+        min-height: 44px;
       }
       nav button.active {
         border-color: #1a946f;
@@ -157,11 +183,51 @@ export function buildWebUiHtml(): string {
         color: var(--danger);
         font-weight: 600;
       }
+      .feedback {
+        min-height: 20px;
+        margin-bottom: 10px;
+        color: #16543f;
+        font-size: 0.92rem;
+      }
+      .feedback.error {
+        color: var(--danger);
+      }
       .empty {
         border: 1px dashed var(--border);
         border-radius: 12px;
         padding: 20px;
         color: var(--muted);
+      }
+      .loading {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+      }
+      .loading::before {
+        content: "";
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        border: 2px solid #b8d5c9;
+        border-top-color: #0f8f66;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      .sr-only {
+        border: 0 !important;
+        clip: rect(0 0 0 0) !important;
+        height: 1px !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        position: absolute !important;
+        width: 1px !important;
       }
       pre {
         white-space: pre-wrap;
@@ -176,7 +242,7 @@ export function buildWebUiHtml(): string {
       }
       @media (max-width: 940px) {
         nav {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -187,45 +253,39 @@ export function buildWebUiHtml(): string {
         }
       }
       @media (max-width: 640px) {
+        main {
+          padding: 20px 14px 36px;
+        }
         .grid {
           grid-template-columns: repeat(1, minmax(0, 1fr));
         }
-        table, thead, tbody, th, td, tr {
-          display: block;
-        }
-        thead {
-          display: none;
-        }
-        td {
-          border-bottom: none;
-          padding: 6px 0;
-        }
-        tr {
-          border-bottom: 1px solid var(--border);
-          padding: 10px 0;
+        nav {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
     </style>
   </head>
   <body>
-    <main>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <main id="main-content">
       <div class="topbar">
         <div class="title-wrap">
           <h1>SYNX Web Observability</h1>
-          <p>Phase 1 - read-only monitoring and review queue visibility</p>
+          <p>Phase 5 - hardened observability, review operations, and analytics</p>
         </div>
-        <div class="badge" id="poll-status">Polling 3s</div>
+        <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Polling 3s</div>
       </div>
-      <nav>
-        <button data-view="overview" class="active">Overview</button>
-        <button data-view="tasks">Tasks</button>
-        <button data-view="review">Review Queue</button>
-        <button data-view="detail">Task Detail</button>
-        <button data-view="live">Live Stream</button>
-        <button data-view="analytics">Analytics</button>
+      <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
+      <nav aria-label="SYNX Web UI sections">
+        <button type="button" data-view="overview" class="active" aria-current="page">Overview</button>
+        <button type="button" data-view="tasks">Tasks</button>
+        <button type="button" data-view="review">Review Queue</button>
+        <button type="button" data-view="detail">Task Detail</button>
+        <button type="button" data-view="live">Live Stream</button>
+        <button type="button" data-view="analytics">Analytics</button>
       </nav>
       <section class="card">
-        <div id="content"></div>
+        <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
       </section>
     </main>
     <script>
@@ -239,6 +299,8 @@ export function buildWebUiHtml(): string {
         reviewAlertAt: "",
       };
       const contentEl = document.getElementById("content");
+      const pollStatusEl = document.getElementById("poll-status");
+      const feedbackEl = document.getElementById("feedback");
       const navButtons = Array.from(document.querySelectorAll("nav button"));
 
       function fmtNumber(value) {
@@ -260,10 +322,29 @@ export function buildWebUiHtml(): string {
           .replace(/'/g, "&#039;");
       }
 
+      function setPollStatus(message) {
+        if (pollStatusEl) pollStatusEl.textContent = message;
+      }
+
+      function setFeedback(message, tone) {
+        if (!feedbackEl) return;
+        feedbackEl.textContent = message || "";
+        feedbackEl.classList.toggle("error", tone === "error");
+      }
+
+      function showLoading(message) {
+        if (!contentEl) return;
+        contentEl.setAttribute("aria-busy", "true");
+        contentEl.innerHTML = '<div class="loading" role="status">' + escapeHtml(message || "Loading...") + "</div>";
+      }
+
       function setView(view) {
         state.view = view;
         navButtons.forEach((button) => {
-          button.classList.toggle("active", button.dataset.view === view);
+          const isActive = button.dataset.view === view;
+          button.classList.toggle("active", isActive);
+          if (isActive) button.setAttribute("aria-current", "page");
+          else button.removeAttribute("aria-current");
         });
         render();
       }
@@ -327,7 +408,9 @@ export function buildWebUiHtml(): string {
           return '<div class="empty">No tasks found in <code>.ai-agents/tasks</code>.</div>';
         }
         return [
+          '<div class="table-wrap">',
           "<table>",
+          '<caption class="sr-only">Tasks list</caption>',
           "<thead><tr><th>Task</th><th>Status</th><th>Project</th><th>Stage</th><th>Tokens</th><th>Cost</th></tr></thead>",
           "<tbody>",
           tasks.map((task) => {
@@ -343,6 +426,7 @@ export function buildWebUiHtml(): string {
             ].join("");
           }).join(""),
           "</tbody></table>",
+          "</div>",
         ].join("");
       }
 
@@ -365,7 +449,9 @@ export function buildWebUiHtml(): string {
           return;
         }
         contentEl.innerHTML = [
+          '<div class="table-wrap">',
           "<table>",
+          '<caption class="sr-only">Tasks waiting for human review</caption>',
           "<thead><tr><th>Task</th><th>Status</th><th>Type</th><th>Updated</th></tr></thead>",
           "<tbody>",
           queue.map((task) => [
@@ -377,6 +463,7 @@ export function buildWebUiHtml(): string {
             "</tr>",
           ].join("")).join(""),
           "</tbody></table>",
+          "</div>",
         ].join("");
       }
 
@@ -430,6 +517,19 @@ export function buildWebUiHtml(): string {
       }
 
       async function render() {
+        const loadingMessage = state.view === "tasks"
+          ? "Loading task list..."
+          : state.view === "review"
+          ? "Loading review queue..."
+          : state.view === "detail"
+          ? "Loading task detail..."
+          : state.view === "analytics"
+          ? "Loading analytics..."
+          : state.view === "overview"
+          ? "Loading overview..."
+          : "";
+
+        if (loadingMessage) showLoading(loadingMessage);
         try {
           if (state.view === "overview") await renderOverview();
           if (state.view === "tasks") await renderTasks();
@@ -437,9 +537,15 @@ export function buildWebUiHtml(): string {
           if (state.view === "detail") await renderDetail();
           if (state.view === "live") renderLive();
           if (state.view === "analytics") await renderAnalytics();
+          contentEl.setAttribute("aria-busy", "false");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown UI error";
-          contentEl.innerHTML = '<div class="error">Failed to load view: ' + escapeHtml(message) + "</div>";
+          contentEl.setAttribute("aria-busy", "false");
+          contentEl.innerHTML = [
+            '<div class="error" role="alert">Failed to load view: ' + escapeHtml(message) + "</div>",
+            '<div style="margin-top:10px;"><button type="button" data-retry-render style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; color:var(--fg); font-weight:600; cursor:pointer;">Retry</button></div>',
+          ].join("");
+          setFeedback("View loading failed. Use Retry or change section.", "error");
         }
       }
 
@@ -459,7 +565,9 @@ export function buildWebUiHtml(): string {
         contentEl.innerHTML = [
           '<div class="toolbar"><div class="muted">Realtime: ' + (state.realtimeConnected ? "connected" : "disconnected") + '</div></div>',
           controls,
+          '<div class="table-wrap">',
           "<table>",
+          '<caption class="sr-only">Realtime event stream</caption>',
           "<thead><tr><th>At</th><th>Type</th><th>Task</th><th>Payload</th></tr></thead>",
           "<tbody>",
           rows.map((event) => [
@@ -470,7 +578,7 @@ export function buildWebUiHtml(): string {
             "<td><code>" + escapeHtml(JSON.stringify(event.payload || {})) + "</code></td>",
             "</tr>",
           ].join("")).join(""),
-          "</tbody></table>",
+          "</tbody></table></div>",
         ].join("");
       }
 
@@ -519,13 +627,13 @@ export function buildWebUiHtml(): string {
           '<div class="metric"><div class="muted">Top Bottleneck</div><strong>' + escapeHtml(bottleneck ? bottleneck.stage : "N/A") + "</strong></div>",
           "</div>",
           '<h3 style="margin:18px 0 8px;">Top Tasks by Consumption</h3>',
-          topTaskRows ? '<table><thead><tr><th>Task</th><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topTaskRows + "</tbody></table>" : '<div class="empty">No task analytics yet.</div>',
+          topTaskRows ? '<div class="table-wrap"><table><caption class="sr-only">Top tasks by consumption</caption><thead><tr><th>Task</th><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topTaskRows + "</tbody></table></div>" : '<div class="empty">No task analytics yet.</div>',
           '<h3 style="margin:18px 0 8px;">Top Agents</h3>',
-          topAgentRows ? '<table><thead><tr><th>Agent</th><th>Stages</th><th>Tokens</th><th>Cost</th><th>Approval Rate</th></tr></thead><tbody>' + topAgentRows + "</tbody></table>" : '<div class="empty">No agent analytics yet.</div>',
+          topAgentRows ? '<div class="table-wrap"><table><caption class="sr-only">Top agents</caption><thead><tr><th>Agent</th><th>Stages</th><th>Tokens</th><th>Cost</th><th>Approval Rate</th></tr></thead><tbody>' + topAgentRows + "</tbody></table></div>" : '<div class="empty">No agent analytics yet.</div>',
           '<h3 style="margin:18px 0 8px;">Top Projects</h3>',
-          topProjectRows ? '<table><thead><tr><th>Project</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topProjectRows + "</tbody></table>" : '<div class="empty">No project analytics yet.</div>',
+          topProjectRows ? '<div class="table-wrap"><table><caption class="sr-only">Top projects</caption><thead><tr><th>Project</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topProjectRows + "</tbody></table></div>" : '<div class="empty">No project analytics yet.</div>',
           '<h3 style="margin:18px 0 8px;">30-day Timeline</h3>',
-          timelineRows ? '<table><thead><tr><th>Date</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + timelineRows + "</tbody></table>" : '<div class="empty">No timeline points yet.</div>',
+          timelineRows ? '<div class="table-wrap"><table><caption class="sr-only">30 day analytics timeline</caption><thead><tr><th>Date</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + timelineRows + "</tbody></table></div>" : '<div class="empty">No timeline points yet.</div>',
         ].join("");
       }
 
@@ -535,7 +643,14 @@ export function buildWebUiHtml(): string {
 
         const navView = target.dataset.view;
         if (navView) {
+          setFeedback("", "info");
           setView(navView);
+          return;
+        }
+
+        if (target.dataset.retryRender !== undefined) {
+          setFeedback("Retrying current section...", "info");
+          void render();
           return;
         }
 
@@ -562,23 +677,25 @@ export function buildWebUiHtml(): string {
 
               if (taskAction === "approve") {
                 await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/approve", {});
+                setFeedback("Task approved successfully.", "info");
               } else if (taskAction === "reprove") {
                 await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/reprove", {
                   reason,
                   rollbackMode,
                 });
+                setFeedback("Task reproved and sent back to agent flow.", "info");
               } else if (taskAction === "cancel") {
                 await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/cancel", {
                   reason,
                 });
+                setFeedback("Cancellation requested for task.", "info");
               }
 
-              const badge = document.getElementById("poll-status");
-              if (badge) badge.textContent = "Last action at " + new Date().toLocaleTimeString();
+              setPollStatus("Last action at " + new Date().toLocaleTimeString());
               await render();
             } catch (error) {
               const message = error instanceof Error ? error.message : "Action failed";
-              alert(message);
+              setFeedback(message, "error");
             }
           })();
           return;
@@ -589,11 +706,11 @@ export function buildWebUiHtml(): string {
           (async () => {
             try {
               await postApi("/api/runtime/" + encodeURIComponent(runtimeAction), {});
-              const badge = document.getElementById("poll-status");
-              if (badge) badge.textContent = "Runtime command sent: " + runtimeAction;
+              setPollStatus("Runtime command sent: " + runtimeAction);
+              setFeedback("Runtime command accepted: " + runtimeAction + ".", "info");
             } catch (error) {
               const message = error instanceof Error ? error.message : "Runtime action failed";
-              alert(message);
+              setFeedback(message, "error");
             }
           })();
         }
@@ -610,14 +727,13 @@ export function buildWebUiHtml(): string {
       function connectRealtime() {
         try {
           const source = new EventSource("/api/stream");
-          const badge = document.getElementById("poll-status");
           source.addEventListener("open", () => {
             state.realtimeConnected = true;
-            if (badge) badge.textContent = "Realtime connected";
+            setPollStatus("Realtime connected");
           });
           source.addEventListener("error", () => {
             state.realtimeConnected = false;
-            if (badge) badge.textContent = "Realtime reconnecting...";
+            setPollStatus("Realtime reconnecting...");
           });
 
           const types = ["runtime.updated", "task.updated", "task.review_required", "task.decision_recorded", "metrics.updated"];
@@ -629,7 +745,8 @@ export function buildWebUiHtml(): string {
                 if (state.liveEvents.length > 160) state.liveEvents = state.liveEvents.slice(-160);
                 if (type === "task.review_required") {
                   state.reviewAlertAt = new Date().toLocaleTimeString();
-                  if (badge) badge.textContent = "Review required now";
+                  setPollStatus("Review required now");
+                  setFeedback("New task entered waiting_human queue.", "info");
                 }
                 if (parsed && parsed.taskId && state.selectedTaskId && parsed.taskId === state.selectedTaskId && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
                   if (state.view === "detail") {
@@ -652,8 +769,7 @@ export function buildWebUiHtml(): string {
             });
           }
         } catch {
-          const badge = document.getElementById("poll-status");
-          if (badge) badge.textContent = "Realtime unavailable";
+          setPollStatus("Realtime unavailable");
         }
       }
 
