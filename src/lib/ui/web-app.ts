@@ -678,6 +678,311 @@ export function buildWebUiHtml(): string {
         font-weight: var(--type-value-weight);
         margin-top: 2px;
       }
+      .overview-root {
+        display: grid;
+        gap: var(--space-3);
+      }
+      .hero-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 78%, transparent);
+        backdrop-filter: blur(8px);
+        padding: var(--space-4);
+        position: relative;
+        overflow: hidden;
+      }
+      .hero-card::after {
+        content: "";
+        position: absolute;
+        width: 320px;
+        height: 320px;
+        right: -190px;
+        top: -130px;
+        border-radius: 999px;
+        background: radial-gradient(circle, color-mix(in srgb, var(--color-accent-working) 22%, transparent) 0%, transparent 68%);
+        pointer-events: none;
+      }
+      .hero-content {
+        display: grid;
+        gap: var(--space-2);
+        max-width: min(72ch, 72%);
+      }
+      .hero-title {
+        margin: 0;
+        font-size: clamp(1.18rem, 2.2vw, 1.62rem);
+        letter-spacing: 0.01em;
+        color: var(--color-text-primary);
+      }
+      .hero-context {
+        margin: 0;
+        color: var(--color-text-secondary);
+        font-size: 0.97rem;
+      }
+      .hero-meta {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-1);
+      }
+      .hero-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        padding: 0 var(--space-2);
+        background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
+        color: var(--muted);
+      }
+      .hero-chip.strong {
+        color: var(--fg);
+      }
+      .hero-art {
+        position: absolute;
+        right: var(--space-4);
+        top: 50%;
+        transform: translateY(-50%);
+        width: 100px;
+        height: 100px;
+        opacity: 0.66;
+        color: color-mix(in srgb, var(--color-accent-working) 58%, var(--color-accent-review));
+        pointer-events: none;
+      }
+      .hero-art svg {
+        width: 100%;
+        height: 100%;
+      }
+      .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+      .stat-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 76%, transparent);
+        backdrop-filter: blur(8px);
+        padding: var(--space-3);
+        min-height: 144px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: var(--space-2);
+      }
+      .stat-card.waiting-hot {
+        border-color: color-mix(in srgb, var(--color-accent-attention) 64%, var(--border));
+        animation: waiting-pulse 2.4s ease-in-out infinite;
+      }
+      @keyframes waiting-pulse {
+        0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-attention) 22%, transparent); }
+        70% { box-shadow: 0 0 0 6px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; }
+      }
+      .stat-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .stat-label {
+        color: var(--muted);
+        font-size: var(--type-label-size);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-weight: var(--type-label-weight);
+      }
+      .stat-icon {
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        color: color-mix(in srgb, var(--fg) 54%, var(--muted));
+      }
+      .stat-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      .stat-value {
+        margin: 0;
+        font-size: clamp(1.16rem, 1.8vw, 1.5rem);
+        line-height: 1.16;
+        font-weight: var(--type-value-weight);
+      }
+      .stat-value.online {
+        color: var(--color-accent-online);
+      }
+      .stat-value.working {
+        color: var(--color-accent-working);
+      }
+      .stat-value.review {
+        color: var(--color-accent-review);
+      }
+      .stat-value.attention {
+        color: var(--color-accent-attention);
+      }
+      .stat-value.error {
+        color: var(--color-accent-error);
+      }
+      .stat-sub {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+      .stat-link {
+        justify-self: start;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        padding: 0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .stat-link:hover {
+        color: var(--fg);
+      }
+      .recent-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 74%, transparent);
+        backdrop-filter: blur(8px);
+        padding: var(--space-3);
+      }
+      .recent-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-bottom: var(--space-2);
+      }
+      .recent-head h3 {
+        margin: 0;
+        font-size: 0.96rem;
+      }
+      .recent-list {
+        display: grid;
+        gap: var(--space-1);
+      }
+      .recent-item {
+        width: 100%;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+        color: var(--fg);
+        text-align: left;
+        cursor: pointer;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+      }
+      .recent-item:hover {
+        border-color: var(--border);
+      }
+      .recent-copy {
+        min-width: 0;
+      }
+      .recent-title {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .recent-sub {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .recent-time {
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 600;
+      }
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        display: inline-flex;
+      }
+      .status-dot.done {
+        background: var(--color-accent-online);
+      }
+      .status-dot.waiting {
+        background: var(--color-accent-attention);
+      }
+      .status-dot.failed {
+        background: var(--color-accent-error);
+      }
+      .status-dot.active {
+        background: var(--color-accent-working);
+      }
+      .status-dot.neutral {
+        background: var(--muted);
+      }
+      .overview-skeleton {
+        display: grid;
+        gap: var(--space-3);
+      }
+      .skeleton-block {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+        padding: var(--space-3);
+      }
+      .skeleton-line,
+      .skeleton-pill {
+        position: relative;
+        overflow: hidden;
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--surface-strong) 86%, transparent);
+      }
+      .skeleton-line::after,
+      .skeleton-pill::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--synx-cyan) 18%, transparent) 50%, transparent 100%);
+        animation: shimmer 1.15s infinite;
+      }
+      @keyframes shimmer {
+        100% { transform: translateX(100%); }
+      }
+      .skeleton-line.lg {
+        height: 22px;
+        width: min(48%, 340px);
+      }
+      .skeleton-line.md {
+        margin-top: var(--space-2);
+        height: 14px;
+        width: min(64%, 420px);
+      }
+      .skeleton-pill {
+        margin-top: var(--space-2);
+        width: 132px;
+        height: 28px;
+      }
+      .skeleton-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+      .skeleton-stat {
+        height: 144px;
+      }
+      .skeleton-recent {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .skeleton-row {
+        height: 50px;
+      }
       .muted {
         color: var(--muted);
         font-size: var(--type-body-size);
@@ -1278,6 +1583,18 @@ export function buildWebUiHtml(): string {
         .global-search {
           width: 100%;
         }
+        .hero-content {
+          max-width: 100%;
+        }
+        .hero-art {
+          width: 78px;
+          height: 78px;
+          right: var(--space-3);
+        }
+        .kpi-grid,
+        .skeleton-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .snapshot-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
@@ -1322,6 +1639,16 @@ export function buildWebUiHtml(): string {
         }
         .workspace-header {
           padding: var(--space-3);
+        }
+        .hero-card {
+          padding: var(--space-3);
+        }
+        .hero-art {
+          display: none;
+        }
+        .kpi-grid,
+        .skeleton-grid {
+          grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         .ops-grid {
           grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -1373,6 +1700,7 @@ export function buildWebUiHtml(): string {
         reviewAlertAt: "",
         reviewDraftReason: "",
         reviewRollbackMode: "none",
+        overviewRenderedKey: "",
         tasksRenderedKey: "",
         reviewRenderedKey: "",
         boardRenderedKey: "",
@@ -2044,6 +2372,140 @@ export function buildWebUiHtml(): string {
         return '<span class="status ' + escapeHtml(status) + '">' + escapeHtml(status) + "</span>";
       }
 
+      function overviewStatusTone(status) {
+        const normalized = String(status || "").toLowerCase();
+        if (normalized === "done") return "done";
+        if (normalized === "waiting_human") return "waiting";
+        if (normalized === "failed" || normalized === "blocked" || normalized === "archived") return "failed";
+        if (normalized === "in_progress" || normalized === "waiting_agent" || normalized === "new") return "active";
+        return "neutral";
+      }
+
+      function overviewStatIcon(kind) {
+        const common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+        if (kind === "total") return '<svg ' + common + '><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16" /><path d="M10 4v16" /></svg>';
+        if (kind === "done") return '<svg ' + common + '><circle cx="12" cy="12" r="8" /><path d="m8.8 12.2 2.2 2.2 4.4-4.4" /></svg>';
+        if (kind === "agents") return '<svg ' + common + '><circle cx="8" cy="9" r="2.6" /><circle cx="16" cy="8" r="2.2" /><path d="M4.3 18a3.7 3.7 0 0 1 7.4 0" /><path d="M13.2 18a3.2 3.2 0 0 1 6.4 0" /></svg>';
+        if (kind === "review") return '<svg ' + common + '><path d="M4 12h7" /><path d="m9 7 5 5-5 5" /><rect x="14" y="4" width="7" height="16" rx="2" /></svg>';
+        if (kind === "failed") return '<svg ' + common + '><circle cx="12" cy="12" r="8" /><path d="m9 9 6 6" /><path d="m15 9-6 6" /></svg>';
+        return '<svg ' + common + '><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /></svg>';
+      }
+
+      function renderStatCard(config) {
+        const valueTone = config && config.valueTone ? String(config.valueTone) : "working";
+        const waitingHot = config && config.waitingHot ? " waiting-hot" : "";
+        const value = config && config.value != null ? String(config.value) : "0";
+        const subtitleRaw = config && config.subtitle ? String(config.subtitle) : "";
+        const subtitle = subtitleRaw ? '<div class="stat-sub">' + escapeHtml(subtitleRaw) + "</div>" : "";
+        const view = config && config.view ? String(config.view) : "tasks";
+        const icon = config && config.icon ? String(config.icon) : "total";
+        const label = config && config.label ? String(config.label) : "Metric";
+        return [
+          '<article class="stat-card' + waitingHot + '">',
+          '<div class="stat-head">',
+          '<div class="stat-label">' + escapeHtml(label) + "</div>",
+          '<span class="stat-icon" aria-hidden="true">' + overviewStatIcon(icon) + "</span>",
+          "</div>",
+          "<div>",
+          '<p class="stat-value ' + valueTone + '">' + escapeHtml(value) + "</p>",
+          subtitle,
+          "</div>",
+          '<button type="button" class="stat-link" data-stat-view="' + escapeHtml(view) + '">Details</button>',
+          "</article>",
+        ].join("");
+      }
+
+      function renderOverviewSkeleton() {
+        if (!contentEl) return;
+        contentEl.setAttribute("aria-busy", "true");
+        const statsSkeleton = Array.from({ length: 6 }, () => '<div class="skeleton-block skeleton-stat"></div>').join("");
+        const recentRows = Array.from({ length: 6 }, () => '<div class="skeleton-line skeleton-row"></div>').join("");
+        contentEl.innerHTML = [
+          '<div id="overview-root" class="overview-root overview-skeleton">',
+          '<section class="hero-card skeleton-block">',
+          '<div class="skeleton-line lg"></div>',
+          '<div class="skeleton-line md"></div>',
+          '<div class="skeleton-pill"></div>',
+          "</section>",
+          '<section class="skeleton-grid">' + statsSkeleton + "</section>",
+          '<section class="recent-card skeleton-recent">',
+          '<div class="skeleton-line lg" style="width:35%;"></div>',
+          recentRows,
+          "</section>",
+          "</div>",
+        ].join("");
+      }
+
+      function buildOverviewContext(runtime, activeAgents, waitingHuman) {
+        const runtimeLabel = runtime && runtime.isAlive ? "Runtime online." : "Runtime offline.";
+        const agentsCount = Math.max(0, Number(activeAgents || 0));
+        const waitingCount = Math.max(0, Number(waitingHuman || 0));
+        const agentsLabel = agentsCount + " active agent" + (agentsCount === 1 ? "" : "s");
+        const waitingLabel = waitingCount + " task" + (waitingCount === 1 ? "" : "s") + " waiting for approval";
+        return runtimeLabel + " " + agentsLabel + ", " + waitingLabel + ".";
+      }
+
+      function normalizeDateValue(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return 0;
+        const ts = new Date(raw).getTime();
+        return Number.isFinite(ts) ? ts : 0;
+      }
+
+      function computeActiveAgentCount(tasks, runtime) {
+        const runtimeWorkers = Number(runtime && runtime.workerCount || 0);
+        if (runtimeWorkers > 0) return runtimeWorkers;
+        const activeStatuses = new Set(["in_progress", "waiting_agent", "waiting_human"]);
+        const activeAgents = new Set();
+        for (const task of tasks) {
+          const status = String(task && task.status || "");
+          if (!activeStatuses.has(status)) continue;
+          const currentAgent = String(task && task.currentAgent || "").trim();
+          if (currentAgent) activeAgents.add(currentAgent);
+        }
+        return activeAgents.size;
+      }
+
+      function renderRecentTaskRows(tasks) {
+        if (!tasks.length) {
+          return '<div class="empty">No task activity yet. Start by creating a new task in the command console.</div>';
+        }
+        return tasks.map((task) => {
+          const statusTone = overviewStatusTone(task.status);
+          const owner = String(task.currentAgent || task.nextAgent || "system");
+          const project = String(task.project || "General");
+          const subtitle = owner + " • " + project;
+          return [
+            '<button type="button" class="recent-item" data-open-task="' + escapeHtml(task.taskId) + '">',
+            '<span class="status-dot ' + statusTone + '" aria-hidden="true"></span>',
+            '<div class="recent-copy">',
+            '<p class="recent-title">' + escapeHtml(task.title || task.taskId) + "</p>",
+            '<p class="recent-sub">' + escapeHtml(subtitle) + "</p>",
+            "</div>",
+            '<span class="recent-time">' + escapeHtml(fmtRelativeTime(task.updatedAt || task.createdAt || "")) + "</span>",
+            "</button>",
+          ].join("");
+        }).join("");
+      }
+
+      function overviewHeroArt() {
+        return [
+          '<svg viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">',
+          '<circle cx="60" cy="62" r="19"></circle>',
+          '<circle cx="51" cy="58" r="2.2"></circle>',
+          '<circle cx="69" cy="58" r="2.2"></circle>',
+          '<path d="M42 60h-9l-7-7"></path>',
+          '<path d="M78 60h9l7-7"></path>',
+          '<path d="M41 72 27 78"></path>',
+          '<path d="M79 72 93 78"></path>',
+          '<path d="M50 79 44 91"></path>',
+          '<path d="M70 79 76 91"></path>',
+          '<path d="M47 41 38 34"></path>',
+          '<path d="M73 41 82 34"></path>',
+          '</svg>',
+        ].join("");
+      }
+
       async function postApi(path, payload) {
         const response = await fetch(path, {
           method: "POST",
@@ -2058,46 +2520,115 @@ export function buildWebUiHtml(): string {
       }
 
       async function renderOverview() {
-        const [overview, metrics] = await Promise.all([
+        const [overview, metrics, tasks] = await Promise.all([
           api("/api/overview"),
           api("/api/metrics/overview?hours=24"),
+          api("/api/tasks"),
         ]);
         applyOverviewSnapshot(overview);
 
         const topSlowStage = metrics.stageSummary && metrics.stageSummary[0] ? metrics.stageSummary[0] : null;
         const runtime = overview.runtime || {};
-        const healthLabel = runtime.isAlive ? "Alive" : "Stopped";
-        if (!document.getElementById("overview-root")) {
-          contentEl.innerHTML = [
-            '<div id="overview-root">',
-            '<div class="grid">',
-            '<div class="metric"><div class="muted">Engine</div><strong id="overview-engine"></strong></div>',
-            '<div class="metric"><div class="muted">Active Tasks</div><strong id="overview-active"></strong></div>',
-            '<div class="metric"><div class="muted">Waiting Human</div><strong id="overview-waiting"></strong></div>',
-            '<div class="metric"><div class="muted">Done</div><strong id="overview-done"></strong></div>',
-            '<div class="metric"><div class="muted">Failed</div><strong id="overview-failed"></strong></div>',
-            '<div class="metric"><div class="muted">Estimated Tokens</div><strong id="overview-tokens"></strong></div>',
-            '<div class="metric"><div class="muted">Estimated Cost</div><strong id="overview-cost"></strong></div>',
-            '<div class="metric"><div class="muted">Review Queue</div><strong id="overview-review-queue"></strong></div>',
-            '</div>',
-            '<div class="card" style="margin-top: 14px; box-shadow: none; border: 1px solid var(--border);">',
-            '<p>Last heartbeat: <code id="overview-heartbeat"></code></p>',
-            '<p style="margin-top: 8px;">Top slow stage (24h): <strong id="overview-slow-stage"></strong></p>',
-            '</div>',
-            "</div>",
-          ].join("");
-        }
+        const taskRows = Array.isArray(tasks) ? tasks : [];
+        const recentTasks = taskRows
+          .slice()
+          .sort((a, b) => normalizeDateValue(b.updatedAt || b.createdAt) - normalizeDateValue(a.updatedAt || a.createdAt))
+          .slice(0, 8);
+        const activeAgentCount = computeActiveAgentCount(taskRows, runtime);
+        const counts = overview.counts || {};
+        const consumption = overview.consumption || {};
 
-        setTextIfChanged("overview-engine", healthLabel);
-        setTextIfChanged("overview-active", fmtNumber(overview.counts.active));
-        setTextIfChanged("overview-waiting", fmtNumber(overview.counts.waitingHuman));
-        setTextIfChanged("overview-done", fmtNumber(overview.counts.done));
-        setTextIfChanged("overview-failed", fmtNumber(overview.counts.failed));
-        setTextIfChanged("overview-tokens", fmtNumber(overview.consumption.estimatedTotalTokens));
-        setTextIfChanged("overview-cost", fmtCost(overview.consumption.estimatedCostUsd));
-        setTextIfChanged("overview-review-queue", fmtNumber(overview.reviewQueueCount));
-        setTextIfChanged("overview-heartbeat", fmtDateTime(runtime.lastHeartbeatAt || ""));
-        setTextIfChanged("overview-slow-stage", topSlowStage ? topSlowStage.stage : "N/A");
+        const overviewKey = [
+          Number(counts.total || 0),
+          Number(counts.done || 0),
+          Number(counts.waitingHuman || 0),
+          Number(counts.failed || 0),
+          Number(counts.active || 0),
+          Number(overview.reviewQueueCount || 0),
+          Number(consumption.estimatedTotalTokens || 0),
+          Number(consumption.estimatedCostUsd || 0),
+          String(runtime.lastHeartbeatAt || ""),
+          String(topSlowStage && topSlowStage.stage || ""),
+          activeAgentCount,
+          recentTasks.map((task) => [task.taskId, task.status, task.updatedAt, task.currentAgent].join(":")).join(","),
+        ].join("|");
+        if (state.overviewRenderedKey === overviewKey && document.getElementById("overview-root")) return;
+
+        const contextLine = buildOverviewContext(runtime, activeAgentCount, counts.waitingHuman);
+        const statCards = [
+          {
+            label: "Total Tasks",
+            value: fmtNumber(counts.total),
+            subtitle: "Current runtime cycle",
+            valueTone: "working",
+            icon: "total",
+            view: "tasks",
+          },
+          {
+            label: "Completed",
+            value: fmtNumber(counts.done),
+            subtitle: "Approved and done",
+            valueTone: "online",
+            icon: "done",
+            view: "tasks",
+          },
+          {
+            label: "Active Agents",
+            value: fmtNumber(activeAgentCount),
+            subtitle: "Workers processing now",
+            valueTone: "working",
+            icon: "agents",
+            view: "tasks",
+          },
+          {
+            label: "Waiting Human",
+            value: fmtNumber(counts.waitingHuman),
+            subtitle: Number(counts.waitingHuman || 0) > 0 ? "Human action required" : "Queue empty",
+            valueTone: Number(counts.waitingHuman || 0) > 0 ? "attention" : "review",
+            icon: "review",
+            view: "review",
+            waitingHot: Number(counts.waitingHuman || 0) > 0,
+          },
+          {
+            label: "Failed / Blocked",
+            value: fmtNumber(counts.failed),
+            subtitle: "Needs intervention",
+            valueTone: Number(counts.failed || 0) > 0 ? "error" : "working",
+            icon: "failed",
+            view: "board",
+          },
+          {
+            label: "Token / Cost",
+            value: fmtCost(consumption.estimatedCostUsd),
+            subtitle: fmtNumber(consumption.estimatedTotalTokens) + " tokens",
+            valueTone: "working",
+            icon: "cost",
+            view: "analytics",
+          },
+        ];
+
+        contentEl.innerHTML = [
+          '<div id="overview-root" class="overview-root">',
+          '<section class="hero-card">',
+          '<div class="hero-content">',
+          '<h2 class="hero-title">Welcome to SYNX Control</h2>',
+          '<p class="hero-context">' + escapeHtml(contextLine) + "</p>",
+          '<div class="hero-meta">',
+          '<span class="hero-chip strong">' + (runtime.isAlive ? "Runtime Active" : "Runtime Paused") + "</span>",
+          '<span class="hero-chip">Top slow stage: ' + escapeHtml(topSlowStage ? topSlowStage.stage : "N/A") + "</span>",
+          '<span class="hero-chip">Heartbeat: ' + escapeHtml(fmtRelativeTime(runtime.lastHeartbeatAt || "")) + "</span>",
+          "</div>",
+          "</div>",
+          '<div class="hero-art" aria-hidden="true">' + overviewHeroArt() + "</div>",
+          "</section>",
+          '<section class="kpi-grid">' + statCards.map((item) => renderStatCard(item)).join("") + "</section>",
+          '<section class="recent-card">',
+          '<div class="recent-head"><h3>Recent Tasks</h3><button type="button" class="stat-link" data-stat-view="tasks">View all</button></div>',
+          '<div class="recent-list">' + renderRecentTaskRows(recentTasks) + "</div>",
+          "</section>",
+          "</div>",
+        ].join("");
+        state.overviewRenderedKey = overviewKey;
       }
 
       function renderTaskRows(tasks) {
@@ -2424,7 +2955,10 @@ export function buildWebUiHtml(): string {
           : "";
 
         const alreadyRendered = Boolean(state.renderedViews[state.view]);
-        if (loadingMessage && !alreadyRendered && mode !== "poll") showLoading(loadingMessage);
+        if (!alreadyRendered && mode !== "poll") {
+          if (state.view === "overview") renderOverviewSkeleton();
+          else if (loadingMessage) showLoading(loadingMessage);
+        }
         try {
           if (state.view === "overview") await renderOverview();
           if (state.view === "tasks") await renderTasks();
@@ -2680,6 +3214,13 @@ export function buildWebUiHtml(): string {
         if (navView) {
           setFeedback("", "info");
           setView(navView);
+          return;
+        }
+
+        const statViewTarget = target.closest("[data-stat-view]");
+        const statView = statViewTarget instanceof HTMLElement ? String(statViewTarget.dataset.statView || "") : "";
+        if (statView === "overview" || statView === "tasks" || statView === "board" || statView === "review" || statView === "detail" || statView === "live" || statView === "analytics") {
+          setView(statView);
           return;
         }
 

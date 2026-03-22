@@ -41,6 +41,11 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("Token Curve (30d)");
     expect(html).toContain("Duration Curve (30d)");
     expect(html).toContain("overview-root");
+    expect(html).toContain("Welcome to SYNX Control");
+    expect(html).toContain("renderStatCard(");
+    expect(html).toContain("renderOverviewSkeleton(");
+    expect(html).toContain('data-stat-view="tasks"');
+    expect(html).toContain('class="recent-list"');
   });
 
   it("includes phase 5 UX hardening markers for loading, accessibility, and retries", () => {
@@ -49,6 +54,11 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('id="content" role="region" aria-live="polite" aria-busy="false"');
     expect(html).toContain('id="feedback" class="feedback" role="status" aria-live="polite"');
     expect(html).toContain("showLoading(");
+    expect(html).toContain("overview-skeleton");
+    expect(html).toContain("skeleton-grid");
+    expect(html).toContain("recent-item");
+    expect(html).toContain("hero-card");
+    expect(html).toContain("kpi-grid");
     expect(html).toContain("renderedViews");
     expect(html).toContain("setTextIfChanged(");
     expect(html).toContain("Loading task list...");
