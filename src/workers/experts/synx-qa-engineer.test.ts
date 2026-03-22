@@ -237,9 +237,9 @@ describe("workers/experts/synx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const historyPath = path.join(task.taskPath, "artifacts", "qa-return-history.json");
+    const historyPath = path.join(task.taskPath, "artifacts", "synx-qa-return-context-history.json");
     await fs.mkdir(path.dirname(historyPath), { recursive: true });
-    await writeJson(historyPath, [{ attempt: 1, returnedTo: "Synx Back Expert" }]);
+    await writeJson(historyPath, { entries: [{ attempt: 1, returnedTo: "Synx Back Expert" }] });
 
     const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
@@ -265,7 +265,7 @@ describe("workers/experts/synx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const historyPath = path.join(task.taskPath, "artifacts", "qa-return-history.json");
+    const historyPath = path.join(task.taskPath, "artifacts", "synx-qa-return-context-history.json");
     await fs.mkdir(path.dirname(historyPath), { recursive: true });
     await fs.writeFile(historyPath, "invalid json");
 
@@ -294,6 +294,8 @@ describe("workers/experts/synx-qa-engineer", () => {
         stdoutPreview: "Unused variable 'x'",
         stderrPreview: "",
         diagnostics: ["Unused variable 'x'"],
+        qaConfigNotes: ["Check your lint rules"],
+        artifacts: ["lint-report.txt"],
         durationMs: 50,
         timedOut: false,
       },
@@ -442,5 +444,41 @@ describe("workers/experts/synx-qa-engineer", () => {
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_human");
+  });
+
+  it("covers line 129 by having non-empty history with no experts", async () => {
+    const task = await createTask({
+      title: "No expert in history test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Check history with non-experts",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const meta = await loadTaskMeta(task.taskId);
+    meta.history.push({
+      agent: "Dispatcher" as any,
+      stage: "dispatcher",
+      status: "done",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 10,
+    });
+    const { saveTaskMeta } = await import("../../lib/task.js");
+    await saveTaskMeta(task.taskId, meta);
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-qa-engineer",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx QA Engineer",
+    });
+
+    const qa = new SynxQAEngineer();
+    await qa.tryProcess(task.taskId);
+    const metaAfter = await loadTaskMeta(task.taskId);
+    expect(metaAfter.nextAgent).toBe("Human Review");
   });
 });
