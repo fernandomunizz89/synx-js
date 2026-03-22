@@ -480,7 +480,89 @@ Steps can mix built-in agents (`Synx Back Expert`, `Synx QA Engineer`, etc.) and
 |---|---|
 | `sequential` | Steps run in order, one after the other. |
 | `dynamic` | Each step's output `nextAgent` field decides the next step. |
-| `conditional` | Each step has an optional `condition` expression and a `defaultNextStep` index. |
+| `conditional` | Steps after the current one are scanned; the first whose `condition` evaluates to `true` runs next. Falls back to `defaultNextStep` when nothing matches. |
+
+---
+
+#### Conditional routing — how it works
+
+When `routing` is `"conditional"`, after step N finishes, the executor scans forward to find the next step to run:
+
+1. Check step N+1, N+2, … in order.
+2. For each candidate:
+   - If it has a `condition`: evaluate the expression against the current step's output. If `true` → go there. If `false` → keep scanning.
+   - If it has **no** `condition`: stop scanning (acts as an unconditional fence).
+3. If no condition matched → use the current step's `defaultNextStep`.
+4. If no `defaultNextStep` either → advance sequentially to N+1.
+
+**Expression syntax** — the expression is evaluated as JavaScript with `output` in scope, where `output` is the full parsed output of the step that just finished.
+
+```
+output.result && output.result.type === 'bug'
+output.result && output.result.confidence > 0.8
+output.result && output.result.severity === 'high'
+output.nextAgent === 'Synx QA Engineer'
+```
+
+> **Important:** The `output` object only contains the fields that your agent explicitly returns: `summary`, `result` (object), and `nextAgent`. Custom data must be nested inside `result`. Access it as `output.result.yourField`.
+
+**Safety:** A condition that throws (e.g. accessing a missing nested key) or has a syntax error evaluates to `false` — the scan continues to the next candidate.
+
+**Full example**
+
+```json
+{
+  "id": "triage-pipeline",
+  "name": "Bug Triage Pipeline",
+  "routing": "conditional",
+  "steps": [
+    {
+      "agent": "triage-analyst",
+      "defaultNextStep": 3
+    },
+    {
+      "agent": "Synx Back Expert",
+      "condition": "output.result && output.result.type === 'bug' && output.result.severity === 'high'",
+      "defaultNextStep": 3
+    },
+    {
+      "agent": "Synx Front Expert",
+      "condition": "output.result && output.result.type === 'bug' && output.result.severity === 'low'",
+      "defaultNextStep": 3
+    },
+    {
+      "agent": "Synx QA Engineer"
+    }
+  ]
+}
+```
+
+After `triage-analyst` (step 0) runs:
+- `{ type: "bug", severity: "high" }` in `result` → goes to **step 1** (Back Expert).
+- `{ type: "bug", severity: "low" }` in `result` → goes to **step 2** (Front Expert).
+- Anything else → no condition matches → `defaultNextStep: 3` → goes directly to **step 3** (QA).
+
+After step 1 or 2 completes:
+- Step 3 (QA) has no `condition`, so the scan stops immediately.
+- `defaultNextStep: 3` on steps 1 and 2 sends them directly to QA.
+
+**Corresponding `triage-analyst` prompt output format:**
+
+Your `triage-analyst` agent must return `result` with the fields your conditions reference:
+
+```json
+{
+  "summary": "Identified a high-severity backend bug in the auth service.",
+  "result": {
+    "type": "bug",
+    "severity": "high",
+    "area": "backend"
+  },
+  "nextAgent": null
+}
+```
+
+---
 
 #### Per-step provider override
 
