@@ -122,6 +122,7 @@ export function buildHeader(): string {
     '<input id="global-search-input" class="field-input" autocomplete="off" placeholder="Search tasks, agents, ids or run commands..." />',
     "</label>",
     '<div class="header-right">',
+    '<button type="button" class="btn" data-open-command-palette>Commands</button>',
     '<div id="connectivity-indicator" class="connectivity-chip is-online" role="status" aria-live="polite">',
     '<span class="dot" aria-hidden="true"></span>',
     '<span id="connectivity-label">Online</span>',

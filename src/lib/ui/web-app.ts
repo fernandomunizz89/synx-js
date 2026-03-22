@@ -23,31 +23,40 @@ export function buildWebUiHtml(): string {
 
         <section class="card command-console">
           <div class="command-head">
-            <div><strong>Command Console</strong><div class="muted">CLI-style input with fast templates and command reference.</div></div>
-            <button type="button" class="btn" data-toggle-command-ref>Commands</button>
+            <div><strong>Command Center</strong><div class="muted">Hacker-premium runtime console with snippets, slash commands and realtime feedback.</div></div>
+            <div class="command-head-actions">
+              <button type="button" class="btn" data-toggle-command-ref>Catalog</button>
+              <button type="button" class="btn" data-open-command-palette>Cmd/Ctrl + K</button>
+            </div>
           </div>
           <div class="command-shell">
             <form id="web-command-form" class="command-form">
-              <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='status --all | new "Fix bug" --type Bug | approve --task-id task-123' />
+              <input id="web-command-input" class="field-input command-input" autocomplete="off" spellcheck="false" placeholder='/status --all | /deploy | /rollback | approve --task-id task-123' />
               <select id="web-command-mode" class="field-select">
                 <option value="command">Command mode</option>
                 <option value="human">Human input mode</option>
               </select>
               <button type="submit" class="btn approve">Run</button>
             </form>
+            <div id="command-suggest" class="command-suggest" hidden></div>
+            <div class="command-log-tools">
+              <div class="command-filter" role="group" aria-label="Command log filter">
+                <button type="button" class="btn active" data-command-filter="all">All</button>
+                <button type="button" class="btn" data-command-filter="info">Info</button>
+                <button type="button" class="btn" data-command-filter="success">Success</button>
+                <button type="button" class="btn" data-command-filter="error">Error</button>
+              </div>
+            </div>
             <div class="command-quick">
-              <button type="button" class="btn" data-web-command="help">help</button>
-              <button type="button" class="btn" data-web-command="status">status</button>
-              <button type="button" class="btn" data-web-command="status --all">status --all</button>
-              <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new</button>
-              <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove</button>
-              <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve</button>
-              <button type="button" class="btn" data-runtime-action="pause">pause</button>
-              <button type="button" class="btn approve" data-runtime-action="resume">resume</button>
-              <button type="button" class="btn cancel" data-runtime-action="stop">stop</button>
+              <button type="button" class="btn" data-web-command="/status --all">/status</button>
+              <button type="button" class="btn" data-web-command="/deploy" data-web-fill="true">/deploy</button>
+              <button type="button" class="btn reprove" data-web-command="/rollback" data-web-fill="true">/rollback</button>
+              <button type="button" class="btn" data-web-command="/pause-all">/pause-all</button>
+              <button type="button" class="btn approve" data-web-command="/resume-runtime">/resume-runtime</button>
+              <button type="button" class="btn cancel" data-web-command="/stop-runtime">/stop-runtime</button>
             </div>
             <section id="command-reference" class="command-ref" hidden>
-              <input id="command-ref-filter" class="field-input" placeholder="Filter command by name or usage..." />
+              <input id="command-ref-filter" class="field-input" placeholder="Filter command by category, trigger or usage..." />
               <div id="command-ref-list" class="command-ref-list"></div>
             </section>
             <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
@@ -56,6 +65,30 @@ export function buildWebUiHtml(): string {
 
         <section class="card">
           <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
+        </section>
+
+        <section id="command-palette" class="command-palette" hidden aria-hidden="true">
+          <div class="command-palette-backdrop" data-close-command-palette></div>
+          <div class="command-palette-panel" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
+            <div class="command-palette-head">
+              <strong id="command-palette-title">Command Palette</strong>
+              <button type="button" class="btn" data-close-command-palette>Close</button>
+            </div>
+            <input id="command-palette-filter" class="field-input" autocomplete="off" spellcheck="false" placeholder="Type command, category or snippet..." />
+            <div id="command-palette-list" class="command-palette-list"></div>
+          </div>
+        </section>
+
+        <section id="command-confirm" class="command-confirm" hidden aria-hidden="true">
+          <div class="command-confirm-backdrop" data-close-command-confirm></div>
+          <div class="command-confirm-panel" role="dialog" aria-modal="true" aria-labelledby="command-confirm-title">
+            <h3 id="command-confirm-title">Confirm Critical Command</h3>
+            <p id="command-confirm-body" class="muted">This action can impact the runtime. Continue?</p>
+            <div class="actions">
+              <button type="button" class="btn" data-close-command-confirm>Cancel</button>
+              <button type="button" class="btn cancel" data-confirm-command>Confirm</button>
+            </div>
+          </div>
         </section>`,
   });
   return `<!doctype html>
@@ -1069,11 +1102,20 @@ export function buildWebUiHtml(): string {
         justify-content: space-between;
         gap: var(--space-2);
       }
+      .command-head-actions {
+        display: inline-flex;
+        gap: var(--space-2);
+      }
       .command-shell {
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
-        background: var(--surface-soft);
+        background:
+          radial-gradient(circle at 14% 8%, color-mix(in srgb, var(--synx-cyan) 16%, transparent) 0%, transparent 32%),
+          radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--synx-magenta) 18%, transparent) 0%, transparent 36%),
+          #060b14;
         padding: var(--space-3);
+        font-family: var(--font-mono);
+        position: relative;
       }
       .command-form {
         display: grid;
@@ -1082,6 +1124,70 @@ export function buildWebUiHtml(): string {
       }
       .command-input {
         width: 100%;
+        font-family: inherit;
+        background: color-mix(in srgb, #04070f 86%, var(--surface-soft));
+      }
+      .command-suggest {
+        margin-top: var(--space-2);
+        border: 1px solid color-mix(in srgb, var(--synx-cyan) 24%, var(--border));
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, #040710 88%, var(--surface-soft));
+        overflow: hidden;
+      }
+      .command-suggest[hidden] {
+        display: none;
+      }
+      .command-suggest-item {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+        cursor: pointer;
+        padding: 8px 10px;
+        display: grid;
+        gap: 4px;
+      }
+      .command-suggest-item:last-child {
+        border-bottom: 0;
+      }
+      .command-suggest-item:hover,
+      .command-suggest-item.active {
+        background: color-mix(in srgb, var(--synx-cyan) 16%, transparent);
+      }
+      .command-suggest-item .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .command-suggest-item .trigger {
+        color: #8dd8ff;
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+      .command-suggest-item .snippet {
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+      .command-log-tools {
+        margin-top: var(--space-2);
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .command-filter {
+        display: inline-flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .command-filter .btn {
+        padding: 4px 8px;
+      }
+      .command-filter .btn.active {
+        border-color: color-mix(in srgb, var(--synx-cyan) 52%, var(--border));
+        background: color-mix(in srgb, var(--synx-cyan) 16%, var(--surface-strong));
       }
       .command-quick {
         display: flex;
@@ -1093,38 +1199,138 @@ export function buildWebUiHtml(): string {
         margin-top: var(--space-2);
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        background: var(--surface);
+        background: color-mix(in srgb, #03060e 90%, var(--surface-soft));
         padding: var(--space-2);
-        min-height: 72px;
-        max-height: 180px;
+        min-height: 104px;
+        max-height: 320px;
         overflow: auto;
         font-family: var(--font-mono);
         font-size: 0.82rem;
       }
-      .command-log .line {
-        margin: 0 0 6px;
-        white-space: pre-wrap;
+      .command-entry {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, #050a12 88%, var(--surface));
+        margin-bottom: var(--space-2);
+        padding: 8px 10px;
+        display: grid;
+        gap: 8px;
       }
-      .command-log .line:last-child {
+      .command-entry:last-child {
         margin-bottom: 0;
       }
-      .command-log .line.user {
-        color: var(--accent);
+      .command-entry.note.system {
+        border-style: dashed;
       }
-      .command-log .line.critical {
-        color: var(--status-failed-fg);
+      .command-entry.status-success {
+        border-color: color-mix(in srgb, var(--color-accent-online) 48%, var(--border));
       }
-      .command-log .line.info {
+      .command-entry.status-error {
+        border-color: color-mix(in srgb, var(--color-accent-error) 48%, var(--border));
+      }
+      .command-entry.status-pending {
+        border-color: color-mix(in srgb, var(--color-accent-working) 48%, var(--border));
+      }
+      .command-entry-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .command-entry-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .command-entry-status {
+        width: 14px;
+        height: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+      .command-entry-status .spinner {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        border: 2px solid color-mix(in srgb, var(--color-accent-working) 32%, transparent);
+        border-top-color: var(--color-accent-working);
+        animation: spin 0.9s linear infinite;
+      }
+      .command-entry-status.success {
+        color: var(--color-accent-online);
+      }
+      .command-entry-status.error {
+        color: var(--color-accent-error);
+      }
+      .command-entry-prompt {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #9bd5ff;
+      }
+      .command-entry-prompt.human {
+        color: #f3c188;
+      }
+      .command-entry-command {
+        color: var(--fg);
+        background: transparent;
+        padding: 0;
+        word-break: break-word;
+      }
+      .command-entry-time {
+        color: var(--muted);
+        font-size: 0.7rem;
+        flex: 0 0 auto;
+      }
+      .command-entry-output {
+        display: grid;
+        gap: 6px;
+      }
+      .command-entry-line {
+        margin: 0;
+        white-space: pre-wrap;
+      }
+      .command-entry-line.info {
         color: var(--fg);
       }
-      .command-log .line.system {
-        color: var(--muted);
+      .command-entry-line.success {
+        color: var(--color-accent-online);
+      }
+      .command-entry-line.critical {
+        color: var(--status-failed-fg);
+      }
+      .command-output-json {
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: color-mix(in srgb, #060a14 90%, var(--surface));
+        padding: 8px;
+        color: #9bd5ff;
+      }
+      .command-output-table-wrap {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: auto;
+      }
+      .command-output-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.75rem;
+      }
+      .command-output-table th,
+      .command-output-table td {
+        padding: 5px 6px;
+      }
+      .command-output-table td {
+        color: var(--fg);
       }
       .command-ref {
         margin-top: var(--space-2);
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        background: var(--surface);
+        background: color-mix(in srgb, #050914 90%, var(--surface));
         padding: var(--space-3);
       }
       .command-ref[hidden] {
@@ -1140,7 +1346,7 @@ export function buildWebUiHtml(): string {
       .command-ref-item {
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        background: var(--surface-soft);
+        background: color-mix(in srgb, #060c18 88%, var(--surface-soft));
         padding: var(--space-2) var(--space-3);
       }
       .command-ref-top {
@@ -1154,13 +1360,111 @@ export function buildWebUiHtml(): string {
         font-family: var(--font-mono);
         font-size: 0.8rem;
         color: var(--fg);
-        background: var(--surface);
+        background: color-mix(in srgb, #03060f 92%, var(--surface));
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
         padding: 5px 7px;
       }
       .command-ref-item .muted {
         margin-top: 4px;
+      }
+      .command-palette {
+        position: fixed;
+        inset: 0;
+        z-index: 70;
+      }
+      .command-palette[hidden] {
+        display: none;
+      }
+      .command-palette-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(2, 5, 10, 0.76);
+      }
+      .command-palette-panel {
+        position: relative;
+        margin: min(8vh, 64px) auto 0;
+        width: min(860px, calc(100vw - 32px));
+        max-height: min(80vh, 760px);
+        border: 1px solid color-mix(in srgb, var(--synx-cyan) 26%, var(--border));
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, #040913 93%, var(--surface-soft));
+        padding: var(--space-3);
+        display: grid;
+        gap: var(--space-2);
+        overflow: hidden;
+      }
+      .command-palette-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .command-palette-list {
+        overflow: auto;
+        display: grid;
+        gap: var(--space-2);
+        max-height: min(64vh, 620px);
+      }
+      .command-palette-group {
+        display: grid;
+        gap: 6px;
+      }
+      .command-palette-group-label {
+        color: var(--muted);
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .command-palette-item {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, #050a15 90%, var(--surface));
+        padding: 8px 10px;
+        display: grid;
+        gap: 4px;
+      }
+      .command-palette-item .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .command-palette-item .trigger {
+        color: #8dd8ff;
+        font-weight: 700;
+      }
+      .command-palette-item .snippet {
+        font-family: var(--font-mono);
+        font-size: 0.74rem;
+        color: var(--muted);
+      }
+      .command-confirm {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+      }
+      .command-confirm[hidden] {
+        display: none;
+      }
+      .command-confirm-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(2, 5, 10, 0.76);
+      }
+      .command-confirm-panel {
+        position: relative;
+        margin: min(18vh, 170px) auto 0;
+        width: min(460px, calc(100vw - 32px));
+        border: 1px solid color-mix(in srgb, var(--color-accent-error) 36%, var(--border));
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, #090812 94%, var(--surface));
+        padding: var(--space-4);
+        display: grid;
+        gap: var(--space-3);
+      }
+      .command-confirm-panel h3 {
+        margin: 0;
       }
       table {
         width: 100%;
@@ -1986,6 +2290,18 @@ export function buildWebUiHtml(): string {
           flex-direction: column;
           align-items: stretch;
         }
+        .command-head-actions {
+          width: 100%;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .command-head-actions .btn {
+          width: 100%;
+        }
+        .command-log-tools {
+          flex-direction: column;
+          align-items: stretch;
+        }
         .board-mode {
           width: 100%;
           justify-content: space-between;
@@ -2057,6 +2373,10 @@ export function buildWebUiHtml(): string {
         .command-log {
           max-height: 240px;
         }
+        .command-palette-panel {
+          margin-top: var(--space-3);
+          width: calc(100vw - 16px);
+        }
       }
     </style>
   </head>
@@ -2092,8 +2412,18 @@ export function buildWebUiHtml(): string {
         liveRenderedConnected: null,
         commandMode: "command",
         commandLog: [],
+        commandRunCounter: 0,
+        commandLogFilter: "all",
         commandRefOpen: false,
         commandRefQuery: "",
+        commandSuggestionsOpen: false,
+        commandSuggestionsIndex: 0,
+        commandSuggestions: [],
+        commandHistory: [],
+        commandHistoryIndex: -1,
+        commandPaletteOpen: false,
+        commandPaletteQuery: "",
+        commandConfirm: null,
         boardMode: "kanban",
         boardFilter: "",
         pendingActionKey: "",
@@ -2110,9 +2440,15 @@ export function buildWebUiHtml(): string {
       const commandInputEl = document.getElementById("web-command-input");
       const commandModeEl = document.getElementById("web-command-mode");
       const commandLogEl = document.getElementById("web-command-log");
+      const commandSuggestEl = document.getElementById("command-suggest");
       const commandRefEl = document.getElementById("command-reference");
       const commandRefFilterEl = document.getElementById("command-ref-filter");
       const commandRefListEl = document.getElementById("command-ref-list");
+      const commandPaletteEl = document.getElementById("command-palette");
+      const commandPaletteFilterEl = document.getElementById("command-palette-filter");
+      const commandPaletteListEl = document.getElementById("command-palette-list");
+      const commandConfirmEl = document.getElementById("command-confirm");
+      const commandConfirmBodyEl = document.getElementById("command-confirm-body");
       const reviewHotspotEl = document.getElementById("review-hotspot");
       const reviewHotspotMetaEl = document.getElementById("review-hotspot-meta");
       const appShellEl = document.querySelector("[data-app-shell]");
@@ -2222,18 +2558,107 @@ export function buildWebUiHtml(): string {
         ? new Intl.RelativeTimeFormat(locale || undefined, { numeric: "auto" })
         : null;
       const commandCatalog = [
-        { mode: "command", name: "help", usage: "help", description: "Show command guide and usage hints." },
-        { mode: "command", name: "status", usage: "status", description: "Show concise runtime status." },
-        { mode: "command", name: "status --all", usage: "status --all", description: "Show all tasks and pipeline state." },
-        { mode: "command", name: "new", usage: 'new "Title" --type Feature', description: "Create a new task." },
-        { mode: "command", name: "approve", usage: "approve --task-id task-123", description: "Approve a task in waiting_human." },
-        { mode: "command", name: "reprove", usage: 'reprove --task-id task-123 --reason "Need changes"', description: "Reprove and send task back to flow." },
-        { mode: "command", name: "cancel", usage: 'cancel --task-id task-123 --reason "No longer needed"', description: "Request task cancellation." },
-        { mode: "command", name: "pause", usage: "pause", description: "Pause runtime loop." },
-        { mode: "command", name: "resume", usage: "resume", description: "Resume runtime loop." },
-        { mode: "command", name: "stop", usage: "stop", description: "Request graceful runtime stop." },
-        { mode: "human", name: "yes", usage: "yes", description: "Approve preferred pending review task." },
-        { mode: "human", name: "no", usage: "no because <reason>", description: "Reprove preferred review task with reason." },
+        {
+          category: "Runtime",
+          mode: "command",
+          trigger: "/status",
+          name: "Runtime status",
+          usage: "status --all",
+          snippet: "status --all",
+          description: "Show runtime health, queue and active tasks.",
+        },
+        {
+          category: "Runtime",
+          mode: "command",
+          trigger: "/pause-all",
+          name: "Pause runtime",
+          usage: "/pause-all",
+          snippet: "/pause-all",
+          description: "Pause all automation workers.",
+        },
+        {
+          category: "Runtime",
+          mode: "command",
+          trigger: "/resume-runtime",
+          name: "Resume runtime",
+          usage: "/resume-runtime",
+          snippet: "/resume-runtime",
+          description: "Resume processing after pause.",
+        },
+        {
+          category: "Runtime",
+          mode: "command",
+          trigger: "/stop-runtime",
+          name: "Stop runtime",
+          usage: "/stop-runtime",
+          snippet: "/stop-runtime",
+          description: "Gracefully stop runtime loop (critical).",
+          critical: true,
+        },
+        {
+          category: "Tasks",
+          mode: "command",
+          trigger: "/deploy",
+          name: "Create deploy task",
+          usage: '/deploy',
+          snippet: 'new "Deploy release" --type Feature',
+          description: "Create a deployment-oriented task skeleton.",
+        },
+        {
+          category: "Tasks",
+          mode: "command",
+          trigger: "/rollback",
+          name: "Rollback template",
+          usage: "/rollback",
+          snippet: 'reprove --task-id task-123 --reason "Rollback requested"',
+          description: "Prepare rollback/reprove command with required reason.",
+        },
+        {
+          category: "Maintenance",
+          mode: "command",
+          trigger: "/clear-cache",
+          name: "Clear cache",
+          usage: "/clear-cache",
+          snippet: "/clear-cache",
+          description: "Reserved maintenance command (requires integration).",
+          critical: true,
+        },
+        {
+          category: "Review",
+          mode: "command",
+          trigger: "/approve",
+          name: "Approve task",
+          usage: "approve --task-id task-123",
+          snippet: "approve --task-id task-123",
+          description: "Approve a waiting_human task.",
+        },
+        {
+          category: "Review",
+          mode: "command",
+          trigger: "/reprove",
+          name: "Reprove task",
+          usage: 'reprove --task-id task-123 --reason "Need changes"',
+          snippet: 'reprove --task-id task-123 --reason "Need changes"',
+          description: "Send a task back to agents with explicit feedback.",
+        },
+        {
+          category: "Human",
+          mode: "human",
+          trigger: "yes",
+          name: "Quick approve",
+          usage: "yes",
+          snippet: "yes",
+          description: "Approve preferred pending review task.",
+        },
+        {
+          category: "Human",
+          mode: "human",
+          trigger: "no",
+          name: "Quick reprove",
+          usage: "no because <reason>",
+          snippet: "no because out of scope",
+          description: "Reprove preferred review task with reason.",
+        },
       ];
 
       function fmtNumber(value) {
@@ -2478,16 +2903,144 @@ export function buildWebUiHtml(): string {
         }
       }
 
+      function trimCommandLog() {
+        if (state.commandLog.length > 180) state.commandLog = state.commandLog.slice(-180);
+      }
+
+      function catalogMatches(row, filter) {
+        if (!filter) return true;
+        return String(row.category || "").toLowerCase().includes(filter)
+          || String(row.mode || "").toLowerCase().includes(filter)
+          || String(row.trigger || "").toLowerCase().includes(filter)
+          || String(row.name || "").toLowerCase().includes(filter)
+          || String(row.usage || "").toLowerCase().includes(filter)
+          || String(row.snippet || "").toLowerCase().includes(filter)
+          || String(row.description || "").toLowerCase().includes(filter);
+      }
+
+      function listCatalogRows(filter) {
+        const normalized = String(filter || "").trim().toLowerCase();
+        return commandCatalog.filter((row) => catalogMatches(row, normalized));
+      }
+
+      function parseStructuredCommandOutput(message) {
+        const raw = String(message || "");
+        const trimmed = raw.trim();
+        if (!trimmed) {
+          return { kind: "text", message: "[empty]" };
+        }
+
+        const maybeJson = (trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"));
+        if (maybeJson) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed) && parsed.length && parsed.every((row) => row && typeof row === "object" && !Array.isArray(row))) {
+              const headerSet = new Set();
+              for (const row of parsed) {
+                for (const key of Object.keys(row)) {
+                  headerSet.add(String(key));
+                  if (headerSet.size >= 8) break;
+                }
+                if (headerSet.size >= 8) break;
+              }
+              const headers = Array.from(headerSet);
+              const rows = parsed.slice(0, 24).map((row) => headers.map((header) => String(row[header] == null ? "" : row[header])));
+              return {
+                kind: "table",
+                headers,
+                rows,
+              };
+            }
+            return {
+              kind: "json",
+              message: JSON.stringify(parsed, null, 2),
+            };
+          } catch {
+            // fall through to plain text
+          }
+        }
+        return { kind: "text", message: raw };
+      }
+
+      function commandEntryFilterKey(entry) {
+        if (entry && entry.type === "run") {
+          if (entry.status === "error") return "error";
+          if (entry.status === "success") return "success";
+          return "info";
+        }
+        const tone = String(entry && entry.tone || "info");
+        if (tone === "critical") return "error";
+        if (tone === "success") return "success";
+        return "info";
+      }
+
+      function renderCommandOutputRow(row) {
+        const tone = String(row && row.tone || "info");
+        const normalizedTone = tone === "critical" || tone === "success" ? tone : "info";
+        const formatted = row && row.formatted ? row.formatted : { kind: "text", message: String(row && row.message || "") };
+        if (formatted.kind === "json") {
+          return '<pre class="command-output-json">' + escapeHtml(formatted.message) + "</pre>";
+        }
+        if (formatted.kind === "table") {
+          const headers = Array.isArray(formatted.headers) ? formatted.headers : [];
+          const rows = Array.isArray(formatted.rows) ? formatted.rows : [];
+          const tableHead = headers.map((header) => "<th>" + escapeHtml(header) + "</th>").join("");
+          const tableRows = rows.map((cells) => "<tr>" + cells.map((cell) => "<td>" + escapeHtml(cell) + "</td>").join("") + "</tr>").join("");
+          return '<div class="command-output-table-wrap"><table class="command-output-table"><thead><tr>' + tableHead + "</tr></thead><tbody>" + tableRows + "</tbody></table></div>";
+        }
+        return '<p class="command-entry-line ' + normalizedTone + '">' + escapeHtml(String(formatted.message || row.message || "")) + "</p>";
+      }
+
       function renderCommandLog() {
         if (!(commandLogEl instanceof HTMLElement)) return;
         if (!state.commandLog.length) {
-          commandLogEl.innerHTML = '<p class="line system">Web command console ready.</p>';
+          commandLogEl.innerHTML = '<article class="command-entry note system"><p class="command-entry-line info">Command center ready.</p></article>';
           return;
         }
-        commandLogEl.innerHTML = state.commandLog.map((row) => {
-          const tone = String(row && row.tone || "info");
-          const message = String(row && row.message || "");
-          return '<p class="line ' + escapeHtml(tone) + '">' + escapeHtml(message) + "</p>";
+
+        const filter = String(state.commandLogFilter || "all");
+        const rows = state.commandLog.filter((entry) => {
+          if (filter === "all") return true;
+          return commandEntryFilterKey(entry) === filter;
+        });
+
+        if (!rows.length) {
+          commandLogEl.innerHTML = '<article class="command-entry note system"><p class="command-entry-line info">No log lines for this filter.</p></article>';
+          return;
+        }
+
+        commandLogEl.innerHTML = rows.map((entry) => {
+          if (!entry || entry.type !== "run") {
+            const tone = String(entry && entry.tone || "info");
+            const lineTone = tone === "critical" || tone === "success" ? tone : "info";
+            return '<article class="command-entry note ' + escapeHtml(tone) + '"><p class="command-entry-line ' + escapeHtml(lineTone) + '">' + escapeHtml(String(entry && entry.message || "")) + "</p></article>";
+          }
+          const isPending = entry.status === "pending";
+          const statusClass = isPending ? "pending" : entry.status === "error" ? "error" : "success";
+          const statusIcon = isPending
+            ? '<span class="spinner" aria-hidden="true"></span>'
+            : statusClass === "success"
+            ? "✓"
+            : "!";
+          const prompt = entry.mode === "human" ? "human>" : "$";
+          const promptClass = entry.mode === "human" ? "human" : "command";
+          const lines = Array.isArray(entry.outputs) ? entry.outputs : [];
+          const outputHtml = lines.length
+            ? lines.map((row) => renderCommandOutputRow(row)).join("")
+            : '<p class="command-entry-line info">' + (isPending ? "Executing..." : "Completed.") + "</p>";
+          return [
+            '<article class="command-entry status-' + escapeHtml(entry.status) + '">',
+            '<div class="command-entry-head">',
+            '<div class="command-entry-meta">',
+            '<span class="command-entry-status ' + statusClass + '" aria-hidden="true">' + statusIcon + "</span>",
+            '<span class="command-entry-prompt ' + promptClass + '">' + prompt + "</span>",
+            '<code class="command-entry-command">' + escapeHtml(entry.input) + "</code>",
+            "</div>",
+            '<span class="command-entry-time">' + escapeHtml(fmtRelativeTime(entry.at || "")) + "</span>",
+            "</div>",
+            '<div class="command-entry-output">' + outputHtml + "</div>",
+            "</article>",
+          ].join("");
         }).join("");
         commandLogEl.scrollTop = commandLogEl.scrollHeight;
       }
@@ -2499,13 +3052,7 @@ export function buildWebUiHtml(): string {
           return;
         }
         commandRefEl.removeAttribute("hidden");
-        const filter = String(state.commandRefQuery || "").trim().toLowerCase();
-        const rows = commandCatalog.filter((row) => {
-          if (!filter) return true;
-          return row.name.toLowerCase().includes(filter)
-            || row.usage.toLowerCase().includes(filter)
-            || row.description.toLowerCase().includes(filter);
-        });
+        const rows = listCatalogRows(state.commandRefQuery);
         if (!rows.length) {
           commandRefListEl.innerHTML = '<div class="empty">No commands match this filter.</div>';
           return;
@@ -2513,51 +3060,320 @@ export function buildWebUiHtml(): string {
         commandRefListEl.innerHTML = rows.map((row) => {
           return [
             '<article class="command-ref-item">',
-            '<div class="command-ref-top"><strong>' + escapeHtml(row.name) + '</strong><span class="status ' + (row.mode === "human" ? "waiting_human" : "in_progress") + '">' + escapeHtml(row.mode) + "</span></div>",
-            '<div class="command-ref-code">' + escapeHtml(row.usage) + "</div>",
+            '<div class="command-ref-top"><strong>' + escapeHtml(row.name) + '</strong><span class="status ' + (row.mode === "human" ? "waiting_human" : "in_progress") + '">' + escapeHtml(row.category) + "</span></div>",
+            '<div class="command-ref-code">' + escapeHtml(row.trigger) + "</div>",
             '<div class="muted">' + escapeHtml(row.description) + "</div>",
-            '<div class="actions" style="margin-top:6px;"><button type="button" class="btn" data-command-snippet="' + escapeHtml(row.usage) + '">Use snippet</button></div>',
+            '<div class="command-ref-code">' + escapeHtml("Usage: " + row.usage) + "</div>",
+            '<div class="actions" style="margin-top:6px;"><button type="button" class="btn" data-command-snippet="' + escapeHtml(row.snippet) + '" data-command-mode="' + escapeHtml(row.mode) + '">Use snippet</button></div>',
             "</article>",
           ].join("");
         }).join("");
       }
 
+      function renderCommandPalette() {
+        if (!(commandPaletteEl instanceof HTMLElement) || !(commandPaletteListEl instanceof HTMLElement)) return;
+        if (!state.commandPaletteOpen) {
+          commandPaletteEl.setAttribute("hidden", "");
+          commandPaletteEl.setAttribute("aria-hidden", "true");
+          return;
+        }
+        commandPaletteEl.removeAttribute("hidden");
+        commandPaletteEl.setAttribute("aria-hidden", "false");
+        const rows = listCatalogRows(state.commandPaletteQuery);
+        if (!rows.length) {
+          commandPaletteListEl.innerHTML = '<div class="empty">No commands match this query.</div>';
+          return;
+        }
+        const byCategory = {};
+        for (const row of rows) {
+          const category = String(row.category || "General");
+          if (!Array.isArray(byCategory[category])) byCategory[category] = [];
+          byCategory[category].push(row);
+        }
+        const groups = Object.keys(byCategory).sort();
+        commandPaletteListEl.innerHTML = groups.map((category) => {
+          const groupRows = byCategory[category];
+          return [
+            '<section class="command-palette-group">',
+            '<div class="command-palette-group-label">' + escapeHtml(category) + "</div>",
+            groupRows.map((row) => [
+              '<article class="command-palette-item">',
+              '<div class="top"><strong>' + escapeHtml(row.name) + '</strong><span class="status ' + (row.mode === "human" ? "waiting_human" : "in_progress") + '">' + escapeHtml(row.mode) + "</span></div>",
+              '<div class="trigger">' + escapeHtml(row.trigger) + "</div>",
+              '<div class="muted">' + escapeHtml(row.description) + "</div>",
+              '<div class="snippet">' + escapeHtml("Example: " + row.usage) + "</div>",
+              '<div class="actions"><button type="button" class="btn" data-command-snippet="' + escapeHtml(row.snippet) + '" data-command-mode="' + escapeHtml(row.mode) + '" data-close-command-palette>Use snippet</button></div>',
+              "</article>",
+            ].join("")).join(""),
+            "</section>",
+          ].join("");
+        }).join("");
+      }
+
+      function renderCommandSuggestions(inputValue) {
+        if (!(commandSuggestEl instanceof HTMLElement)) return;
+        const raw = String(inputValue || "").trim();
+        if (!raw.startsWith("/")) {
+          state.commandSuggestionsOpen = false;
+          state.commandSuggestions = [];
+          state.commandSuggestionsIndex = 0;
+          commandSuggestEl.setAttribute("hidden", "");
+          return;
+        }
+        const query = String(raw.split(/\s+/)[0] || "").toLowerCase();
+        const suggestions = commandCatalog
+          .filter((row) => String(row.trigger || "").toLowerCase().startsWith(query))
+          .slice(0, 8);
+        state.commandSuggestions = suggestions;
+        state.commandSuggestionsIndex = 0;
+        if (!suggestions.length) {
+          state.commandSuggestionsOpen = false;
+          commandSuggestEl.setAttribute("hidden", "");
+          return;
+        }
+        state.commandSuggestionsOpen = true;
+        commandSuggestEl.removeAttribute("hidden");
+        commandSuggestEl.innerHTML = suggestions.map((row, index) => {
+          const active = index === state.commandSuggestionsIndex ? " active" : "";
+          return [
+            '<button type="button" class="command-suggest-item' + active + '" data-command-suggest-index="' + String(index) + '" data-command-snippet="' + escapeHtml(row.snippet) + '" data-command-mode="' + escapeHtml(row.mode) + '">',
+            '<span class="top"><span class="trigger">' + escapeHtml(row.trigger) + '</span><span class="status ' + (row.critical ? "failed" : "in_progress") + '">' + escapeHtml(row.category) + "</span></span>",
+            '<span class="snippet">' + escapeHtml(row.description) + "</span>",
+            "</button>",
+          ].join("");
+        }).join("");
+      }
+
+      function setCommandSuggestionActive(nextIndex) {
+        if (!state.commandSuggestionsOpen) return;
+        const total = Array.isArray(state.commandSuggestions) ? state.commandSuggestions.length : 0;
+        if (!total) return;
+        const normalized = ((nextIndex % total) + total) % total;
+        state.commandSuggestionsIndex = normalized;
+        const buttons = Array.from(document.querySelectorAll(".command-suggest-item"));
+        for (const [index, button] of buttons.entries()) {
+          if (!(button instanceof HTMLElement)) continue;
+          button.classList.toggle("active", index === normalized);
+        }
+      }
+
+      function applyCommandSnippet(snippet, mode, closePalette) {
+        const value = String(snippet || "").trim();
+        if (!value || !(commandInputEl instanceof HTMLInputElement)) return;
+        commandInputEl.value = value;
+        state.commandHistoryIndex = -1;
+        if (mode && commandModeEl instanceof HTMLSelectElement) {
+          const normalized = mode === "human" ? "human" : "command";
+          commandModeEl.value = normalized;
+          state.commandMode = normalized;
+        }
+        if (closePalette) {
+          state.commandPaletteOpen = false;
+          renderCommandPalette();
+        }
+        commandInputEl.focus();
+        renderCommandSuggestions(value);
+      }
+
+      function openCommandPalette(seedQuery) {
+        state.commandPaletteOpen = true;
+        if (typeof seedQuery === "string") state.commandPaletteQuery = seedQuery;
+        renderCommandPalette();
+        if (commandPaletteFilterEl instanceof HTMLInputElement) {
+          commandPaletteFilterEl.value = state.commandPaletteQuery;
+          commandPaletteFilterEl.focus();
+          commandPaletteFilterEl.select();
+        }
+      }
+
+      function closeCommandPalette() {
+        state.commandPaletteOpen = false;
+        renderCommandPalette();
+      }
+
+      function openCommandConfirm(payload) {
+        state.commandConfirm = payload || null;
+        if (!(commandConfirmEl instanceof HTMLElement) || !(commandConfirmBodyEl instanceof HTMLElement)) return;
+        if (!state.commandConfirm) {
+          commandConfirmEl.setAttribute("hidden", "");
+          commandConfirmEl.setAttribute("aria-hidden", "true");
+          return;
+        }
+        const commandText = String(state.commandConfirm.input || "");
+        commandConfirmBodyEl.textContent = "Command: " + commandText + ". This can impact runtime stability. Continue?";
+        commandConfirmEl.removeAttribute("hidden");
+        commandConfirmEl.setAttribute("aria-hidden", "false");
+      }
+
+      function closeCommandConfirm() {
+        state.commandConfirm = null;
+        if (!(commandConfirmEl instanceof HTMLElement)) return;
+        commandConfirmEl.setAttribute("hidden", "");
+        commandConfirmEl.setAttribute("aria-hidden", "true");
+      }
+
       function pushCommandLog(message, tone) {
+        const normalizedTone = tone === "critical" || tone === "success" || tone === "system" ? tone : "info";
+        state.commandRunCounter += 1;
         state.commandLog.push({
+          id: state.commandRunCounter,
+          type: "note",
           message: String(message || ""),
-          tone: tone === "critical" || tone === "user" || tone === "system" ? tone : "info",
+          tone: normalizedTone,
+          at: new Date().toISOString(),
         });
-        if (state.commandLog.length > 140) state.commandLog = state.commandLog.slice(-140);
+        trimCommandLog();
         renderCommandLog();
       }
 
-      async function executeWebCommand(input, mode) {
+      function startCommandRun(input, mode) {
+        state.commandRunCounter += 1;
+        const run = {
+          id: state.commandRunCounter,
+          type: "run",
+          input: String(input || ""),
+          mode: mode === "human" ? "human" : "command",
+          status: "pending",
+          outputs: [],
+          at: new Date().toISOString(),
+        };
+        state.commandLog.push(run);
+        trimCommandLog();
+        renderCommandLog();
+        return run;
+      }
+
+      function appendRunOutput(run, message, tone) {
+        if (!run) return;
+        const text = String(message || "");
+        const level = tone === "critical" || tone === "success" ? tone : "info";
+        run.outputs.push({
+          tone: level,
+          message: text,
+          formatted: parseStructuredCommandOutput(text),
+        });
+      }
+
+      function finalizeRun(run, status) {
+        if (!run) return;
+        run.status = status === "error" ? "error" : status === "success" ? "success" : "pending";
+        renderCommandLog();
+      }
+
+      function rememberCommandHistory(rawInput) {
+        const value = String(rawInput || "").trim();
+        if (!value) return;
+        const history = Array.isArray(state.commandHistory) ? state.commandHistory : [];
+        if (!history.length || history[history.length - 1] !== value) history.push(value);
+        if (history.length > 80) history.splice(0, history.length - 80);
+        state.commandHistory = history;
+        state.commandHistoryIndex = -1;
+      }
+
+      function browseCommandHistory(direction) {
+        const history = Array.isArray(state.commandHistory) ? state.commandHistory : [];
+        if (!history.length) return "";
+        const step = direction < 0 ? -1 : 1;
+        const current = Number(state.commandHistoryIndex);
+        if (current < 0 && step < 0) {
+          state.commandHistoryIndex = history.length - 1;
+        } else if (current >= 0) {
+          state.commandHistoryIndex = Math.min(history.length, Math.max(0, current + step));
+          if (state.commandHistoryIndex === history.length) {
+            state.commandHistoryIndex = -1;
+            return "";
+          }
+        }
+        if (state.commandHistoryIndex < 0) return "";
+        return String(history[state.commandHistoryIndex] || "");
+      }
+
+      function resolveCommandDispatch(rawInput) {
+        const raw = String(rawInput || "").trim();
+        const firstToken = String(raw.split(/\s+/)[0] || "").toLowerCase();
+        if (!raw) return { kind: "inline", input: "" };
+        if (firstToken === "/status") return { kind: "inline", input: raw.includes("--all") ? "status --all" : "status" };
+        if (firstToken === "/help") return { kind: "inline", input: "help" };
+        if (firstToken === "/deploy") return { kind: "inline", input: 'new "Deploy release" --type Feature' };
+        if (firstToken === "/rollback") return { kind: "inline", input: 'reprove --task-id task-123 --reason "Rollback requested"' };
+        if (firstToken === "/pause-all" || firstToken === "pause") return { kind: "runtime", action: "pause" };
+        if (firstToken === "/resume-runtime" || firstToken === "resume") return { kind: "runtime", action: "resume" };
+        if (firstToken === "/stop-runtime") return { kind: "runtime", action: "stop" };
+        if (firstToken === "/clear-cache") {
+          return { kind: "unsupported", message: "/clear-cache is not wired in backend yet. Integrate runtime cache API first." };
+        }
+        if (firstToken.startsWith("/")) return { kind: "inline", input: raw.slice(1) };
+        return { kind: "inline", input: raw };
+      }
+
+      function isCriticalCommand(rawInput, dispatch) {
+        const firstToken = String(String(rawInput || "").trim().split(/\s+/)[0] || "").toLowerCase();
+        if (dispatch && dispatch.kind === "runtime" && dispatch.action === "stop") return true;
+        if (dispatch && dispatch.kind === "unsupported" && firstToken === "/clear-cache") return true;
+        return firstToken === "stop" || firstToken === "/stop-runtime" || firstToken === "/flush-db" || firstToken === "flush-db";
+      }
+
+      async function executeWebCommand(input, mode, options) {
         const raw = String(input || "").trim();
         if (!raw) return;
         const selectedMode = mode === "human" ? "human" : "command";
-        pushCommandLog(selectedMode === "human" ? "human> " + raw : "$ " + raw, "user");
+        const dispatch = resolveCommandDispatch(raw);
+        if (!options || options.skipConfirm !== true) {
+          if (isCriticalCommand(raw, dispatch)) {
+            openCommandConfirm({
+              input: raw,
+              mode: selectedMode,
+            });
+            return;
+          }
+        }
+
+        rememberCommandHistory(raw);
+        const run = startCommandRun(raw, selectedMode);
         try {
+          if (dispatch.kind === "unsupported") {
+            appendRunOutput(run, dispatch.message, "critical");
+            finalizeRun(run, "error");
+            setFeedback(dispatch.message, "error");
+            return;
+          }
+
+          if (dispatch.kind === "runtime") {
+            await postApi("/api/runtime/" + encodeURIComponent(dispatch.action), {
+              reason: "Triggered from command center",
+            });
+            appendRunOutput(run, "Runtime command accepted: " + dispatch.action + ".", "success");
+            setPollStatus("Runtime command sent: " + dispatch.action);
+            finalizeRun(run, "success");
+            requestRender("user");
+            return;
+          }
+
+          const runtimeInput = String(dispatch.input || "");
           const result = await postApi("/api/command", {
-            input: raw,
+            input: runtimeInput,
             mode: selectedMode,
           });
           const lines = Array.isArray(result && result.lines) ? result.lines : [];
           if (!lines.length) {
-            pushCommandLog("No output lines returned by command handler.", "system");
+            appendRunOutput(run, "No output lines returned by command handler.", "info");
           } else {
             for (const line of lines) {
               const text = String(line && line.message || "");
               const tone = String(line && line.level || "info");
-              pushCommandLog(text || "[empty]", tone === "critical" ? "critical" : "info");
+              appendRunOutput(run, text || "[empty]", tone === "critical" ? "critical" : "success");
             }
           }
           if (result && result.stopRequested) {
-            pushCommandLog("Runtime stop requested from command input.", "critical");
+            appendRunOutput(run, "Runtime stop requested from command input.", "success");
           }
+          const hasCritical = run.outputs.some((row) => row.tone === "critical");
+          finalizeRun(run, hasCritical ? "error" : "success");
           requestRender("user");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Command failed";
-          pushCommandLog(message, "critical");
+          appendRunOutput(run, message, "critical");
+          finalizeRun(run, "error");
           setFeedback(message, "error");
         }
       }
@@ -3894,6 +4710,40 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
 
+        const openCommandPaletteTarget = target.closest("[data-open-command-palette]");
+        if (openCommandPaletteTarget instanceof HTMLElement && openCommandPaletteTarget.dataset.openCommandPalette !== undefined) {
+          openCommandPalette(commandInputEl instanceof HTMLInputElement ? commandInputEl.value : "");
+          return;
+        }
+
+        const closeCommandPaletteTarget = target.closest("[data-close-command-palette]");
+        if (
+          closeCommandPaletteTarget instanceof HTMLElement
+          && closeCommandPaletteTarget.dataset.closeCommandPalette !== undefined
+          && !(target.closest("[data-command-snippet]") instanceof HTMLElement)
+        ) {
+          closeCommandPalette();
+          if (commandInputEl instanceof HTMLInputElement) commandInputEl.focus();
+          return;
+        }
+
+        const closeCommandConfirmTarget = target.closest("[data-close-command-confirm]");
+        if (closeCommandConfirmTarget instanceof HTMLElement && closeCommandConfirmTarget.dataset.closeCommandConfirm !== undefined) {
+          closeCommandConfirm();
+          if (commandInputEl instanceof HTMLInputElement) commandInputEl.focus();
+          return;
+        }
+
+        const confirmCommandTarget = target.closest("[data-confirm-command]");
+        if (confirmCommandTarget instanceof HTMLElement && confirmCommandTarget.dataset.confirmCommand !== undefined) {
+          const payload = state.commandConfirm;
+          closeCommandConfirm();
+          if (payload && payload.input) {
+            void executeWebCommand(payload.input, payload.mode || "command", { skipConfirm: true });
+          }
+          return;
+        }
+
         const openSidebarTarget = target.closest("[data-sidebar-toggle]");
         if (openSidebarTarget instanceof HTMLElement && openSidebarTarget.dataset.sidebarToggle !== undefined) {
           openSidebarOverlay();
@@ -3916,10 +4766,32 @@ export function buildWebUiHtml(): string {
         const snippetTarget = target.closest("[data-command-snippet]");
         const snippet = snippetTarget instanceof HTMLElement ? String(snippetTarget.dataset.commandSnippet || "").trim() : "";
         if (snippet) {
-          if (commandInputEl instanceof HTMLInputElement) {
-            commandInputEl.value = snippet;
-            commandInputEl.focus();
+          const mode = snippetTarget instanceof HTMLElement ? String(snippetTarget.dataset.commandMode || "") : "";
+          const shouldClosePalette = Boolean(snippetTarget instanceof HTMLElement && snippetTarget.dataset.closeCommandPalette !== undefined);
+          applyCommandSnippet(snippet, mode, shouldClosePalette);
+          return;
+        }
+
+        const commandSuggestTarget = target.closest("[data-command-suggest-index]");
+        if (commandSuggestTarget instanceof HTMLElement) {
+          const index = Number(commandSuggestTarget.dataset.commandSuggestIndex || "0");
+          if (Number.isFinite(index) && state.commandSuggestions[index]) {
+            const row = state.commandSuggestions[index];
+            applyCommandSnippet(row.snippet, row.mode, false);
           }
+          return;
+        }
+
+        const commandFilterTarget = target.closest("[data-command-filter]");
+        const commandFilter = commandFilterTarget instanceof HTMLElement ? String(commandFilterTarget.dataset.commandFilter || "") : "";
+        if (commandFilter === "all" || commandFilter === "info" || commandFilter === "success" || commandFilter === "error") {
+          state.commandLogFilter = commandFilter;
+          const buttons = Array.from(document.querySelectorAll("[data-command-filter]"));
+          for (const button of buttons) {
+            if (!(button instanceof HTMLElement)) continue;
+            button.classList.toggle("active", String(button.dataset.commandFilter || "") === commandFilter);
+          }
+          renderCommandLog();
           return;
         }
 
@@ -3927,9 +4799,8 @@ export function buildWebUiHtml(): string {
         const webCommand = webCommandTarget instanceof HTMLElement ? String(webCommandTarget.dataset.webCommand || "").trim() : "";
         if (webCommand) {
           const shouldFill = webCommandTarget instanceof HTMLElement && webCommandTarget.dataset.webFill === "true";
-          if (shouldFill && commandInputEl instanceof HTMLInputElement) {
-            commandInputEl.value = webCommand;
-            commandInputEl.focus();
+          if (shouldFill) {
+            applyCommandSnippet(webCommand, "command", false);
           } else {
             const mode = commandModeEl instanceof HTMLSelectElement ? commandModeEl.value : state.commandMode;
             void executeWebCommand(webCommand, mode);
@@ -4047,16 +4918,15 @@ export function buildWebUiHtml(): string {
         const runtimeActionTarget = target.closest("[data-runtime-action]");
         const runtimeAction = runtimeActionTarget instanceof HTMLElement ? runtimeActionTarget.dataset.runtimeAction : "";
         if (runtimeAction) {
-          (async () => {
-            try {
-              await postApi("/api/runtime/" + encodeURIComponent(runtimeAction), {});
-              setPollStatus("Runtime command sent: " + runtimeAction);
-              setFeedback("Runtime command accepted: " + runtimeAction + ".", "info");
-            } catch (error) {
-              const message = error instanceof Error ? error.message : "Runtime action failed";
-              setFeedback(message, "error");
-            }
-          })();
+          if (runtimeAction === "stop") {
+            openCommandConfirm({
+              input: "/stop-runtime",
+              mode: "command",
+            });
+            return;
+          }
+          const alias = runtimeAction === "pause" ? "/pause-all" : "/resume-runtime";
+          void executeWebCommand(alias, "command", { skipConfirm: true });
         }
       });
 
@@ -4069,6 +4939,14 @@ export function buildWebUiHtml(): string {
         if (target instanceof HTMLInputElement && target.id === "command-ref-filter") {
           state.commandRefQuery = target.value || "";
           renderCommandReference();
+        }
+        if (target instanceof HTMLInputElement && target.id === "web-command-input") {
+          state.commandHistoryIndex = -1;
+          renderCommandSuggestions(target.value);
+        }
+        if (target instanceof HTMLInputElement && target.id === "command-palette-filter") {
+          state.commandPaletteQuery = target.value || "";
+          renderCommandPalette();
         }
         if (target instanceof HTMLInputElement && target.id === "board-filter") {
           state.boardFilter = target.value || "";
@@ -4086,7 +4964,28 @@ export function buildWebUiHtml(): string {
       });
 
       document.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+          event.preventDefault();
+          if (state.commandPaletteOpen) closeCommandPalette();
+          else openCommandPalette(commandInputEl instanceof HTMLInputElement ? commandInputEl.value : "");
+          return;
+        }
         if (event.key === "Escape") {
+          if (state.commandConfirm) {
+            closeCommandConfirm();
+            return;
+          }
+          if (state.commandPaletteOpen) {
+            closeCommandPalette();
+            return;
+          }
+          if (state.commandSuggestionsOpen) {
+            state.commandSuggestionsOpen = false;
+            state.commandSuggestions = [];
+            state.commandSuggestionsIndex = 0;
+            if (commandSuggestEl instanceof HTMLElement) commandSuggestEl.setAttribute("hidden", "");
+            return;
+          }
           if (state.view === "detail") {
             state.selectedTaskId = "";
             setView("review");
@@ -4109,6 +5008,30 @@ export function buildWebUiHtml(): string {
           }
           return;
         }
+
+        const commandInputTarget = event.target;
+        if (commandInputTarget instanceof HTMLInputElement && commandInputTarget.id === "web-command-input") {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            const isDown = event.key === "ArrowDown";
+            if (state.commandSuggestionsOpen && state.commandSuggestions.length) {
+              event.preventDefault();
+              setCommandSuggestionActive(state.commandSuggestionsIndex + (isDown ? 1 : -1));
+              return;
+            }
+            event.preventDefault();
+            const value = browseCommandHistory(isDown ? 1 : -1);
+            commandInputTarget.value = value;
+            renderCommandSuggestions(value);
+            return;
+          }
+          if ((event.key === "Enter" || event.key === "Tab") && state.commandSuggestionsOpen && state.commandSuggestions.length) {
+            event.preventDefault();
+            const row = state.commandSuggestions[state.commandSuggestionsIndex] || state.commandSuggestions[0];
+            if (row) applyCommandSnippet(row.snippet, row.mode, false);
+            return;
+          }
+        }
+
         const keyTarget = event.target;
         if (keyTarget instanceof HTMLElement && keyTarget.classList.contains("board-card") && (event.key === "Enter" || event.key === " ")) {
           const taskId = String(keyTarget.dataset.openTask || "");
@@ -4141,7 +5064,10 @@ export function buildWebUiHtml(): string {
           return;
         }
         void executeWebCommand(input, mode);
-        if (commandInputEl instanceof HTMLInputElement) commandInputEl.value = "";
+        state.commandSuggestionsOpen = false;
+        state.commandSuggestions = [];
+        state.commandSuggestionsIndex = 0;
+        if (commandSuggestEl instanceof HTMLElement) commandSuggestEl.setAttribute("hidden", "");
       });
 
       document.addEventListener("change", (event) => {
@@ -4231,6 +5157,9 @@ export function buildWebUiHtml(): string {
       if (commandRefFilterEl instanceof HTMLInputElement) {
         commandRefFilterEl.value = state.commandRefQuery;
       }
+      if (commandPaletteFilterEl instanceof HTMLInputElement) {
+        commandPaletteFilterEl.value = state.commandPaletteQuery;
+      }
       if (globalSearchInputEl instanceof HTMLInputElement) {
         globalSearchInputEl.value = state.search;
       }
@@ -4240,9 +5169,11 @@ export function buildWebUiHtml(): string {
       setHeaderNotificationCount(0);
       setRuntimeStatusPill({ isAlive: true, provider: "Local LLM" });
       setConnectivityIndicator(false, "Connecting");
-      pushCommandLog("Web command console ready. Try: status --all", "system");
-      pushCommandLog("Human mode accepts: yes / no + reason", "system");
+      pushCommandLog("Command center online. Try /status or Cmd/Ctrl + K.", "system");
+      pushCommandLog("Use ArrowUp/ArrowDown for command history.", "system");
       renderCommandReference();
+      renderCommandPalette();
+      renderCommandSuggestions("");
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
       setInterval(() => {
