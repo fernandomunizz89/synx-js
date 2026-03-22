@@ -19,6 +19,9 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("/reprove");
     expect(html).toContain("/cancel");
     expect(html).toContain("/api/runtime/");
+    expect(html).toContain("Cost Curve (30d)");
+    expect(html).toContain("Token Curve (30d)");
+    expect(html).toContain("Duration Curve (30d)");
   });
 
   it("includes phase 5 UX hardening markers for loading, accessibility, and retries", () => {
@@ -31,6 +34,8 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('data-retry-render');
     expect(html).toContain('class="table-wrap"');
     expect(html).toContain('caption class="sr-only"');
+    expect(html).toContain('class="chart-grid"');
+    expect(html).toContain("renderCurveChart(");
     expect(html).toContain("@media (max-width: 940px)");
     expect(html).toContain("@media (max-width: 640px)");
   });
