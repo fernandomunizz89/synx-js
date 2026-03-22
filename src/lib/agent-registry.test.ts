@@ -42,6 +42,15 @@ describe.sequential("lib/agent-registry", () => {
       expect(result).toEqual([]);
     });
 
+    it("returns empty array when readdir fails", async () => {
+      await fs.mkdir(agentsDirPath, { recursive: true });
+      // Mock readdir to throw
+      const spy = vi.spyOn(fs, "readdir").mockRejectedValue(new Error("Permission denied"));
+      const result = await loadAgentDefinitions();
+      expect(result).toEqual([]);
+      spy.mockRestore();
+    });
+
     it("returns an empty array when agents dir exists but is empty", async () => {
       await fs.mkdir(agentsDirPath, { recursive: true });
       const result = await loadAgentDefinitions();
