@@ -10,17 +10,10 @@ import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import { requestTaskCancel } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import type { AgentName, NewTaskInput, StageEnvelope, TaskType } from "../types.js";
+import type { RollbackSummary } from "./task-rollback.js";
 
 export type ProjectSource = "explicit" | "resolved-config" | "repository";
 export type RollbackMode = "none" | "task";
-
-export interface RollbackSummary {
-  requested: number;
-  trackedRestored: string[];
-  untrackedRemoved: string[];
-  skipped: string[];
-  warnings: string[];
-}
 
 export interface ReproveTaskServiceResult {
   taskId: string;

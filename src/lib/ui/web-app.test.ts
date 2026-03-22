@@ -11,5 +11,8 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('data-view="detail"');
     expect(html).toContain("/api/overview");
     expect(html).toContain("setInterval(render, state.pollMs)");
+    expect(html).toContain("/approve");
+    expect(html).toContain("/reprove");
+    expect(html).toContain("/cancel");
   });
 });

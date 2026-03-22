@@ -277,6 +277,19 @@ export function buildWebUiHtml(): string {
         return '<span class="status ' + escapeHtml(status) + '">' + escapeHtml(status) + "</span>";
       }
 
+      async function postApi(path, payload) {
+        const response = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload || {}),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error((data && data.error) ? data.error : "Action failed.");
+        }
+        return data.data;
+      }
+
       async function renderOverview() {
         const [overview, metrics] = await Promise.all([
           api("/api/overview"),
@@ -370,6 +383,25 @@ export function buildWebUiHtml(): string {
 
         const detail = await api("/api/tasks/" + encodeURIComponent(state.selectedTaskId));
         const eventLines = Array.isArray(detail.recentEvents) ? detail.recentEvents : [];
+        const canReview = Boolean(detail.humanApprovalRequired) || detail.status === "waiting_human";
+        const canCancel = ["new", "in_progress", "waiting_agent"].includes(detail.status);
+        const actionPanel = (canReview || canCancel)
+          ? [
+            '<h3 style="margin: 18px 0 8px;">Human Actions</h3>',
+            '<div style="border: 1px solid var(--border); border-radius: 12px; padding: 12px;">',
+            '<textarea id="action-reason" rows="3" style="width: 100%; border:1px solid var(--border); border-radius:8px; padding: 8px; font: inherit;" placeholder="Reason (required for reprove, optional for cancel)"></textarea>',
+            '<div style="display:flex; gap:8px; margin-top: 8px; flex-wrap:wrap;">',
+            '<select id="action-rollback" style="border:1px solid var(--border); border-radius:8px; padding:8px;">',
+            '<option value="none">Rollback: none</option>',
+            '<option value="task">Rollback: task-scoped</option>',
+            '</select>',
+            canReview ? '<button data-task-action="approve" style="padding:8px 12px; border-radius:8px; border:1px solid #138a67; background:#e0f5ec; color:#095f45; font-weight:700; cursor:pointer;">Approve</button>' : "",
+            canReview ? '<button data-task-action="reprove" style="padding:8px 12px; border-radius:8px; border:1px solid #c98a09; background:#fff3d7; color:#734f03; font-weight:700; cursor:pointer;">Reprove</button>' : "",
+            canCancel ? '<button data-task-action="cancel" style="padding:8px 12px; border-radius:8px; border:1px solid #c33b46; background:#fde8ea; color:#7f1e28; font-weight:700; cursor:pointer;">Cancel Task</button>' : "",
+            "</div>",
+            "</div>",
+          ].join("")
+          : '<h3 style="margin: 18px 0 8px;">Human Actions</h3><div class="empty">No manual action available for this task status.</div>';
         contentEl.innerHTML = [
           '<div class="toolbar"><div><strong>' + escapeHtml(detail.title) + '</strong><div class="muted">' + escapeHtml(detail.taskId) + '</div></div></div>',
           '<div class="grid">',
@@ -380,6 +412,7 @@ export function buildWebUiHtml(): string {
           "</div>",
           '<h3 style="margin: 18px 0 8px;">Recent Events</h3>',
           eventLines.length ? "<pre>" + escapeHtml(eventLines.join("\\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
+          actionPanel,
           '<h3 style="margin: 18px 0 8px;">Artifacts</h3>',
           '<p class="muted">Views: ' + escapeHtml((detail.views || []).join(", ") || "[none]") + '</p>',
           '<p class="muted">Done: ' + escapeHtml((detail.doneArtifacts || []).join(", ") || "[none]") + '</p>',
@@ -413,6 +446,44 @@ export function buildWebUiHtml(): string {
         if (taskId) {
           state.selectedTaskId = taskId;
           setView("detail");
+          return;
+        }
+
+        const taskAction = target.dataset.taskAction;
+        if (taskAction) {
+          const reasonEl = document.getElementById("action-reason");
+          const rollbackEl = document.getElementById("action-rollback");
+          const reason = reasonEl instanceof HTMLTextAreaElement ? reasonEl.value.trim() : "";
+          const rollbackMode = rollbackEl instanceof HTMLSelectElement ? rollbackEl.value : "none";
+
+          (async () => {
+            try {
+              if (!state.selectedTaskId) throw new Error("Select a task first.");
+              if (taskAction === "reprove" && !reason) {
+                throw new Error("Reason is required to reprove.");
+              }
+
+              if (taskAction === "approve") {
+                await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/approve", {});
+              } else if (taskAction === "reprove") {
+                await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/reprove", {
+                  reason,
+                  rollbackMode,
+                });
+              } else if (taskAction === "cancel") {
+                await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/cancel", {
+                  reason,
+                });
+              }
+
+              const badge = document.getElementById("poll-status");
+              if (badge) badge.textContent = "Last action at " + new Date().toLocaleTimeString();
+              await render();
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Action failed";
+              alert(message);
+            }
+          })();
         }
       });
 
