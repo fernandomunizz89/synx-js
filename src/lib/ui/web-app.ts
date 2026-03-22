@@ -2133,34 +2133,140 @@ export function buildWebUiHtml(): string {
         border-color: color-mix(in srgb, var(--color-accent-attention) 52%, var(--border));
         background: color-mix(in srgb, var(--status-waiting-bg) 26%, var(--surface-soft));
       }
+      .live-stream {
+        display: grid;
+        gap: var(--space-3);
+      }
+      .live-filters {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .live-filters .btn.active {
+        border-color: color-mix(in srgb, var(--synx-cyan) 48%, var(--border));
+        background: color-mix(in srgb, var(--synx-cyan) 18%, var(--surface));
+      }
+      .event-feed {
+        max-height: min(72vh, 760px);
+        overflow: auto;
+        display: grid;
+        gap: var(--space-2);
+        padding-right: 2px;
+      }
+      .event-feed.virtual {
+        position: relative;
+      }
+      .event-spacer {
+        width: 100%;
+      }
+      .event-pins {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .event-pins-label {
+        color: var(--color-accent-attention);
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
       .event-card {
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
         padding: var(--space-3);
-        background: var(--surface);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        display: grid;
+        gap: 8px;
+      }
+      .event-card.fresh {
+        animation: event-card-enter 0.28s ease both;
+      }
+      @keyframes event-card-enter {
+        from { opacity: 0; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .event-card.pinned {
+        border-color: color-mix(in srgb, var(--color-accent-attention) 52%, var(--border));
+        background: color-mix(in srgb, var(--status-waiting-bg) 30%, var(--surface));
+      }
+      .event-card.alert {
+        border-color: color-mix(in srgb, var(--color-accent-error) 54%, var(--border));
+        background: color-mix(in srgb, var(--status-failed-bg) 28%, var(--surface));
+      }
+      .event-card.alert .event-icon {
+        color: var(--status-failed-fg);
+      }
+      .event-card.pinned .event-icon {
+        color: var(--status-waiting-fg);
       }
       .event-card .head {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
         gap: var(--space-2);
-        margin-bottom: 6px;
+      }
+      .event-card .title-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .event-icon {
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        color: var(--fg);
+      }
+      .event-icon svg {
+        width: 100%;
+        height: 100%;
       }
       .event-card .title {
         font-weight: 700;
+        color: var(--fg);
       }
       .event-card .time {
         color: var(--muted);
-        font-size: 0.86rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
       }
       .event-card .summary {
         color: var(--fg);
-        font-size: 0.95rem;
+        font-size: 0.91rem;
       }
-      .event-card .details {
-        margin-top: 6px;
+      .event-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .event-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        padding: 2px 8px;
         color: var(--muted);
-        font-size: 0.88rem;
+        font-size: 0.72rem;
+      }
+      .event-tag strong {
+        color: var(--fg);
+      }
+      .event-alert-actions {
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .event-raw {
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, #060911 92%, var(--surface));
+        padding: 8px;
+        font-family: var(--font-mono);
+        font-size: 0.77rem;
+        color: var(--muted);
       }
       .pill {
         display: inline-flex;
@@ -2175,6 +2281,7 @@ export function buildWebUiHtml(): string {
       .pill.task { background: var(--pill-task-bg); color: var(--pill-task-fg); }
       .pill.review { background: var(--pill-review-bg); color: var(--pill-review-fg); }
       .pill.metrics { background: var(--pill-metrics-bg); color: var(--pill-metrics-fg); }
+      .pill.alert { background: var(--status-failed-bg); color: var(--status-failed-fg); }
       .sr-only {
         border: 0 !important;
         clip: rect(0 0 0 0) !important;
@@ -2410,6 +2517,12 @@ export function buildWebUiHtml(): string {
         analyticsRenderedKey: "",
         liveRenderedCount: -1,
         liveRenderedConnected: null,
+        liveRenderedKey: "",
+        liveFilter: "all",
+        liveAutoScroll: true,
+        liveScrollTop: 0,
+        liveViewportHeight: 0,
+        liveExpandedLogKey: "",
         commandMode: "command",
         commandLog: [],
         commandRunCounter: 0,
@@ -3496,26 +3609,72 @@ export function buildWebUiHtml(): string {
         return value && typeof value === "object" ? value : {};
       }
 
-      function eventTone(eventType) {
+      function eventTone(eventType, rawEvent, payloadObj) {
+        const payload = asObject(payloadObj);
+        const rawPayload = asObject(payload.payload);
+        const status = String(rawPayload.status || payload.status || "").toLowerCase();
+        const raw = String(rawEvent || "").toLowerCase();
         if (eventType === "task.review_required") return "review";
-        if (eventType === "task.decision_recorded" || eventType === "task.updated") return "task";
+        if (eventType === "task.decision_recorded") return "review";
+        if (status === "failed" || status === "blocked" || status === "archived") return "alert";
+        if (/\berror\b|\bfailed\b|\bblocked\b/.test(raw)) return "alert";
+        if (eventType === "task.updated") return "task";
         if (eventType === "metrics.updated") return "metrics";
         return "runtime";
       }
 
-      function eventTitle(eventType, rawEvent) {
-        if (eventType === "task.review_required") return "Human Review Needed";
-        if (eventType === "task.decision_recorded") return "Human Decision Recorded";
-        if (eventType === "metrics.updated") return "Metrics Updated";
-        if (eventType === "task.updated") return rawEvent === "task.created" ? "Task Created" : "Task Updated";
-        if (eventType === "runtime.updated") {
-          if (rawEvent === "engine.started") return "Engine Started";
-          if (rawEvent === "engine.stopped") return "Engine Stopped";
-          if (rawEvent === "engine.paused") return "Engine Paused";
-          if (rawEvent === "engine.resumed") return "Engine Resumed";
-          return "Runtime Updated";
+      function eventGroup(eventType, tone) {
+        if (tone === "alert") return "alerts";
+        if (eventType === "task.decision_recorded") return "human";
+        if (eventType === "task.updated" || eventType === "task.review_required") return "tasks";
+        return "runtime";
+      }
+
+      function eventExecutor(payloadObj, fallback) {
+        const payload = asObject(payloadObj);
+        const rawPayload = asObject(payload.payload);
+        return String(
+          rawPayload.currentAgent
+          || rawPayload.agent
+          || rawPayload.requestedBy
+          || payload.source
+          || fallback
+          || "system",
+        );
+      }
+
+      function eventTitle(eventType, rawEvent, payloadObj) {
+        const payload = asObject(payloadObj);
+        const rawPayload = asObject(payload.payload);
+        const stage = String(rawPayload.currentStage || "").toLowerCase();
+        const status = String(rawPayload.status || "").toLowerCase();
+        const decision = String(rawPayload.decision || "").toLowerCase();
+        const raw = String(rawEvent || "").toLowerCase();
+        if (eventType === "task.review_required") return "Revisão humana necessária";
+        if (eventType === "task.decision_recorded") {
+          if (decision === "approved") return "Aprovação humana registrada";
+          if (decision === "reproved") return "Reprovação humana registrada";
+          return "Decisão humana registrada";
         }
-        return "Event";
+        if (eventType === "task.updated") {
+          if (raw === "task.created") return "Nova tarefa recebida";
+          if (status === "failed" || status === "blocked") return "Falha crítica em tarefa";
+          if (stage.includes("research")) return "Pesquisa de mercado iniciada";
+          if (stage.includes("qa")) return "Validação de QA em andamento";
+          if (stage.includes("review")) return "Tarefa movida para revisão";
+          if (status === "done") return "Tarefa concluída";
+          return "Atualização operacional de tarefa";
+        }
+        if (eventType === "runtime.updated") {
+          if (raw === "engine.started") return "Runtime iniciado";
+          if (raw === "engine.stopped") return "Runtime interrompido";
+          if (raw === "engine.paused") return "Runtime pausado";
+          if (raw === "engine.resumed") return "Runtime retomado";
+          if (raw === "engine.stop_requested") return "Solicitação de parada recebida";
+          return "Atualização de runtime";
+        }
+        if (eventType === "metrics.updated") return "Métricas atualizadas";
+        return "Evento operacional";
       }
 
       function eventSummary(event) {
@@ -3523,79 +3682,148 @@ export function buildWebUiHtml(): string {
         const rawPayload = asObject(payloadObj.payload);
         const rawEvent = String(payloadObj.rawEvent || event.type || "");
         const stage = String(rawPayload.currentStage || event.stage || "");
-        const currentAgent = String(rawPayload.currentAgent || "");
+        const currentAgent = eventExecutor(payloadObj, "agent");
         const nextAgent = String(rawPayload.nextAgent || rawPayload.returnedTo || "");
         const reason = String(rawPayload.reason || payloadObj.reason || "");
+        const status = String(rawPayload.status || "").toLowerCase();
 
         if (event.type === "task.review_required") {
           const context = [
             stage ? "stage " + stage : "",
             currentAgent ? "agent " + currentAgent : "",
-          ].filter(Boolean).join(" | ");
+          ].filter(Boolean).join(" • ");
           return context
-            ? "Task moved to waiting_human and needs your decision (" + context + ")."
-            : "Task moved to waiting_human and needs your decision.";
+            ? "A tarefa está aguardando decisão humana (" + context + ")."
+            : "A tarefa entrou no gargalo de revisão humana.";
         }
         if (event.type === "task.decision_recorded") {
           const decision = String(rawPayload.decision || "");
-          if (decision === "approved") return "Task approved and marked as done.";
+          if (decision === "approved") return "A saída da IA foi aprovada e o fluxo seguiu para done.";
           if (decision === "reproved") {
             const rollbackMode = String(rawPayload.rollbackMode || "");
-            const toAgent = nextAgent ? "returning to " + nextAgent : "returning to implementation flow";
-            const rollback = rollbackMode ? " | rollback: " + rollbackMode : "";
-            const why = reason ? " | reason: " + reason : "";
-            return "Task reproved, " + toAgent + rollback + why + ".";
+            const toAgent = nextAgent ? "retornando para " + nextAgent : "retornando ao fluxo de implementação";
+            const rollback = rollbackMode ? " (rollback: " + rollbackMode + ")" : "";
+            const why = reason ? " Motivo: " + reason + "." : "";
+            return "Reprovação registrada, " + toAgent + rollback + "." + why;
           }
-          return "Human decision captured in runtime events.";
+          return "Uma decisão humana foi anexada ao histórico da tarefa.";
         }
         if (event.type === "metrics.updated") {
           const prev = Number(payloadObj.previousCount || 0);
           const curr = Number(payloadObj.currentCount || 0);
           if (Number.isFinite(prev) && Number.isFinite(curr)) {
-            return "Metrics samples changed from " + prev + " to " + curr + ".";
+            return "A amostragem operacional mudou de " + prev + " para " + curr + " pontos.";
           }
-          return "Metrics snapshots were updated.";
+          return "Os indicadores de performance foram atualizados.";
         }
         if (event.type === "runtime.updated") {
           const requestedBy = String(rawPayload.requestedBy || "");
           const reasonText = String(rawPayload.reason || "");
-          if (rawEvent === "engine.started") return "Orchestrator loop is now running.";
-          if (rawEvent === "engine.stopped") return "Orchestrator loop was stopped.";
-          if (rawEvent === "engine.paused") return "Processing loop is paused.";
-          if (rawEvent === "engine.resumed") return "Processing loop resumed.";
+          if (rawEvent === "engine.started") return "O loop principal foi iniciado e está apto a processar tarefas.";
+          if (rawEvent === "engine.stopped") return "O loop principal foi interrompido.";
+          if (rawEvent === "engine.paused") return "O processamento está pausado aguardando intervenção.";
+          if (rawEvent === "engine.resumed") return "O processamento voltou ao estado ativo.";
           if (rawEvent === "engine.stop_requested") {
             const context = [requestedBy ? "requestedBy=" + requestedBy : "", reasonText ? "reason=" + reasonText : ""]
               .filter(Boolean)
-              .join(" | ");
-            return context ? "Graceful stop was requested (" + context + ")." : "Graceful stop was requested.";
+              .join(" • ");
+            return context ? "Parada graciosa solicitada (" + context + ")." : "Parada graciosa solicitada.";
           }
-          return "Runtime state changed.";
+          return "Estado de runtime alterado.";
         }
         if (event.type === "task.updated") {
-          const status = String(rawPayload.status || "");
           if (rawEvent === "task.created") {
             const title = String(rawPayload.title || "");
             const project = String(rawPayload.project || "");
-            const parts = [title ? "title: " + title : "", project ? "project: " + project : ""]
+            const parts = [title ? "título: " + title : "", project ? "projeto: " + project : ""]
               .filter(Boolean)
-              .join(" | ");
-            return parts ? "A new task entered the queue (" + parts + ")." : "A new task entered the queue.";
+              .join(" • ");
+            return parts ? "Uma nova demanda entrou no pipeline (" + parts + ")." : "Uma nova demanda entrou no pipeline.";
           }
           if (rawEvent === "task.cancel_requested") {
             return reason
-              ? "Cancellation was requested for task (reason: " + reason + ")."
-              : "Cancellation was requested for task.";
+              ? "Cancelamento solicitado para a tarefa. Motivo: " + reason + "."
+              : "Cancelamento solicitado para a tarefa.";
           }
           const context = [
             status ? "status " + status : "",
             stage ? "stage " + stage : "",
-            currentAgent ? "agent " + currentAgent : "",
-            nextAgent ? "next " + nextAgent : "",
-            reason ? "reason " + reason : "",
-          ].filter(Boolean).join(" | ");
-          return context ? "Task state changed (" + context + ")." : "Task state changed in the execution flow.";
+            currentAgent ? "executor " + currentAgent : "",
+            nextAgent ? "próximo " + nextAgent : "",
+            reason ? "motivo " + reason : "",
+          ].filter(Boolean).join(" • ");
+          return context ? "A tarefa mudou de estado (" + context + ")." : "Mudança operacional registrada na tarefa.";
         }
-        return "System event received.";
+        return "Evento operacional recebido.";
+      }
+
+      function eventIconKey(eventType, rawEvent, payloadObj, tone) {
+        const payload = asObject(payloadObj);
+        const rawPayload = asObject(payload.payload);
+        const stage = String(rawPayload.currentStage || "").toLowerCase();
+        const decision = String(rawPayload.decision || "").toLowerCase();
+        const raw = String(rawEvent || "").toLowerCase();
+        if (tone === "alert") return "alert";
+        if (eventType === "task.review_required") return "review";
+        if (eventType === "task.decision_recorded") return decision === "approved" ? "approved" : "review";
+        if (stage.includes("research")) return "research";
+        if (stage.includes("qa")) return "qa";
+        if (stage.includes("build") || stage.includes("coder") || stage.includes("front") || stage.includes("back")) return "build";
+        if (raw.includes("engine")) return "runtime";
+        return "task";
+      }
+
+      function renderEventIcon(iconKey) {
+        const common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+        if (iconKey === "research") return '<svg ' + common + '><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>';
+        if (iconKey === "build") return '<svg ' + common + '><path d="m14 7 3 3-8 8-3 1 1-3z" /><path d="m12 9 3 3" /></svg>';
+        if (iconKey === "approved") return '<svg ' + common + '><circle cx="12" cy="12" r="8" /><path d="m8.8 12.2 2.2 2.2 4.4-4.4" /></svg>';
+        if (iconKey === "review") return '<svg ' + common + '><path d="M4 12h7" /><path d="m9 7 5 5-5 5" /><rect x="14" y="4" width="7" height="16" rx="2" /></svg>';
+        if (iconKey === "runtime") return '<svg ' + common + '><path d="M12 3v8" /><path d="M8.1 5.8A8 8 0 1 0 16 5.8" /></svg>';
+        if (iconKey === "alert") return '<svg ' + common + '><path d="M12 4 3 20h18z" /><path d="M12 9v5" /><circle cx="12" cy="17" r="1" /></svg>';
+        if (iconKey === "qa") return '<svg ' + common + '><path d="m8 12 2.5 2.5L16 9" /><rect x="4" y="4" width="16" height="16" rx="2" /></svg>';
+        return '<svg ' + common + '><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16" /><path d="M10 4v16" /></svg>';
+      }
+
+      function buildStreamItem(event, index) {
+        const payloadObj = asObject(event.payload);
+        const rawPayload = asObject(payloadObj.payload);
+        const rawEvent = String(payloadObj.rawEvent || event.type || "");
+        const tone = eventTone(event.type, rawEvent, payloadObj);
+        const group = eventGroup(event.type, tone);
+        const title = eventTitle(event.type, rawEvent, payloadObj);
+        const summary = eventSummary(event);
+        const iconKey = eventIconKey(event.type, rawEvent, payloadObj, tone);
+        const taskId = String(event.taskId || rawPayload.taskId || "");
+        const agent = eventExecutor(payloadObj, rawPayload.currentAgent || "");
+        const pin = event.type === "task.review_required";
+        const alert = tone === "alert";
+        const key = String(event.id || "") + "|" + String(event.at || "") + "|" + String(index);
+        return {
+          key,
+          tone,
+          group,
+          title,
+          summary,
+          iconKey,
+          taskId,
+          agent,
+          pin,
+          alert,
+          at: String(event.at || ""),
+          rawEvent,
+          payloadObj,
+        };
+      }
+
+      function streamFilterMatches(item, filter) {
+        const normalized = String(filter || "all");
+        if (normalized === "all") return true;
+        if (normalized === "tasks") return item.group === "tasks";
+        if (normalized === "runtime") return item.group === "runtime";
+        if (normalized === "human") return item.group === "human";
+        if (normalized === "alerts") return item.alert;
+        return true;
       }
 
       function setView(view) {
@@ -3609,6 +3837,10 @@ export function buildWebUiHtml(): string {
         const meta = viewMeta[view] || viewMeta.overview;
         if (headerViewKeyEl) headerViewKeyEl.textContent = meta.breadcrumb;
         if (headerScreenTitleEl) headerScreenTitleEl.textContent = meta.title;
+        if (view === "live") {
+          state.liveAutoScroll = true;
+          state.liveRenderedKey = "";
+        }
         closeSidebarOverlay();
         requestRender("user");
       }
@@ -4555,14 +4787,78 @@ export function buildWebUiHtml(): string {
       }
 
       function renderLive() {
-        const rows = state.liveEvents.slice().reverse();
-        if (
-          state.liveRenderedCount === rows.length
-          && state.liveRenderedConnected === state.realtimeConnected
-          && document.getElementById("live-root")
-        ) {
-          return;
+        const allItems = state.liveEvents.map((event, index) => buildStreamItem(event, index));
+        const filtered = allItems.filter((item) => streamFilterMatches(item, state.liveFilter));
+        const pinned = filtered.filter((item) => item.pin);
+        const regular = filtered.filter((item) => !item.pin);
+        const virtualEnabled = regular.length > 500;
+        const estimatedItemHeight = 154;
+        const viewportHeight = Math.max(420, Number(state.liveViewportHeight || 680));
+        const virtualCount = virtualEnabled
+          ? Math.ceil(viewportHeight / estimatedItemHeight) + 16
+          : regular.length;
+        const virtualStart = virtualEnabled
+          ? (state.liveAutoScroll
+            ? Math.max(0, regular.length - virtualCount)
+            : Math.max(0, Math.floor(Number(state.liveScrollTop || 0) / estimatedItemHeight) - 6))
+          : 0;
+        const virtualEnd = virtualEnabled
+          ? Math.min(regular.length, virtualStart + virtualCount)
+          : regular.length;
+        const visible = regular.slice(virtualStart, virtualEnd);
+        const topSpacer = virtualEnabled ? virtualStart * estimatedItemHeight : 0;
+        const bottomSpacer = virtualEnabled ? Math.max(0, (regular.length - virtualEnd) * estimatedItemHeight) : 0;
+        const latestKey = allItems.length ? allItems[allItems.length - 1].key : "";
+        const liveKey = [
+          latestKey,
+          String(allItems.length),
+          String(filtered.length),
+          String(pinned.length),
+          String(virtualStart),
+          String(virtualEnd),
+          String(state.liveFilter || "all"),
+          String(state.realtimeConnected),
+          String(state.liveExpandedLogKey || ""),
+        ].join("|");
+        if (state.liveRenderedKey === liveKey && document.getElementById("live-root")) return;
+
+        function renderStreamCard(item, forcedClass) {
+          const tone = item.tone === "alert" ? "alert" : item.tone;
+          const classes = ["event-card", tone];
+          if (item.pin || forcedClass === "pinned") classes.push("pinned");
+          if (item.alert) classes.push("alert");
+          const ageMs = Date.now() - new Date(item.at || 0).getTime();
+          if (Number.isFinite(ageMs) && ageMs >= 0 && ageMs < 8_000) classes.push("fresh");
+          const taskTag = item.taskId
+            ? '<span class="event-tag"><strong>Task</strong><button type="button" class="link" data-open-task="' + escapeHtml(item.taskId) + '">' + escapeHtml(item.taskId) + "</button></span>"
+            : '<span class="event-tag"><strong>Task</strong>n/a</span>';
+          const agentTag = '<span class="event-tag"><strong>Agent</strong>' + escapeHtml(item.agent || "system") + "</span>";
+          const typeTag = '<span class="event-tag"><strong>Type</strong>' + escapeHtml(item.rawEvent || "event") + "</span>";
+          const expanded = state.liveExpandedLogKey === item.key;
+          const logButton = item.alert
+            ? '<button type="button" class="btn cancel" data-live-view-logs="' + escapeHtml(item.key) + '">View Logs</button>'
+            : "";
+          const alertAction = item.taskId && item.pin
+            ? '<button type="button" class="btn approve" data-open-review>Open Review Queue</button>'
+            : "";
+          const rawPayload = JSON.stringify(item.payloadObj, null, 2);
+          const rawLogs = expanded
+            ? '<pre class="event-raw">' + escapeHtml(rawPayload || "{}") + "</pre>"
+            : "";
+          return [
+            '<article class="' + escapeHtml(classes.join(" ")) + '">',
+            '<div class="head">',
+            '<div class="title-wrap"><span class="event-icon" aria-hidden="true">' + renderEventIcon(item.iconKey) + "</span><div><div class=\"title\">" + escapeHtml(item.title) + "</div><span class=\"pill " + escapeHtml(tone === "alert" ? "alert" : tone) + "\">" + escapeHtml(item.group) + "</span></div></div>",
+            '<div class="time">' + escapeHtml(fmtRelativeTime(item.at)) + "</div>",
+            "</div>",
+            '<div class="summary">' + escapeHtml(item.summary) + "</div>",
+            '<div class="event-meta">' + taskTag + agentTag + typeTag + "</div>",
+            item.alert || item.pin ? '<div class="event-alert-actions">' + logButton + alertAction + "</div>" : "",
+            rawLogs,
+            "</article>",
+          ].join("");
         }
+
         const controls = [
           '<div class="actions" style="margin-bottom:10px;">',
           '<button type="button" class="btn" data-runtime-action="pause">Pause Engine</button>',
@@ -4570,43 +4866,45 @@ export function buildWebUiHtml(): string {
           '<button type="button" class="btn cancel" data-runtime-action="stop">Graceful Stop</button>',
           "</div>",
         ].join("");
-        if (!rows.length) {
-          contentEl.innerHTML = '<div id="live-root">' + controls + '<div class="empty">Waiting realtime events from <code>/api/stream</code>...</div></div>';
+        if (!filtered.length) {
+          contentEl.innerHTML = '<div id="live-root" class="live-stream">' + controls + '<div class="empty">No events for this filter yet. Waiting realtime events from <code>/api/stream</code>...</div></div>';
           state.liveRenderedCount = 0;
           state.liveRenderedConnected = state.realtimeConnected;
+          state.liveRenderedKey = liveKey;
           return;
         }
         contentEl.innerHTML = [
-          '<div id="live-root">',
-          '<div class="toolbar"><div class="muted">Realtime: ' + (state.realtimeConnected ? "connected" : "disconnected") + '</div></div>',
+          '<div id="live-root" class="live-stream">',
+          '<div class="toolbar"><div class="muted">Realtime: ' + (state.realtimeConnected ? "connected" : "disconnected") + ' • events ' + fmtNumber(filtered.length) + (virtualEnabled ? " (virtual list enabled)" : "") + '</div></div>',
+          '<div class="live-filters" role="group" aria-label="Live stream filters">',
+          '<button type="button" class="btn' + (state.liveFilter === "all" ? " active" : "") + '" data-live-filter="all">All Events</button>',
+          '<button type="button" class="btn' + (state.liveFilter === "tasks" ? " active" : "") + '" data-live-filter="tasks">Tasks Only</button>',
+          '<button type="button" class="btn' + (state.liveFilter === "runtime" ? " active" : "") + '" data-live-filter="runtime">Runtime</button>',
+          '<button type="button" class="btn' + (state.liveFilter === "human" ? " active" : "") + '" data-live-filter="human">Human Decisions</button>',
+          '<button type="button" class="btn' + (state.liveFilter === "alerts" ? " active" : "") + '" data-live-filter="alerts">Alerts</button>',
+          "</div>",
           controls,
-          '<div class="event-feed">',
-          rows.map((event) => {
-            const payloadObj = asObject(event.payload);
-            const rawEvent = String(payloadObj.rawEvent || event.type || "");
-            const source = String(payloadObj.source || "");
-            const tone = eventTone(event.type);
-            const title = eventTitle(event.type, rawEvent);
-            const summary = eventSummary(event);
-            const taskLine = event.taskId ? "Task: " + event.taskId : "Task: n/a";
-            const sourceLine = source ? "Source: " + source : "";
-            const rawLine = rawEvent && rawEvent !== event.type ? "Raw event: " + rawEvent : "";
-            return [
-              '<article class="event-card">',
-              '<div class="head">',
-              '<div class="title"><span class="pill ' + tone + '">' + escapeHtml(event.type) + "</span> " + escapeHtml(title) + "</div>",
-              '<div class="time">' + escapeHtml(fmtDateTime(event.at || "")) + "</div>",
-              "</div>",
-              '<div class="summary">' + escapeHtml(summary) + "</div>",
-              '<div class="details">' + escapeHtml(taskLine + (sourceLine ? " | " + sourceLine : "") + (rawLine ? " | " + rawLine : "")) + "</div>",
-              "</article>",
-            ].join("");
-          }).join(""),
+          pinned.length
+            ? '<section class="event-pins"><div class="event-pins-label">Pinned Intervention</div>' + pinned.map((item) => renderStreamCard(item, "pinned")).join("") + "</section>"
+            : "",
+          '<div id="live-scroll" class="event-feed' + (virtualEnabled ? " virtual" : "") + '">',
+          virtualEnabled ? '<div class="event-spacer" style="height:' + String(topSpacer) + 'px;"></div>' : "",
+          visible.map((item) => renderStreamCard(item, "")).join(""),
+          virtualEnabled ? '<div class="event-spacer" style="height:' + String(bottomSpacer) + 'px;"></div>' : "",
           "</div>",
           "</div>",
         ].join("");
-        state.liveRenderedCount = rows.length;
+        const liveScrollEl = document.getElementById("live-scroll");
+        if (liveScrollEl instanceof HTMLElement) {
+          state.liveViewportHeight = liveScrollEl.clientHeight || state.liveViewportHeight;
+          if (state.liveAutoScroll) {
+            liveScrollEl.scrollTop = liveScrollEl.scrollHeight;
+            state.liveScrollTop = liveScrollEl.scrollTop;
+          }
+        }
+        state.liveRenderedCount = filtered.length;
         state.liveRenderedConnected = state.realtimeConnected;
+        state.liveRenderedKey = liveKey;
       }
 
       async function renderAnalytics() {
@@ -4843,6 +5141,24 @@ export function buildWebUiHtml(): string {
           return;
         }
 
+        const liveFilterTarget = target.closest("[data-live-filter]");
+        const liveFilter = liveFilterTarget instanceof HTMLElement ? String(liveFilterTarget.dataset.liveFilter || "") : "";
+        if (liveFilter === "all" || liveFilter === "tasks" || liveFilter === "runtime" || liveFilter === "human" || liveFilter === "alerts") {
+          state.liveFilter = liveFilter;
+          state.liveRenderedKey = "";
+          requestRender("user");
+          return;
+        }
+
+        const liveLogsTarget = target.closest("[data-live-view-logs]");
+        const liveLogKey = liveLogsTarget instanceof HTMLElement ? String(liveLogsTarget.dataset.liveViewLogs || "") : "";
+        if (liveLogKey) {
+          state.liveExpandedLogKey = state.liveExpandedLogKey === liveLogKey ? "" : liveLogKey;
+          state.liveRenderedKey = "";
+          requestRender("user");
+          return;
+        }
+
         const openReviewTarget = target.closest("[data-open-review]");
         if (openReviewTarget instanceof HTMLElement && openReviewTarget.dataset.openReview !== undefined) {
           setView("review");
@@ -4963,6 +5279,20 @@ export function buildWebUiHtml(): string {
         }
       });
 
+      document.addEventListener("scroll", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || target.id !== "live-scroll") return;
+        const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+        const nearBottom = distanceToBottom < 48;
+        state.liveAutoScroll = nearBottom;
+        state.liveScrollTop = target.scrollTop;
+        state.liveViewportHeight = target.clientHeight;
+        if (state.view === "live" && state.liveEvents.length > 500) {
+          state.liveRenderedKey = "";
+          requestRender("poll");
+        }
+      }, true);
+
       document.addEventListener("keydown", (event) => {
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
           event.preventDefault();
@@ -4984,6 +5314,12 @@ export function buildWebUiHtml(): string {
             state.commandSuggestions = [];
             state.commandSuggestionsIndex = 0;
             if (commandSuggestEl instanceof HTMLElement) commandSuggestEl.setAttribute("hidden", "");
+            return;
+          }
+          if (state.view === "live" && state.liveExpandedLogKey) {
+            state.liveExpandedLogKey = "";
+            state.liveRenderedKey = "";
+            requestRender("user");
             return;
           }
           if (state.view === "detail") {
@@ -5106,7 +5442,7 @@ export function buildWebUiHtml(): string {
               try {
                 const parsed = JSON.parse(row.data);
                 state.liveEvents.push(parsed);
-                if (state.liveEvents.length > 160) state.liveEvents = state.liveEvents.slice(-160);
+                if (state.liveEvents.length > 1200) state.liveEvents = state.liveEvents.slice(-1200);
                 if (type === "task.review_required") {
                   state.reviewAlertAt = fmtTimeNow();
                   setPollStatus("Review required now");
