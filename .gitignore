@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # Optional outputs
 coverage
+
+# Local agent/worktree scratch (generated)
+.claude/
