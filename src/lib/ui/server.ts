@@ -38,6 +38,15 @@ interface ApiSuccessPayload<T> {
   data: T;
 }
 
+class UiHttpError extends Error {
+  statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
+
 function sendJson<T>(res: http.ServerResponse, statusCode: number, payload: ApiSuccessPayload<T> | ApiErrorPayload): void {
   res.statusCode = statusCode;
   res.setHeader("content-type", "application/json; charset=utf-8");
@@ -68,12 +77,30 @@ async function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, 
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
   } catch {
-    throw new Error("Invalid JSON body.");
+    throw new UiHttpError(400, "Invalid JSON body.");
   }
 }
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  if ("code" in error && String((error as { code?: unknown }).code || "") === "ENOENT") return true;
+  const message = "message" in error ? String((error as { message?: unknown }).message || "") : "";
+  return /\bENOENT\b|no such file or directory/i.test(message);
+}
+
+async function assertTaskExists(taskId: string): Promise<void> {
+  try {
+    await loadTaskMeta(taskId);
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      throw new UiHttpError(404, `Task ${taskId} not found.`);
+    }
+    throw error;
+  }
 }
 
 export function createUiRequestHandler(options: {
@@ -230,6 +257,7 @@ export function createUiRequestHandler(options: {
 
       if (method === "POST" && approveMatch) {
         const taskId = decodeURIComponent(approveMatch[1]);
+        await assertTaskExists(taskId);
         await approveTaskService(taskId);
         sendJson(res, 200, { ok: true, data: { taskId, status: "approved" } });
         return;
@@ -237,6 +265,7 @@ export function createUiRequestHandler(options: {
 
       if (method === "POST" && reproveMatch) {
         const taskId = decodeURIComponent(reproveMatch[1]);
+        await assertTaskExists(taskId);
         const body = await parseJsonBody(req);
         const reason = normalizeString(body.reason);
         const rollbackMode = normalizeString(body.rollbackMode) === "task" ? "task" : "none";
@@ -248,10 +277,17 @@ export function createUiRequestHandler(options: {
 
       if (method === "POST" && cancelMatch) {
         const taskId = decodeURIComponent(cancelMatch[1]);
-        const meta = await loadTaskMeta(taskId);
+        let meta: Awaited<ReturnType<typeof loadTaskMeta>>;
+        try {
+          meta = await loadTaskMeta(taskId);
+        } catch (error) {
+          if (isNotFoundError(error)) {
+            throw new UiHttpError(404, `Task ${taskId} not found.`);
+          }
+          throw error;
+        }
         if (!["new", "in_progress", "waiting_agent"].includes(meta.status)) {
-          sendJson(res, 400, { ok: false, error: `Task ${taskId} is in status '${meta.status}' and cannot be cancelled.` });
-          return;
+          throw new UiHttpError(400, `Task ${taskId} is in status '${meta.status}' and cannot be cancelled.`);
         }
         const body = await parseJsonBody(req);
         await cancelTaskService({
@@ -282,6 +318,10 @@ export function createUiRequestHandler(options: {
 
       notFound(res);
     } catch (error) {
+      if (error instanceof UiHttpError) {
+        sendJson(res, error.statusCode, { ok: false, error: error.message });
+        return;
+      }
       const message = error instanceof Error ? error.message : "Unexpected server error.";
       sendJson(res, 500, { ok: false, error: message });
     }
