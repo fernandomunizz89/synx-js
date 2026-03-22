@@ -33,7 +33,7 @@ synx ui --read-only
 - **Review Queue:** tasks in `waiting_human`
 - **Task Detail:** status/stage/agent, recent events, artifacts, review controls
 - **Live Stream:** runtime/task/metrics events over SSE
-- **Analytics:** rankings for tasks/agents/projects plus timeline and QA-loop indicators
+- **Analytics:** rankings for tasks/agents/projects plus timeline, QA-loop indicators, and 30-day cost/token/duration curves
 
 ## API and SSE endpoints
 

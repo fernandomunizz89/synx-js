@@ -219,6 +219,33 @@ export function buildWebUiHtml(): string {
       .table-wrap {
         overflow-x: auto;
       }
+      .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+        gap: 12px;
+        margin: 6px 0 2px;
+      }
+      .chart-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 10px 8px;
+        background: #fff;
+      }
+      .chart {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 10px;
+        background: linear-gradient(180deg, #f6faf8 0%, #ffffff 70%);
+      }
+      .chart-legend {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        margin-top: 6px;
+      }
       .sr-only {
         border: 0 !important;
         clip: rect(0 0 0 0) !important;
@@ -320,6 +347,95 @@ export function buildWebUiHtml(): string {
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;");
+      }
+
+      function fmtDurationMs(value) {
+        const ms = Math.max(0, Number(value || 0));
+        const totalSeconds = Math.round(ms / 1000);
+        if (totalSeconds < 60) return totalSeconds + "s";
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        if (minutes < 60) return minutes + "m " + seconds + "s";
+        const hours = Math.floor(minutes / 60);
+        const remainMinutes = minutes % 60;
+        return hours + "h " + remainMinutes + "m";
+      }
+
+      function renderCurveChart(args) {
+        const rows = Array.isArray(args.rows) ? args.rows : [];
+        const valueKey = String(args.valueKey || "");
+        const title = String(args.title || "Curve");
+        if (!rows.length || !valueKey) {
+          return '<div class="empty">No timeline points for ' + escapeHtml(title) + ".</div>";
+        }
+
+        const values = rows.map((row) => {
+          const parsed = Number(row && row[valueKey]);
+          return Number.isFinite(parsed) ? parsed : 0;
+        });
+        const maxValue = Math.max(...values, 1);
+        const minValue = Math.min(...values, 0);
+        const range = Math.max(1, maxValue - minValue);
+
+        const width = 760;
+        const height = 220;
+        const padX = 34;
+        const padY = 24;
+        const usableWidth = width - padX * 2;
+        const usableHeight = height - padY * 2;
+        const stepX = rows.length > 1 ? usableWidth / (rows.length - 1) : 0;
+
+        const points = values.map((value, index) => {
+          const x = padX + stepX * index;
+          const ratio = (value - minValue) / range;
+          const y = height - padY - ratio * usableHeight;
+          return {
+            x,
+            y,
+            value,
+            date: String(rows[index] && rows[index].date ? rows[index].date : ""),
+          };
+        });
+
+        const polylinePoints = points.map((point) => point.x.toFixed(2) + "," + point.y.toFixed(2)).join(" ");
+        const lastPoint = points[points.length - 1];
+        const areaPoints = padX + "," + (height - padY) + " " + polylinePoints + " " + lastPoint.x.toFixed(2) + "," + (height - padY);
+
+        let maxIndex = 0;
+        for (let i = 1; i < values.length; i += 1) {
+          if (values[i] > values[maxIndex]) maxIndex = i;
+        }
+        const markerIndexes = Array.from(new Set([0, maxIndex, values.length - 1]));
+        const markers = markerIndexes.map((index) => {
+          const point = points[index];
+          return '<circle cx="' + point.x.toFixed(2) + '" cy="' + point.y.toFixed(2) + '" r="4" fill="' + escapeHtml(args.color || "#0f8f66") + '" />';
+        }).join("");
+
+        const gridFractions = [0.25, 0.5, 0.75];
+        const gridLines = gridFractions.map((fraction) => {
+          const y = (height - padY - usableHeight * fraction).toFixed(2);
+          return '<line x1="' + padX + '" y1="' + y + '" x2="' + (width - padX) + '" y2="' + y + '" stroke="#e6eef2" stroke-width="1" />';
+        }).join("");
+
+        const formatValue = typeof args.formatValue === "function" ? args.formatValue : (x) => String(x);
+        const firstDate = String(rows[0] && rows[0].date ? rows[0].date : "n/a");
+        const lastDate = String(rows[rows.length - 1] && rows[rows.length - 1].date ? rows[rows.length - 1].date : "n/a");
+        const peakLabel = formatValue(maxValue);
+        const latestLabel = formatValue(values[values.length - 1]);
+
+        return [
+          '<div class="chart-card">',
+          '<div class="toolbar" style="margin-bottom:8px;"><div><strong>' + escapeHtml(title) + '</strong><div class="muted">' + escapeHtml(firstDate) + " to " + escapeHtml(lastDate) + '</div></div><div class="muted">Peak: ' + escapeHtml(peakLabel) + "</div></div>",
+          '<svg class="chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="' + escapeHtml(title) + '">',
+          gridLines,
+          '<line x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padX) + '" y2="' + (height - padY) + '" stroke="#d5e4ea" stroke-width="1" />',
+          '<polygon points="' + areaPoints + '" fill="' + escapeHtml(args.fill || "rgba(13,143,102,0.16)") + '" />',
+          '<polyline points="' + polylinePoints + '" fill="none" stroke="' + escapeHtml(args.color || "#0f8f66") + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />',
+          markers,
+          "</svg>",
+          '<div class="chart-legend"><span>Baseline: ' + escapeHtml(formatValue(minValue)) + '</span><span>Latest: ' + escapeHtml(latestLabel) + "</span></div>",
+          "</div>",
+        ].join("");
       }
 
       function setPollStatus(message) {
@@ -584,6 +700,9 @@ export function buildWebUiHtml(): string {
 
       async function renderAnalytics() {
         const report = await api("/api/metrics/advanced?limit=12&days=30");
+        const timeline = Array.isArray(report.timeline)
+          ? report.timeline.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+          : [];
         const topTaskRows = (report.tasks || []).slice(0, 6).map((row) => {
           return "<tr>"
             + "<td>" + escapeHtml(row.title || row.taskId || "") + "</td>"
@@ -609,7 +728,7 @@ export function buildWebUiHtml(): string {
             + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
             + "</tr>";
         }).join("");
-        const timelineRows = (report.timeline || []).slice(-8).map((row) => {
+        const timelineRows = timeline.slice(-8).map((row) => {
           return "<tr>"
             + "<td>" + escapeHtml(row.date || "") + "</td>"
             + "<td>" + fmtNumber(row.taskCount) + "</td>"
@@ -617,6 +736,30 @@ export function buildWebUiHtml(): string {
             + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
             + "</tr>";
         }).join("");
+        const costCurve = renderCurveChart({
+          rows: timeline,
+          title: "Cost Curve (30d)",
+          valueKey: "estimatedCostUsd",
+          color: "#0f8f66",
+          fill: "rgba(13, 143, 102, 0.16)",
+          formatValue: (value) => fmtCost(value),
+        });
+        const tokenCurve = renderCurveChart({
+          rows: timeline,
+          title: "Token Curve (30d)",
+          valueKey: "estimatedTotalTokens",
+          color: "#1f78d1",
+          fill: "rgba(31, 120, 209, 0.14)",
+          formatValue: (value) => fmtNumber(value),
+        });
+        const durationCurve = renderCurveChart({
+          rows: timeline,
+          title: "Duration Curve (30d)",
+          valueKey: "totalDurationMs",
+          color: "#a65c00",
+          fill: "rgba(166, 92, 0, 0.14)",
+          formatValue: (value) => fmtDurationMs(value),
+        });
         const bottleneck = (report.bottlenecks || [])[0] || null;
         const qaLoops = report.qaLoops || { tasksWithQa: 0, totalQaLoops: 0, avgQaLoopsPerTask: 0 };
         contentEl.innerHTML = [
@@ -626,6 +769,8 @@ export function buildWebUiHtml(): string {
           '<div class="metric"><div class="muted">Avg QA Loops/Task</div><strong>' + Number(qaLoops.avgQaLoopsPerTask || 0).toFixed(2) + "</strong></div>",
           '<div class="metric"><div class="muted">Top Bottleneck</div><strong>' + escapeHtml(bottleneck ? bottleneck.stage : "N/A") + "</strong></div>",
           "</div>",
+          '<h3 style="margin:18px 0 8px;">Consumption Curves</h3>',
+          '<div class="chart-grid">' + costCurve + tokenCurve + durationCurve + "</div>",
           '<h3 style="margin:18px 0 8px;">Top Tasks by Consumption</h3>',
           topTaskRows ? '<div class="table-wrap"><table><caption class="sr-only">Top tasks by consumption</caption><thead><tr><th>Task</th><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topTaskRows + "</tbody></table></div>" : '<div class="empty">No task analytics yet.</div>',
           '<h3 style="margin:18px 0 8px;">Top Agents</h3>',
