@@ -133,6 +133,20 @@ export function createUiRequestHandler(options: {
         return;
       }
 
+      if (method === "GET" && pathname === "/ui-assets/task-assistant.react.js") {
+        const assetPath = path.join(process.cwd(), "dist", "ui-assets", "task-assistant.react.js");
+        if (!(await exists(assetPath))) {
+          res.statusCode = 404;
+          res.end("Not found");
+          return;
+        }
+        const source = await readText(assetPath);
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/javascript; charset=utf-8");
+        res.end(source);
+        return;
+      }
+
       if (method === "GET" && (pathname === "/" || pathname === "/index.html")) {
         sendHtml(res, 200, options.html);
         return;

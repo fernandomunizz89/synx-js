@@ -21,10 +21,78 @@ export function buildWebUiHtml(): string {
 
         <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
 
-        <section class="card command-console">
+        <section id="simple-console" class="card simple-console" data-ui-mode-panel="simple">
           <div class="command-head">
-            <div><strong>Command Center</strong><div class="muted">Hacker-premium runtime console with snippets, slash commands and realtime feedback.</div></div>
+            <div><strong>Task Assistant</strong><div class="muted">Fluxo simples para enviar e acompanhar tarefas sem comandos de terminal.</div></div>
             <div class="command-head-actions">
+              <button type="button" class="btn" data-open-command-palette>Buscar tarefas</button>
+              <button type="button" class="btn" data-ui-mode="advanced">Avancado</button>
+            </div>
+          </div>
+          <div id="react-task-assistant-root"></div>
+          <div id="simple-action-fallback" class="simple-shell">
+            <form id="simple-action-form" class="simple-form">
+              <label class="simple-field">
+                <span class="simple-label">Acao</span>
+                <select id="simple-action" class="field-select">
+                  <option value="new">Criar nova task</option>
+                  <option value="status">Ver panorama atual</option>
+                  <option value="approve">Aprovar tarefa</option>
+                  <option value="reprove">Reprovar tarefa</option>
+                  <option value="runtime_pause">Pausar runtime</option>
+                  <option value="runtime_resume">Retomar runtime</option>
+                  <option value="runtime_stop">Parar runtime</option>
+                  <option value="help">Mostrar ajuda</option>
+                </select>
+              </label>
+              <label id="simple-title-wrap" class="simple-field">
+                <span class="simple-label">Solicitacao</span>
+                <input id="simple-title" class="field-input" autocomplete="off" placeholder="Descreva a task que voce precisa..." />
+              </label>
+              <label id="simple-type-wrap" class="simple-field">
+                <span class="simple-label">Tipo</span>
+                <select id="simple-type" class="field-select">
+                  <option value="Feature">Feature</option>
+                  <option value="Bug">Bug</option>
+                  <option value="Refactor">Refactor</option>
+                  <option value="Research">Research</option>
+                  <option value="Documentation">Documentation</option>
+                  <option value="Mixed">Mixed</option>
+                </select>
+              </label>
+              <label id="simple-task-id-wrap" class="simple-field" hidden>
+                <span class="simple-label">Task ID</span>
+                <input id="simple-task-id" class="field-input" autocomplete="off" placeholder="task-123..." />
+              </label>
+              <label id="simple-reason-wrap" class="simple-field" hidden>
+                <span class="simple-label">Motivo</span>
+                <textarea id="simple-reason" class="field-input" rows="2" placeholder="Explique o motivo para reprovar..."></textarea>
+              </label>
+              <label id="simple-status-all-wrap" class="simple-checkbox" hidden>
+                <input id="simple-status-all" type="checkbox" checked />
+                <span>Incluir panorama completo</span>
+              </label>
+              <div class="simple-actions">
+                <button id="simple-submit" type="submit" class="btn approve">Enviar</button>
+              </div>
+            </form>
+            <section class="simple-progress">
+              <div class="simple-progress-head">
+                <strong>Progresso em tempo real</strong>
+                <span class="muted">Acompanhe a tarefa enviada sem abrir detalhes.</span>
+              </div>
+              <div id="simple-progress-feed" class="simple-progress-feed">
+                <div class="loading">Aguardando eventos realtime...</div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="advanced-console" class="card command-console" data-ui-mode-panel="advanced" hidden>
+          <div class="command-head">
+            <div><strong>Modo Avancado</strong><div class="muted">Console completo com comandos, snippets e logs tecnicos.</div></div>
+            <div class="command-head-actions">
+              <button type="button" class="btn" data-ui-mode="simple">Voltar ao modo facil</button>
               <button type="button" class="btn" data-toggle-command-ref>Catalog</button>
               <button type="button" class="btn" data-open-command-palette>Cmd/Ctrl + K</button>
             </div>
@@ -139,6 +207,9 @@ export function buildWebUiHtml(): string {
         overflow: hidden;
         color: var(--fg);
         line-height: var(--type-body-line);
+      }
+      :root[data-ui-mode="simple"] .workspace-header [data-open-command-palette] {
+        display: none;
       }
       .skip-link {
         position: absolute;
@@ -1109,6 +1180,89 @@ export function buildWebUiHtml(): string {
         margin-top: 8px;
         color: var(--status-failed-fg);
         font-weight: 700;
+      }
+      .simple-console {
+        margin-bottom: var(--space-3);
+      }
+      .simple-shell {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        padding: var(--space-3);
+        display: grid;
+        gap: var(--space-3);
+      }
+      .simple-form {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .simple-field {
+        display: grid;
+        gap: 6px;
+      }
+      .simple-label {
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .simple-checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+      }
+      .simple-actions {
+        display: flex;
+        justify-content: flex-start;
+      }
+      .simple-progress {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
+        background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+      }
+      .simple-progress-head {
+        display: grid;
+        gap: 4px;
+        margin-bottom: var(--space-2);
+      }
+      .simple-progress-feed {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .simple-task-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--surface) 94%, transparent);
+        padding: var(--space-2);
+        display: grid;
+        gap: 8px;
+      }
+      .simple-task-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .simple-task-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+      .simple-event-list {
+        display: grid;
+        gap: 6px;
+      }
+      .simple-event-item {
+        font-size: 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 8px;
+        background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
       }
       .command-console {
         margin-bottom: var(--space-3);
@@ -2631,6 +2785,10 @@ export function buildWebUiHtml(): string {
         omniResults: [],
         omniActiveIndex: 0,
         commandMode: "command",
+        uiMode: "simple",
+        simpleAction: "new",
+        simpleTrackedTaskId: "",
+        simpleLastTaskSeenAt: "",
         commandLog: [],
         commandRunCounter: 0,
         commandLogFilter: "all",
@@ -2659,6 +2817,22 @@ export function buildWebUiHtml(): string {
       const commandFormEl = document.getElementById("web-command-form");
       const commandInputEl = document.getElementById("web-command-input");
       const commandModeEl = document.getElementById("web-command-mode");
+      const simpleConsoleEl = document.getElementById("simple-console");
+      const advancedConsoleEl = document.getElementById("advanced-console");
+      const simpleFormEl = document.getElementById("simple-action-form");
+      const simpleActionEl = document.getElementById("simple-action");
+      const simpleTitleEl = document.getElementById("simple-title");
+      const simpleTypeEl = document.getElementById("simple-type");
+      const simpleTaskIdEl = document.getElementById("simple-task-id");
+      const simpleReasonEl = document.getElementById("simple-reason");
+      const simpleStatusAllEl = document.getElementById("simple-status-all");
+      const simpleTitleWrapEl = document.getElementById("simple-title-wrap");
+      const simpleTypeWrapEl = document.getElementById("simple-type-wrap");
+      const simpleTaskIdWrapEl = document.getElementById("simple-task-id-wrap");
+      const simpleReasonWrapEl = document.getElementById("simple-reason-wrap");
+      const simpleStatusAllWrapEl = document.getElementById("simple-status-all-wrap");
+      const simpleSubmitEl = document.getElementById("simple-submit");
+      const simpleProgressFeedEl = document.getElementById("simple-progress-feed");
       const commandLogEl = document.getElementById("web-command-log");
       const commandSuggestEl = document.getElementById("command-suggest");
       const commandRefEl = document.getElementById("command-reference");
@@ -3157,6 +3331,241 @@ export function buildWebUiHtml(): string {
         feedbackEl.classList.toggle("error", tone === "error");
       }
 
+      function normalizeUiMode(value) {
+        return value === "advanced" ? "advanced" : "simple";
+      }
+
+      function applyUiMode(mode, persist) {
+        const normalized = normalizeUiMode(mode);
+        state.uiMode = normalized;
+        rootEl.setAttribute("data-ui-mode", normalized);
+        if (simpleConsoleEl instanceof HTMLElement) {
+          if (normalized === "simple") simpleConsoleEl.removeAttribute("hidden");
+          else simpleConsoleEl.setAttribute("hidden", "");
+        }
+        if (advancedConsoleEl instanceof HTMLElement) {
+          if (normalized === "advanced") advancedConsoleEl.removeAttribute("hidden");
+          else advancedConsoleEl.setAttribute("hidden", "");
+        }
+        const modeButtons = Array.from(document.querySelectorAll("[data-ui-mode]"));
+        for (const button of modeButtons) {
+          if (!(button instanceof HTMLElement)) continue;
+          const value = normalizeUiMode(String(button.dataset.uiMode || "simple"));
+          const active = value === normalized;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", active ? "true" : "false");
+        }
+        if (persist !== false) persistUiPrefs();
+      }
+
+      function updateSimpleActionUi() {
+        const action = simpleActionEl instanceof HTMLSelectElement ? String(simpleActionEl.value || "new") : "new";
+        state.simpleAction = action;
+        const isNew = action === "new";
+        const isStatus = action === "status";
+        const isApprove = action === "approve";
+        const isReprove = action === "reprove";
+        if (simpleTitleWrapEl instanceof HTMLElement) {
+          if (isNew) simpleTitleWrapEl.removeAttribute("hidden");
+          else simpleTitleWrapEl.setAttribute("hidden", "");
+        }
+        if (simpleTypeWrapEl instanceof HTMLElement) {
+          if (isNew) simpleTypeWrapEl.removeAttribute("hidden");
+          else simpleTypeWrapEl.setAttribute("hidden", "");
+        }
+        if (simpleTaskIdWrapEl instanceof HTMLElement) {
+          if (isApprove || isReprove) simpleTaskIdWrapEl.removeAttribute("hidden");
+          else simpleTaskIdWrapEl.setAttribute("hidden", "");
+        }
+        if (simpleReasonWrapEl instanceof HTMLElement) {
+          if (isReprove) simpleReasonWrapEl.removeAttribute("hidden");
+          else simpleReasonWrapEl.setAttribute("hidden", "");
+        }
+        if (simpleStatusAllWrapEl instanceof HTMLElement) {
+          if (isStatus) simpleStatusAllWrapEl.removeAttribute("hidden");
+          else simpleStatusAllWrapEl.setAttribute("hidden", "");
+        }
+      }
+
+      function latestEventsForTask(taskId) {
+        const normalized = String(taskId || "");
+        if (!normalized) return [];
+        const rows = [];
+        for (let i = state.liveEvents.length - 1; i >= 0; i -= 1) {
+          const row = state.liveEvents[i];
+          if (String(row && row.taskId || "") !== normalized) continue;
+          rows.push(row);
+          if (rows.length >= 5) break;
+        }
+        return rows.reverse();
+      }
+
+      function renderSimpleProgressCard(detail) {
+        const events = latestEventsForTask(detail.taskId);
+        const eventsHtml = events.length
+          ? '<div class="simple-event-list">' + events.map((event) => {
+            const summary = eventSummary(String(event.type || ""), event);
+            return '<div class="simple-event-item">' + escapeHtml(summary) + "</div>";
+          }).join("") + "</div>"
+          : '<div class="muted">Aguardando novos eventos para esta task.</div>';
+        return [
+          '<article class="simple-task-card">',
+          '<div class="simple-task-head">',
+          '<div><strong>' + escapeHtml(detail.title || detail.taskId) + '</strong><div class="muted">' + escapeHtml(boardShortTaskId(detail.taskId)) + "</div></div>",
+          taskStatusBadge(detail.status || "unknown"),
+          "</div>",
+          '<div class="simple-task-meta">',
+          '<span>Etapa: ' + escapeHtml(detail.currentStage || "[none]") + "</span>",
+          '<span>Agente: ' + escapeHtml(detail.currentAgent || "[none]") + "</span>",
+          '<span>Atualizado: ' + escapeHtml(fmtRelativeTime(detail.updatedAt || "")) + "</span>",
+          "</div>",
+          eventsHtml,
+          '<div class="actions"><button type="button" class="btn" data-open-task="' + escapeHtml(detail.taskId) + '">Ver detalhes</button></div>',
+          "</article>",
+        ].join("");
+      }
+
+      async function refreshSimpleProgress() {
+        if (!(simpleProgressFeedEl instanceof HTMLElement)) return;
+        if (state.simpleTrackedTaskId) {
+          try {
+            const detail = await api("/api/tasks/" + encodeURIComponent(state.simpleTrackedTaskId));
+            simpleProgressFeedEl.innerHTML = renderSimpleProgressCard(detail);
+            state.simpleLastTaskSeenAt = String(detail.updatedAt || "");
+            return;
+          } catch {
+            state.simpleTrackedTaskId = "";
+          }
+        }
+        try {
+          const tasks = await api("/api/tasks");
+          const rows = Array.isArray(tasks) ? tasks.slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).slice(0, 3) : [];
+          if (!rows.length) {
+            simpleProgressFeedEl.innerHTML = '<div class="empty">Nenhuma task ativa no momento.</div>';
+            return;
+          }
+          simpleProgressFeedEl.innerHTML = rows.map((task) => {
+            return [
+              '<article class="simple-task-card">',
+              '<div class="simple-task-head">',
+              '<div><strong>' + escapeHtml(task.title || task.taskId) + '</strong><div class="muted">' + escapeHtml(boardShortTaskId(task.taskId)) + "</div></div>",
+              taskStatusBadge(task.status || "unknown"),
+              "</div>",
+              '<div class="simple-task-meta">',
+              '<span>Etapa: ' + escapeHtml(task.currentStage || "[none]") + "</span>",
+              '<span>Agente: ' + escapeHtml(task.currentAgent || "[none]") + "</span>",
+              '<span>Atualizado: ' + escapeHtml(fmtRelativeTime(task.updatedAt || "")) + "</span>",
+              "</div>",
+              '<div class="actions"><button type="button" class="btn" data-open-task="' + escapeHtml(task.taskId) + '">Ver detalhes</button></div>',
+              "</article>",
+            ].join("");
+          }).join("");
+        } catch {
+          simpleProgressFeedEl.innerHTML = '<div class="empty">Falha ao carregar progresso em tempo real.</div>';
+        }
+      }
+
+      function extractCreatedTaskId(run) {
+        if (!run || !Array.isArray(run.outputs)) return "";
+        for (const row of run.outputs) {
+          const text = String(row && row.message || "");
+          const match = text.match(/Task created:\s+([^\s]+)/i);
+          if (match && match[1]) return match[1];
+        }
+        return "";
+      }
+
+      async function runSimpleAction() {
+        const action = simpleActionEl instanceof HTMLSelectElement ? String(simpleActionEl.value || "new") : "new";
+        const title = simpleTitleEl instanceof HTMLInputElement ? simpleTitleEl.value.trim() : "";
+        const type = simpleTypeEl instanceof HTMLSelectElement ? String(simpleTypeEl.value || "Feature") : "Feature";
+        const taskId = simpleTaskIdEl instanceof HTMLInputElement ? simpleTaskIdEl.value.trim() : "";
+        const reason = simpleReasonEl instanceof HTMLTextAreaElement ? simpleReasonEl.value.trim() : "";
+        const withAll = simpleStatusAllEl instanceof HTMLInputElement ? Boolean(simpleStatusAllEl.checked) : true;
+
+        if (simpleSubmitEl instanceof HTMLButtonElement) {
+          simpleSubmitEl.disabled = true;
+          simpleSubmitEl.textContent = "Enviando...";
+        }
+        try {
+          if (action === "new") {
+            if (!title) {
+              setFeedback("Descreva a solicitacao da task antes de enviar.", "error");
+              return;
+            }
+            const safeTitle = title.replace(/"/g, '\\"');
+            const command = 'new "' + safeTitle + '" --type ' + type;
+            const execution = await executeWebCommand(command, "command", { skipConfirm: true });
+            const createdTaskId = extractCreatedTaskId(execution && execution.run);
+            if (createdTaskId) {
+              state.simpleTrackedTaskId = createdTaskId;
+              setFeedback("Task criada e em acompanhamento realtime: " + createdTaskId, "info");
+            }
+            await refreshSimpleProgress();
+            return;
+          }
+
+          if (action === "status") {
+            await executeWebCommand(withAll ? "status --all" : "status", "command", { skipConfirm: true });
+            setFeedback("Status atualizado em tempo real.", "info");
+            await refreshSimpleProgress();
+            return;
+          }
+
+          if (action === "approve") {
+            if (!taskId) {
+              setFeedback("Informe o Task ID para aprovar.", "error");
+              return;
+            }
+            await executeTaskAction("approve", taskId, "", "none", "");
+            state.simpleTrackedTaskId = taskId;
+            await refreshSimpleProgress();
+            return;
+          }
+
+          if (action === "reprove") {
+            if (!taskId) {
+              setFeedback("Informe o Task ID para reprovar.", "error");
+              return;
+            }
+            if (!reason) {
+              setFeedback("Motivo obrigatorio para reprovar.", "error");
+              return;
+            }
+            await executeTaskAction("reprove", taskId, reason, "none", "");
+            state.simpleTrackedTaskId = taskId;
+            await refreshSimpleProgress();
+            return;
+          }
+
+          if (action === "runtime_pause") {
+            await executeWebCommand("/pause-all", "command", { skipConfirm: true });
+            setFeedback("Runtime pausado.", "info");
+            return;
+          }
+          if (action === "runtime_resume") {
+            await executeWebCommand("/resume-runtime", "command", { skipConfirm: true });
+            setFeedback("Runtime retomado.", "info");
+            return;
+          }
+          if (action === "runtime_stop") {
+            const result = await executeWebCommand("/stop-runtime", "command");
+            if (result && result.needsConfirm) {
+              setFeedback("Confirme a parada no dialogo para continuar.", "info");
+            }
+            return;
+          }
+
+          await executeWebCommand("help", "command", { skipConfirm: true });
+          setFeedback("Ajuda carregada no modo avancado.", "info");
+        } finally {
+          if (simpleSubmitEl instanceof HTMLButtonElement) {
+            simpleSubmitEl.disabled = false;
+            simpleSubmitEl.textContent = "Enviar";
+          }
+        }
+      }
+
       function setDecisionPending(taskId, action, pending) {
         const normalizedTaskId = String(taskId || "");
         const key = normalizedTaskId ? normalizedTaskId + ":" + String(action || "") : "";
@@ -3303,7 +3712,7 @@ export function buildWebUiHtml(): string {
       function renderCommandLog() {
         if (!(commandLogEl instanceof HTMLElement)) return;
         if (!state.commandLog.length) {
-          commandLogEl.innerHTML = '<article class="command-entry note system"><p class="command-entry-line info">Command center ready.</p></article>';
+          commandLogEl.innerHTML = '<article class="command-entry note system"><p class="command-entry-line info">Modo avancado pronto.</p></article>';
           return;
         }
 
@@ -3510,23 +3919,25 @@ export function buildWebUiHtml(): string {
           .slice(0, 8);
         pushGroup("Events", eventRows);
 
-        const commandRows = commandCatalog
-          .map((row) => {
-            const text = [row.name, row.trigger, row.snippet, row.usage, row.description].join(" ");
-            return {
-              category: "Commands",
-              kind: "command",
-              commandMode: row.mode,
-              label: row.name,
-              subtitle: row.usage,
-              snippet: row.snippet,
-              score: fuzzyScore(query, text),
-            };
-          })
-          .filter((row) => row.score > 0)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 8);
-        pushGroup("Commands", commandRows);
+        if (state.uiMode === "advanced") {
+          const commandRows = commandCatalog
+            .map((row) => {
+              const text = [row.name, row.trigger, row.snippet, row.usage, row.description].join(" ");
+              return {
+                category: "Commands",
+                kind: "command",
+                commandMode: row.mode,
+                label: row.name,
+                subtitle: row.usage,
+                snippet: row.snippet,
+                score: fuzzyScore(query, text),
+              };
+            })
+            .filter((row) => row.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 8);
+          pushGroup("Commands", commandRows);
+        }
 
         state.omniResults = flattened;
         if (state.omniActiveIndex >= state.omniResults.length) state.omniActiveIndex = Math.max(0, state.omniResults.length - 1);
@@ -3817,7 +4228,7 @@ export function buildWebUiHtml(): string {
 
       async function executeWebCommand(input, mode, options) {
         const raw = String(input || "").trim();
-        if (!raw) return;
+        if (!raw) return { ok: false, run: null, message: "Empty command input." };
         const selectedMode = mode === "human" ? "human" : "command";
         const dispatch = resolveCommandDispatch(raw);
         if (!options || options.skipConfirm !== true) {
@@ -3826,7 +4237,7 @@ export function buildWebUiHtml(): string {
               input: raw,
               mode: selectedMode,
             });
-            return;
+            return { ok: false, run: null, message: "Confirmation required.", needsConfirm: true };
           }
         }
 
@@ -3837,7 +4248,7 @@ export function buildWebUiHtml(): string {
             appendRunOutput(run, dispatch.message, "critical");
             finalizeRun(run, "error");
             setFeedback(dispatch.message, "error");
-            return;
+            return { ok: false, run, message: dispatch.message };
           }
 
           if (dispatch.kind === "runtime") {
@@ -3848,7 +4259,7 @@ export function buildWebUiHtml(): string {
             setPollStatus("Runtime command sent: " + dispatch.action);
             finalizeRun(run, "success");
             requestRender("user");
-            return;
+            return { ok: true, run, dispatch };
           }
 
           const runtimeInput = String(dispatch.input || "");
@@ -3872,11 +4283,18 @@ export function buildWebUiHtml(): string {
           const hasCritical = run.outputs.some((row) => row.tone === "critical");
           finalizeRun(run, hasCritical ? "error" : "success");
           requestRender("user");
+          return {
+            ok: !hasCritical,
+            run,
+            dispatch,
+            result,
+          };
         } catch (error) {
           const message = error instanceof Error ? error.message : "Command failed";
           appendRunOutput(run, message, "critical");
           finalizeRun(run, "error");
           setFeedback(message, "error");
+          return { ok: false, run, message, dispatch };
         }
       }
 
@@ -3987,6 +4405,7 @@ export function buildWebUiHtml(): string {
         try {
           const overview = await api("/api/overview");
           applyOverviewSnapshot(overview);
+          void refreshSimpleProgress();
         } catch {
           // ignore snapshot refresh failures; main view rendering keeps detailed errors
         } finally {
@@ -4228,9 +4647,11 @@ export function buildWebUiHtml(): string {
       function persistUiPrefs() {
         safeWriteLocalStorage(UI_PREFS_STORAGE_KEY, JSON.stringify({
           lastView: state.view,
+          uiMode: state.uiMode,
           boardFilter: state.boardFilter,
           liveFilter: state.liveFilter,
           commandMode: state.commandMode,
+          simpleTrackedTaskId: state.simpleTrackedTaskId,
           analyticsPreset: state.analyticsPreset,
           analyticsCustomFrom: state.analyticsCustomFrom,
           analyticsCustomTo: state.analyticsCustomTo,
@@ -4246,6 +4667,8 @@ export function buildWebUiHtml(): string {
           const boardFilter = String(parsed && parsed.boardFilter || "");
           const liveFilter = String(parsed && parsed.liveFilter || "");
           const commandMode = String(parsed && parsed.commandMode || "");
+          const uiMode = String(parsed && parsed.uiMode || "");
+          const simpleTrackedTaskId = String(parsed && parsed.simpleTrackedTaskId || "");
           const analyticsPreset = String(parsed && parsed.analyticsPreset || "");
           const analyticsCustomFrom = String(parsed && parsed.analyticsCustomFrom || "");
           const analyticsCustomTo = String(parsed && parsed.analyticsCustomTo || "");
@@ -4255,6 +4678,8 @@ export function buildWebUiHtml(): string {
             state.liveFilter = liveFilter;
           }
           if (commandMode === "human" || commandMode === "command") state.commandMode = commandMode;
+          if (uiMode === "simple" || uiMode === "advanced") state.uiMode = uiMode;
+          if (simpleTrackedTaskId) state.simpleTrackedTaskId = simpleTrackedTaskId;
           if (analyticsPreset === "24h" || analyticsPreset === "7d" || analyticsPreset === "30d" || analyticsPreset === "custom") {
             state.analyticsPreset = analyticsPreset;
           }
@@ -4607,7 +5032,7 @@ export function buildWebUiHtml(): string {
 
       function renderRecentTaskRows(tasks) {
         if (!tasks.length) {
-          return '<div class="empty">No task activity yet. Start by creating a new task in the command console.</div>';
+          return '<div class="empty">No task activity yet. Start by creating a new task in Task Assistant.</div>';
         }
         return tasks.map((task) => {
           const statusTone = overviewStatusTone(task.status);
@@ -5942,6 +6367,17 @@ export function buildWebUiHtml(): string {
         // Accept SVG/icon clicks inside buttons and links, not only HTMLElement targets.
         if (!(target instanceof Element)) return;
 
+        const uiModeTarget = target.closest("[data-ui-mode]");
+        const uiMode = uiModeTarget instanceof HTMLElement ? String(uiModeTarget.dataset.uiMode || "") : "";
+        if (uiMode === "simple" || uiMode === "advanced") {
+          applyUiMode(uiMode, true);
+          if (uiMode === "simple") {
+            updateSimpleActionUi();
+            void refreshSimpleProgress();
+          }
+          return;
+        }
+
         const openCommandPaletteTarget = target.closest("[data-open-command-palette]");
         if (openCommandPaletteTarget instanceof HTMLElement && openCommandPaletteTarget.dataset.openCommandPalette !== undefined) {
           openCommandPalette(commandInputEl instanceof HTMLInputElement ? commandInputEl.value : "");
@@ -6249,6 +6685,10 @@ export function buildWebUiHtml(): string {
 
       document.addEventListener("input", (event) => {
         const target = event.target;
+        if (target instanceof HTMLInputElement && target.id === "simple-task-id") {
+          state.simpleTrackedTaskId = target.value.trim();
+          persistUiPrefs();
+        }
         if (target instanceof HTMLInputElement && target.id === "task-search") {
           state.search = target.value;
           requestRender("user");
@@ -6292,6 +6732,9 @@ export function buildWebUiHtml(): string {
           state.reviewDraftReason = target.value;
         }
         if (target instanceof HTMLTextAreaElement && target.id === "action-reason") {
+          state.reviewDraftReason = target.value;
+        }
+        if (target instanceof HTMLTextAreaElement && target.id === "simple-reason") {
           state.reviewDraftReason = target.value;
         }
       });
@@ -6438,6 +6881,11 @@ export function buildWebUiHtml(): string {
       document.addEventListener("submit", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLFormElement)) return;
+        if (target.id === "simple-action-form") {
+          event.preventDefault();
+          void runSimpleAction();
+          return;
+        }
         if (target.id !== "web-command-form") return;
         event.preventDefault();
         const input = commandInputEl instanceof HTMLInputElement ? commandInputEl.value.trim() : "";
@@ -6455,6 +6903,10 @@ export function buildWebUiHtml(): string {
 
       document.addEventListener("change", (event) => {
         const target = event.target;
+        if (target instanceof HTMLSelectElement && target.id === "simple-action") {
+          updateSimpleActionUi();
+          return;
+        }
         if (target instanceof HTMLSelectElement && target.id === "review-rollback") {
           state.reviewRollbackMode = target.value === "task" ? "task" : "none";
         }
@@ -6518,6 +6970,9 @@ export function buildWebUiHtml(): string {
                 ) {
                   void refreshGlobalSnapshot();
                 }
+                if (type === "task.updated" || type === "task.review_required" || type === "task.decision_recorded") {
+                  void refreshSimpleProgress();
+                }
                 if (parsed && parsed.taskId && state.selectedTaskId && parsed.taskId === state.selectedTaskId && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
                   if (state.view === "detail") {
                     requestRender("poll");
@@ -6552,6 +7007,12 @@ export function buildWebUiHtml(): string {
       if (state.selectedTaskId && state.view !== "detail" && state.view !== "live") {
         state.view = "detail";
       }
+      if (simpleActionEl instanceof HTMLSelectElement) {
+        simpleActionEl.value = state.simpleAction;
+      }
+      if (simpleTaskIdEl instanceof HTMLInputElement && state.simpleTrackedTaskId) {
+        simpleTaskIdEl.value = state.simpleTrackedTaskId;
+      }
       if (commandModeEl instanceof HTMLSelectElement) {
         commandModeEl.value = state.commandMode;
       }
@@ -6574,11 +7035,13 @@ export function buildWebUiHtml(): string {
       setHeaderNotificationCount(0);
       setRuntimeStatusPill({ isAlive: true, provider: "Local LLM" });
       setConnectivityIndicator(false, "Connecting");
-      pushCommandLog("Command center online. Try /status or Cmd/Ctrl + K.", "system");
+      pushCommandLog("Advanced command center ready. Open it when you need full control.", "system");
       pushCommandLog("Use ArrowUp/ArrowDown for command history.", "system");
       renderCommandReference();
       renderCommandPalette();
       renderCommandSuggestions("");
+      updateSimpleActionUi();
+      applyUiMode(state.uiMode, false);
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
       syncUrlState();
@@ -6586,13 +7049,26 @@ export function buildWebUiHtml(): string {
       if (state.drawerOpen && state.drawerTaskId) {
         void openTaskDrawer(state.drawerTaskId, state.drawerContextLabel || "Agent Logs");
       }
-      setInterval(() => {
-        requestRender("poll");
-        if (state.view !== "overview") void refreshGlobalSnapshot();
-      }, state.pollMs);
       connectRealtime();
       void refreshGlobalSnapshot();
+      void refreshSimpleProgress();
       requestRender("user");
+    </script>
+    <script type="module">
+      (async () => {
+        const root = document.getElementById("react-task-assistant-root");
+        if (!(root instanceof HTMLElement)) return;
+        try {
+          const module = await import("/ui-assets/task-assistant.react.js");
+          if (!module || typeof module.mountSynxTaskAssistant !== "function") return;
+          const mounted = module.mountSynxTaskAssistant({ rootId: "react-task-assistant-root" });
+          if (!mounted) return;
+          const fallback = document.getElementById("simple-action-fallback");
+          if (fallback instanceof HTMLElement) fallback.setAttribute("hidden", "");
+        } catch {
+          // Keep legacy fallback visible if React asset is unavailable.
+        }
+      })();
     </script>
   </body>
 </html>`;
