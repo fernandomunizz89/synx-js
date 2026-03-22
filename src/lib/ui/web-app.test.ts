@@ -14,7 +14,7 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('data-view="analytics"');
     expect(html).toContain("/api/overview");
     expect(html).toContain("/api/metrics/advanced");
-    expect(html).toContain("setInterval(render, state.pollMs)");
+    expect(html).toContain('setInterval(() => requestRender("poll"), state.pollMs)');
     expect(html).toContain("/api/stream");
     expect(html).toContain("/approve");
     expect(html).toContain("/reprove");
@@ -64,6 +64,7 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("applyThemePreference(");
     expect(html).toContain("loadThemePreference(");
     expect(html).toContain("bindSystemThemeSync(");
+    expect(html).toContain("requestRender(");
     expect(html).toContain('class="logo-ascii"');
     expect(html).toContain("SYNX.js - Mission Control");
     expect(html).toContain("--synx-cyan");

@@ -710,8 +710,11 @@ export function buildWebUiHtml(): string {
         reviewAlertAt: "",
         reviewDraftReason: "",
         reviewRollbackMode: "none",
+        tasksRenderedKey: "",
         reviewRenderedKey: "",
         boardRenderedKey: "",
+        detailRenderedKey: "",
+        analyticsRenderedKey: "",
         liveRenderedCount: -1,
         liveRenderedConnected: null,
         themePreference: "system",
@@ -1025,7 +1028,7 @@ export function buildWebUiHtml(): string {
           if (isActive) button.setAttribute("aria-current", "page");
           else button.removeAttribute("aria-current");
         });
-        render();
+        requestRender("user");
       }
 
       async function api(path) {
@@ -1127,13 +1130,29 @@ export function buildWebUiHtml(): string {
       async function renderTasks() {
         const query = state.search ? "?q=" + encodeURIComponent(state.search) : "";
         const tasks = await api("/api/tasks" + query);
+        const tasksKey = query + "::" + tasks
+          .map((task) => [
+            task.taskId,
+            task.status,
+            task.currentStage,
+            task.currentAgent,
+            task.nextAgent,
+            task.updatedAt,
+            task.consumption && task.consumption.estimatedTotalTokens,
+            task.consumption && task.consumption.estimatedCostUsd,
+          ].join("|"))
+          .join(";");
+        if (state.tasksRenderedKey === tasksKey && document.getElementById("tasks-root")) return;
         contentEl.innerHTML = [
+          '<div id="tasks-root">',
           '<div class="toolbar">',
           '<input id="task-search" placeholder="Search by task id, title, or project..." value="' + escapeHtml(state.search) + '" />',
           '<div class="muted">' + fmtNumber(tasks.length) + " tasks</div>",
           "</div>",
           renderTaskRows(tasks),
+          "</div>",
         ].join("");
+        state.tasksRenderedKey = tasksKey;
       }
 
       function boardColumnForTask(task) {
@@ -1281,12 +1300,28 @@ export function buildWebUiHtml(): string {
 
       async function renderDetail() {
         if (!state.selectedTaskId) {
+          state.detailRenderedKey = "";
           contentEl.innerHTML = '<div class="empty">Choose a task from Tasks or Review Queue.</div>';
           return;
         }
 
         const detail = await api("/api/tasks/" + encodeURIComponent(state.selectedTaskId));
         const eventLines = Array.isArray(detail.recentEvents) ? detail.recentEvents : [];
+        const detailKey = [
+          detail.taskId,
+          detail.status,
+          detail.currentStage,
+          detail.currentAgent,
+          detail.nextAgent,
+          detail.updatedAt,
+          eventLines.length,
+          eventLines.length ? eventLines[eventLines.length - 1] : "",
+          (detail.views || []).length,
+          (detail.doneArtifacts || []).length,
+          (detail.humanArtifacts || []).length,
+          state.reviewAlertAt,
+        ].join("|");
+        if (state.detailRenderedKey === detailKey && document.getElementById("detail-root")) return;
         const canReview = Boolean(detail.humanApprovalRequired) || detail.status === "waiting_human";
         const canCancel = ["new", "in_progress", "waiting_agent"].includes(detail.status);
         const actionPanel = (canReview || canCancel)
@@ -1310,6 +1345,7 @@ export function buildWebUiHtml(): string {
           ? '<p class="review-alert">Attention: new task entered waiting_human at ' + escapeHtml(state.reviewAlertAt) + "</p>"
           : "";
         contentEl.innerHTML = [
+          '<div id="detail-root">',
           '<div class="toolbar"><div><strong>' + escapeHtml(detail.title) + '</strong><div class="muted">' + escapeHtml(detail.taskId) + '</div></div></div>',
           '<div class="grid">',
           '<div class="metric"><div class="muted">Status</div><strong>' + escapeHtml(detail.status) + "</strong></div>",
@@ -1325,10 +1361,13 @@ export function buildWebUiHtml(): string {
           '<p class="muted">Views: ' + escapeHtml((detail.views || []).join(", ") || "[none]") + '</p>',
           '<p class="muted">Done: ' + escapeHtml((detail.doneArtifacts || []).join(", ") || "[none]") + '</p>',
           '<p class="muted">Human: ' + escapeHtml((detail.humanArtifacts || []).join(", ") || "[none]") + '</p>',
+          "</div>",
         ].join("");
+        state.detailRenderedKey = detailKey;
       }
 
-      async function render() {
+      async function render(trigger) {
+        const mode = trigger === "poll" ? "poll" : "user";
         const loadingMessage = state.view === "tasks"
           ? "Loading task list..."
           : state.view === "board"
@@ -1344,7 +1383,7 @@ export function buildWebUiHtml(): string {
           : "";
 
         const alreadyRendered = Boolean(state.renderedViews[state.view]);
-        if (loadingMessage && !alreadyRendered) showLoading(loadingMessage);
+        if (loadingMessage && !alreadyRendered && mode !== "poll") showLoading(loadingMessage);
         try {
           if (state.view === "overview") await renderOverview();
           if (state.view === "tasks") await renderTasks();
@@ -1365,6 +1404,27 @@ export function buildWebUiHtml(): string {
           ].join("");
           setFeedback("View loading failed. Use Retry or change section.", "error");
         }
+      }
+
+      let renderInFlight = false;
+      let queuedRenderMode = "";
+      function requestRender(trigger) {
+        const normalized = trigger === "poll" ? "poll" : "user";
+        queuedRenderMode = queuedRenderMode === "user" || normalized === "user" ? "user" : normalized;
+        if (renderInFlight) return;
+        renderInFlight = true;
+        (async () => {
+          try {
+            while (queuedRenderMode) {
+              const nextMode = queuedRenderMode;
+              queuedRenderMode = "";
+              await render(nextMode);
+            }
+          } finally {
+            renderInFlight = false;
+            if (queuedRenderMode) requestRender(queuedRenderMode);
+          }
+        })();
       }
 
       function renderLive() {
@@ -1427,6 +1487,16 @@ export function buildWebUiHtml(): string {
         const timeline = Array.isArray(report.timeline)
           ? report.timeline.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
           : [];
+        const analyticsKey = [
+          timeline.length,
+          timeline.length ? String(timeline[timeline.length - 1].date || "") : "",
+          ((report.tasks || []).slice(0, 3).map((row) => [row.taskId, row.estimatedTotalTokens, row.estimatedCostUsd].join(":")).join(",")),
+          ((report.agents || []).slice(0, 3).map((row) => [row.agent, row.stageCount, row.estimatedTotalTokens, row.estimatedCostUsd].join(":")).join(",")),
+          ((report.projects || []).slice(0, 3).map((row) => [row.project, row.taskCount, row.estimatedTotalTokens, row.estimatedCostUsd].join(":")).join(",")),
+          Number(report.qaLoops && report.qaLoops.totalQaLoops || 0),
+          String((report.bottlenecks || [])[0] && (report.bottlenecks || [])[0].stage || ""),
+        ].join("|");
+        if (state.analyticsRenderedKey === analyticsKey && document.getElementById("analytics-root")) return;
         const topTaskRows = (report.tasks || []).slice(0, 6).map((row) => {
           return "<tr>"
             + "<td>" + escapeHtml(row.title || row.taskId || "") + "</td>"
@@ -1487,6 +1557,7 @@ export function buildWebUiHtml(): string {
         const bottleneck = (report.bottlenecks || [])[0] || null;
         const qaLoops = report.qaLoops || { tasksWithQa: 0, totalQaLoops: 0, avgQaLoopsPerTask: 0 };
         contentEl.innerHTML = [
+          '<div id="analytics-root">',
           '<div class="grid">',
           '<div class="metric"><div class="muted">Tasks with QA</div><strong>' + fmtNumber(qaLoops.tasksWithQa) + "</strong></div>",
           '<div class="metric"><div class="muted">Total QA Loops</div><strong>' + fmtNumber(qaLoops.totalQaLoops) + "</strong></div>",
@@ -1503,7 +1574,9 @@ export function buildWebUiHtml(): string {
           topProjectRows ? '<div class="table-wrap"><table><caption class="sr-only">Top projects</caption><thead><tr><th>Project</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topProjectRows + "</tbody></table></div>" : '<div class="empty">No project analytics yet.</div>',
           '<h3 style="margin:18px 0 8px;">30-day Timeline</h3>',
           timelineRows ? '<div class="table-wrap"><table><caption class="sr-only">30 day analytics timeline</caption><thead><tr><th>Date</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + timelineRows + "</tbody></table></div>" : '<div class="empty">No timeline points yet.</div>',
+          "</div>",
         ].join("");
+        state.analyticsRenderedKey = analyticsKey;
       }
 
       document.addEventListener("click", (event) => {
@@ -1529,7 +1602,7 @@ export function buildWebUiHtml(): string {
         const retryTarget = target.closest("[data-retry-render]");
         if (retryTarget instanceof HTMLElement && retryTarget.dataset.retryRender !== undefined) {
           setFeedback("Retrying current section...", "info");
-          void render();
+          requestRender("user");
           return;
         }
 
@@ -1585,7 +1658,7 @@ export function buildWebUiHtml(): string {
 
               setPollStatus("Last action at " + new Date().toLocaleTimeString());
               if (taskAction === "reprove") state.reviewDraftReason = "";
-              await render();
+              requestRender("user");
             } catch (error) {
               const message = error instanceof Error ? error.message : "Action failed";
               setFeedback(message, "error");
@@ -1614,7 +1687,7 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (target instanceof HTMLInputElement && target.id === "task-search") {
           state.search = target.value;
-          render();
+          requestRender("user");
         }
         if (target instanceof HTMLTextAreaElement && target.id === "review-reason") {
           state.reviewDraftReason = target.value;
@@ -1654,21 +1727,21 @@ export function buildWebUiHtml(): string {
                 }
                 if (parsed && parsed.taskId && state.selectedTaskId && parsed.taskId === state.selectedTaskId && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
                   if (state.view === "detail") {
-                    void renderDetail();
+                    requestRender("poll");
                   }
                 }
-                if (state.view === "live") renderLive();
+                if (state.view === "live") requestRender("poll");
                 if (state.view === "overview" && (type === "runtime.updated" || type === "metrics.updated")) {
-                  void renderOverview();
+                  requestRender("poll");
                 }
                 if (state.view === "review" && (type === "task.review_required" || type === "task.decision_recorded" || type === "task.updated")) {
-                  void renderReviewQueue();
+                  requestRender("poll");
                 }
                 if (state.view === "board" && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
-                  void renderBoard();
+                  requestRender("poll");
                 }
                 if (state.view === "analytics" && (type === "task.updated" || type === "task.decision_recorded" || type === "metrics.updated")) {
-                  void renderAnalytics();
+                  requestRender("poll");
                 }
               } catch {
                 // ignore malformed stream event payloads
@@ -1682,9 +1755,9 @@ export function buildWebUiHtml(): string {
 
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
-      setInterval(render, state.pollMs);
+      setInterval(() => requestRender("poll"), state.pollMs);
       connectRealtime();
-      render();
+      requestRender("user");
     </script>
   </body>
 </html>`;
