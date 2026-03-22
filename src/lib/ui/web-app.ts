@@ -71,10 +71,10 @@ export function buildWebUiHtml(): string {
           <div class="command-palette-backdrop" data-close-command-palette></div>
           <div class="command-palette-panel" role="dialog" aria-modal="true" aria-labelledby="command-palette-title">
             <div class="command-palette-head">
-              <strong id="command-palette-title">Command Palette</strong>
+              <strong id="command-palette-title">Global Search</strong>
               <button type="button" class="btn" data-close-command-palette>Close</button>
             </div>
-            <input id="command-palette-filter" class="field-input" autocomplete="off" spellcheck="false" placeholder="Type command, category or snippet..." />
+            <input id="command-palette-filter" class="field-input" autocomplete="off" spellcheck="false" placeholder="Search tasks, agents, events or actions..." />
             <div id="command-palette-list" class="command-palette-list"></div>
           </div>
         </section>
@@ -89,6 +89,22 @@ export function buildWebUiHtml(): string {
               <button type="button" class="btn cancel" data-confirm-command>Confirm</button>
             </div>
           </div>
+        </section>
+
+        <section id="task-context-drawer" class="task-drawer" hidden aria-hidden="true">
+          <button type="button" class="task-drawer-backdrop" data-close-task-drawer aria-label="Close task context drawer"></button>
+          <aside class="task-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="task-drawer-title">
+            <div class="task-drawer-head">
+              <div>
+                <div id="task-drawer-path" class="muted">Task Context</div>
+                <h3 id="task-drawer-title">Task Detail</h3>
+              </div>
+              <button type="button" class="btn" data-close-task-drawer>Close</button>
+            </div>
+            <div id="task-drawer-content" class="task-drawer-content">
+              <div class="loading">Loading task context...</div>
+            </div>
+          </aside>
         </section>`,
   });
   return `<!doctype html>
@@ -1424,6 +1440,10 @@ export function buildWebUiHtml(): string {
         display: grid;
         gap: 4px;
       }
+      .command-palette-item.active {
+        border-color: color-mix(in srgb, var(--synx-cyan) 50%, var(--border));
+        background: color-mix(in srgb, var(--synx-cyan) 16%, #060c18);
+      }
       .command-palette-item .top {
         display: flex;
         align-items: center;
@@ -1465,6 +1485,66 @@ export function buildWebUiHtml(): string {
       }
       .command-confirm-panel h3 {
         margin: 0;
+      }
+      .hl {
+        background: color-mix(in srgb, var(--color-accent-attention) 28%, transparent);
+        color: var(--fg);
+        padding: 0 1px;
+        border-radius: 2px;
+      }
+      .task-drawer {
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+      }
+      .task-drawer[hidden] {
+        display: none;
+      }
+      .task-drawer-backdrop {
+        position: absolute;
+        inset: 0;
+        border: 0;
+        margin: 0;
+        padding: 0;
+        background: rgba(3, 7, 14, 0.62);
+      }
+      .task-drawer-panel {
+        position: absolute;
+        top: var(--space-2);
+        right: var(--space-2);
+        bottom: var(--space-2);
+        width: min(560px, calc(100vw - 16px));
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, #050a15 94%, var(--surface));
+        padding: var(--space-3);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: var(--space-2);
+      }
+      .task-drawer-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .task-drawer-head h3 {
+        margin: 0;
+      }
+      .task-drawer-content {
+        overflow: auto;
+        display: grid;
+        gap: var(--space-2);
+      }
+      .task-drawer-grid {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .task-drawer-meta {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
+        background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
       }
       table {
         width: 100%;
@@ -2179,6 +2259,9 @@ export function buildWebUiHtml(): string {
         display: grid;
         gap: 8px;
       }
+      .event-card[data-open-task-drawer] {
+        cursor: pointer;
+      }
       .event-card.fresh {
         animation: event-card-enter 0.28s ease both;
       }
@@ -2484,6 +2567,13 @@ export function buildWebUiHtml(): string {
           margin-top: var(--space-3);
           width: calc(100vw - 16px);
         }
+        .task-drawer-panel {
+          top: var(--space-1);
+          right: var(--space-1);
+          bottom: var(--space-1);
+          width: calc(100vw - 8px);
+          border-radius: var(--radius-sm);
+        }
       }
     </style>
   </head>
@@ -2523,6 +2613,18 @@ export function buildWebUiHtml(): string {
         liveScrollTop: 0,
         liveViewportHeight: 0,
         liveExpandedLogKey: "",
+        detailOriginView: "overview",
+        detailOriginLabel: "Dashboard",
+        drawerOpen: false,
+        drawerTaskId: "",
+        drawerContextLabel: "",
+        drawerLoading: false,
+        drawerDetail: null,
+        omniTasksCache: [],
+        omniTasksCacheAt: 0,
+        omniLoading: false,
+        omniResults: [],
+        omniActiveIndex: 0,
         commandMode: "command",
         commandLog: [],
         commandRunCounter: 0,
@@ -2562,6 +2664,10 @@ export function buildWebUiHtml(): string {
       const commandPaletteListEl = document.getElementById("command-palette-list");
       const commandConfirmEl = document.getElementById("command-confirm");
       const commandConfirmBodyEl = document.getElementById("command-confirm-body");
+      const taskDrawerEl = document.getElementById("task-context-drawer");
+      const taskDrawerPathEl = document.getElementById("task-drawer-path");
+      const taskDrawerTitleEl = document.getElementById("task-drawer-title");
+      const taskDrawerContentEl = document.getElementById("task-drawer-content");
       const reviewHotspotEl = document.getElementById("review-hotspot");
       const reviewHotspotMetaEl = document.getElementById("review-hotspot-meta");
       const appShellEl = document.querySelector("[data-app-shell]");
@@ -2588,6 +2694,23 @@ export function buildWebUiHtml(): string {
         live: { breadcrumb: "Live Stream", title: "Realtime Event Stream" },
         analytics: { breadcrumb: "Analytics", title: "Runtime Analytics" },
       };
+      const UI_PREFS_STORAGE_KEY = "synx-ui-prefs-v1";
+
+      function safeReadLocalStorage(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      }
+
+      function safeWriteLocalStorage(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          // ignore storage write errors
+        }
+      }
 
       function localeRegion(loc) {
         const raw = String(loc || "");
@@ -2830,6 +2953,74 @@ export function buildWebUiHtml(): string {
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;");
+      }
+
+      function fuzzyScore(query, target) {
+        const q = String(query || "").trim().toLowerCase();
+        const t = String(target || "").toLowerCase();
+        if (!q) return 1;
+        if (!t) return 0;
+        const directIndex = t.indexOf(q);
+        if (directIndex >= 0) {
+          const directBoost = 1200 - directIndex * 3;
+          return Math.max(1, directBoost - Math.max(0, t.length - q.length));
+        }
+        let ti = 0;
+        let matched = 0;
+        let gapPenalty = 0;
+        for (let qi = 0; qi < q.length; qi += 1) {
+          const ch = q[qi];
+          let foundAt = -1;
+          for (let search = ti; search < t.length; search += 1) {
+            if (t[search] === ch) {
+              foundAt = search;
+              break;
+            }
+          }
+          if (foundAt < 0) return 0;
+          gapPenalty += Math.max(0, foundAt - ti);
+          matched += 1;
+          ti = foundAt + 1;
+        }
+        const score = 800 + matched * 10 - gapPenalty * 2 - (t.length - matched);
+        return Math.max(1, score);
+      }
+
+      function highlightFuzzyMatch(text, query) {
+        const source = String(text || "");
+        const q = String(query || "").trim();
+        if (!q) return escapeHtml(source);
+        const lowerSource = source.toLowerCase();
+        const lowerQuery = q.toLowerCase();
+        const directIndex = lowerSource.indexOf(lowerQuery);
+        if (directIndex >= 0) {
+          const before = escapeHtml(source.slice(0, directIndex));
+          const match = escapeHtml(source.slice(directIndex, directIndex + q.length));
+          const after = escapeHtml(source.slice(directIndex + q.length));
+          return before + "<mark class=\"hl\">" + match + "</mark>" + after;
+        }
+        const marks = new Set();
+        let ti = 0;
+        for (let qi = 0; qi < lowerQuery.length; qi += 1) {
+          const ch = lowerQuery[qi];
+          let foundAt = -1;
+          for (let search = ti; search < lowerSource.length; search += 1) {
+            if (lowerSource[search] === ch) {
+              foundAt = search;
+              break;
+            }
+          }
+          if (foundAt < 0) return escapeHtml(source);
+          marks.add(foundAt);
+          ti = foundAt + 1;
+        }
+        let out = "";
+        for (let index = 0; index < source.length; index += 1) {
+          const ch = escapeHtml(source[index]);
+          if (marks.has(index)) out += "<mark class=\"hl\">" + ch + "</mark>";
+          else out += ch;
+        }
+        return out;
       }
 
       function fmtDurationMs(value) {
@@ -3183,6 +3374,195 @@ export function buildWebUiHtml(): string {
         }).join("");
       }
 
+      async function refreshOmniTasksCache(force) {
+        const now = Date.now();
+        if (!force && Array.isArray(state.omniTasksCache) && state.omniTasksCache.length && now - Number(state.omniTasksCacheAt || 0) < 15_000) {
+          return;
+        }
+        if (state.omniLoading) return;
+        state.omniLoading = true;
+        try {
+          const tasks = await api("/api/tasks");
+          state.omniTasksCache = Array.isArray(tasks) ? tasks : [];
+          state.omniTasksCacheAt = Date.now();
+        } catch {
+          // ignore refresh failures and keep stale cache
+        } finally {
+          state.omniLoading = false;
+        }
+      }
+
+      function omniQuickActions(query, tasks) {
+        const actions = [
+          { label: "Go to Dashboard", subtitle: "Mission KPIs and recent tasks", kind: "nav", view: "overview" },
+          { label: "View Active Agents", subtitle: "Open Team/Agents view", kind: "nav", view: "tasks" },
+          { label: "Open Review Queue", subtitle: "Pending human decisions", kind: "nav", view: "review" },
+          { label: "Blocked Tasks", subtitle: "Task Board filtered by blocked tasks", kind: "preset", view: "board", boardFilter: "status:blocked" },
+          { label: "My Reviews", subtitle: "Task Board filtered by waiting human", kind: "preset", view: "board", boardFilter: "status:waiting_human" },
+        ];
+        const normalizedQuery = String(query || "").trim().toLowerCase();
+        if (normalizedQuery) {
+          const targetIdToken = normalizedQuery.match(/#?tx-?(\d+)/i);
+          if (targetIdToken) {
+            const numeric = Number(targetIdToken[1] || 0);
+            if (Number.isFinite(numeric) && numeric > 0) {
+              const found = tasks.find((task) => boardShortTaskId(task.taskId).toLowerCase() === ("#tx-" + String(numeric).padStart(3, "0")));
+              if (found) {
+                actions.unshift({
+                  label: "Go to " + boardShortTaskId(found.taskId),
+                  subtitle: String(found.title || found.taskId),
+                  kind: "task",
+                  taskId: found.taskId,
+                });
+              }
+            }
+          }
+        }
+        return actions;
+      }
+
+      function buildOmniResults() {
+        const query = String(state.commandPaletteQuery || "").trim();
+        const tasks = Array.isArray(state.omniTasksCache) ? state.omniTasksCache : [];
+        const events = state.liveEvents.slice(-240).map((event, index) => buildStreamItem(event, index));
+        const agentsMap = new Map();
+        for (const task of tasks) {
+          const current = String(task.currentAgent || "").trim();
+          const next = String(task.nextAgent || "").trim();
+          if (current) agentsMap.set(current.toLowerCase(), current);
+          if (next) agentsMap.set(next.toLowerCase(), next);
+        }
+        const agents = Array.from(agentsMap.values());
+        const groups = [];
+        const flattened = [];
+
+        function pushGroup(groupLabel, rows) {
+          if (!rows.length) return;
+          groups.push({ label: groupLabel, rows });
+          for (const row of rows) flattened.push(row);
+        }
+
+        const quickActionRows = omniQuickActions(query, tasks)
+          .map((row) => {
+            const text = String(row.label || "") + " " + String(row.subtitle || "");
+            return {
+              ...row,
+              category: "Quick Actions",
+              score: fuzzyScore(query, text),
+            };
+          })
+          .filter((row) => row.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6);
+        pushGroup("Quick Actions", quickActionRows);
+
+        const taskRows = tasks
+          .map((task) => {
+            const text = [task.taskId, boardShortTaskId(task.taskId), task.title, task.project, task.currentAgent, task.status].join(" ");
+            return {
+              category: "Tasks",
+              kind: "task",
+              taskId: task.taskId,
+              label: String(task.title || task.taskId),
+              subtitle: boardShortTaskId(task.taskId) + " • " + String(task.status || "unknown"),
+              score: fuzzyScore(query, text),
+            };
+          })
+          .filter((row) => row.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 8);
+        pushGroup("Tasks", taskRows);
+
+        const agentRows = agents
+          .map((agent) => ({
+            category: "Agents",
+            kind: "agent",
+            agent,
+            label: agent,
+            subtitle: "Filter board by " + agent,
+            score: fuzzyScore(query, agent),
+          }))
+          .filter((row) => row.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6);
+        pushGroup("Agents", agentRows);
+
+        const eventRows = events
+          .map((item) => {
+            const text = [item.title, item.summary, item.taskId, item.agent, item.rawEvent, item.group].join(" ");
+            return {
+              category: "Events",
+              kind: "event",
+              eventKey: item.key,
+              taskId: item.taskId,
+              label: item.title,
+              subtitle: (item.taskId ? boardShortTaskId(item.taskId) + " • " : "") + item.summary,
+              score: fuzzyScore(query, text),
+            };
+          })
+          .filter((row) => row.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 8);
+        pushGroup("Events", eventRows);
+
+        const commandRows = commandCatalog
+          .map((row) => {
+            const text = [row.name, row.trigger, row.snippet, row.usage, row.description].join(" ");
+            return {
+              category: "Commands",
+              kind: "command",
+              commandMode: row.mode,
+              label: row.name,
+              subtitle: row.usage,
+              snippet: row.snippet,
+              score: fuzzyScore(query, text),
+            };
+          })
+          .filter((row) => row.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 8);
+        pushGroup("Commands", commandRows);
+
+        state.omniResults = flattened;
+        if (state.omniActiveIndex >= state.omniResults.length) state.omniActiveIndex = Math.max(0, state.omniResults.length - 1);
+        return groups;
+      }
+
+      function applyOmniSelection(index) {
+        const row = state.omniResults[index];
+        if (!row) return;
+        closeCommandPalette();
+        if (row.kind === "task" && row.taskId) {
+          openTaskDetail(row.taskId, state.view);
+          return;
+        }
+        if (row.kind === "agent" && row.agent) {
+          state.boardFilter = "agent:" + row.agent;
+          state.boardRenderedKey = "";
+          setView("board");
+          return;
+        }
+        if (row.kind === "event") {
+          setView("live");
+          if (row.taskId) void openTaskDrawer(row.taskId, "Agent Logs");
+          return;
+        }
+        if (row.kind === "command" && row.snippet) {
+          applyCommandSnippet(row.snippet, row.commandMode || "command", false);
+          return;
+        }
+        if (row.kind === "preset") {
+          state.boardFilter = String(row.boardFilter || "");
+          state.boardRenderedKey = "";
+          setView(String(row.view || "board"));
+          return;
+        }
+        if (row.kind === "nav") {
+          setView(String(row.view || "overview"));
+          return;
+        }
+      }
+
       function renderCommandPalette() {
         if (!(commandPaletteEl instanceof HTMLElement) || !(commandPaletteListEl instanceof HTMLElement)) return;
         if (!state.commandPaletteOpen) {
@@ -3192,32 +3572,32 @@ export function buildWebUiHtml(): string {
         }
         commandPaletteEl.removeAttribute("hidden");
         commandPaletteEl.setAttribute("aria-hidden", "false");
-        const rows = listCatalogRows(state.commandPaletteQuery);
-        if (!rows.length) {
-          commandPaletteListEl.innerHTML = '<div class="empty">No commands match this query.</div>';
+        const groups = buildOmniResults();
+        if (state.omniLoading && (!state.omniTasksCache || !state.omniTasksCache.length)) {
+          commandPaletteListEl.innerHTML = '<div class="loading">Loading search index...</div>';
           return;
         }
-        const byCategory = {};
-        for (const row of rows) {
-          const category = String(row.category || "General");
-          if (!Array.isArray(byCategory[category])) byCategory[category] = [];
-          byCategory[category].push(row);
+        if (!groups.length) {
+          commandPaletteListEl.innerHTML = '<div class="empty">No results for this search.</div>';
+          return;
         }
-        const groups = Object.keys(byCategory).sort();
-        commandPaletteListEl.innerHTML = groups.map((category) => {
-          const groupRows = byCategory[category];
+        let indexCursor = 0;
+        const query = String(state.commandPaletteQuery || "");
+        commandPaletteListEl.innerHTML = groups.map((group) => {
           return [
             '<section class="command-palette-group">',
-            '<div class="command-palette-group-label">' + escapeHtml(category) + "</div>",
-            groupRows.map((row) => [
-              '<article class="command-palette-item">',
-              '<div class="top"><strong>' + escapeHtml(row.name) + '</strong><span class="status ' + (row.mode === "human" ? "waiting_human" : "in_progress") + '">' + escapeHtml(row.mode) + "</span></div>",
-              '<div class="trigger">' + escapeHtml(row.trigger) + "</div>",
-              '<div class="muted">' + escapeHtml(row.description) + "</div>",
-              '<div class="snippet">' + escapeHtml("Example: " + row.usage) + "</div>",
-              '<div class="actions"><button type="button" class="btn" data-command-snippet="' + escapeHtml(row.snippet) + '" data-command-mode="' + escapeHtml(row.mode) + '" data-close-command-palette>Use snippet</button></div>',
-              "</article>",
-            ].join("")).join(""),
+            '<div class="command-palette-group-label">' + escapeHtml(group.label) + "</div>",
+            group.rows.map((row) => {
+              const itemIndex = indexCursor;
+              indexCursor += 1;
+              const active = itemIndex === state.omniActiveIndex ? " active" : "";
+              return [
+                '<article class="command-palette-item' + active + '" data-omni-index="' + String(itemIndex) + '" role="button" tabindex="0">',
+                '<div class="top"><strong>' + highlightFuzzyMatch(String(row.label || ""), query) + '</strong><span class="status in_progress">' + escapeHtml(String(row.category || "")) + "</span></div>",
+                '<div class="snippet">' + highlightFuzzyMatch(String(row.subtitle || ""), query) + "</div>",
+                "</article>",
+              ].join("");
+            }).join(""),
             "</section>",
           ].join("");
         }).join("");
@@ -3291,7 +3671,11 @@ export function buildWebUiHtml(): string {
       function openCommandPalette(seedQuery) {
         state.commandPaletteOpen = true;
         if (typeof seedQuery === "string") state.commandPaletteQuery = seedQuery;
+        state.omniActiveIndex = 0;
         renderCommandPalette();
+        void refreshOmniTasksCache(false).then(() => {
+          if (state.commandPaletteOpen) renderCommandPalette();
+        });
         if (commandPaletteFilterEl instanceof HTMLInputElement) {
           commandPaletteFilterEl.value = state.commandPaletteQuery;
           commandPaletteFilterEl.focus();
@@ -3826,23 +4210,250 @@ export function buildWebUiHtml(): string {
         return true;
       }
 
-      function setView(view) {
-        state.view = view;
+      function isKnownView(view) {
+        return view === "overview"
+          || view === "tasks"
+          || view === "board"
+          || view === "review"
+          || view === "detail"
+          || view === "live"
+          || view === "analytics";
+      }
+
+      function persistUiPrefs() {
+        safeWriteLocalStorage(UI_PREFS_STORAGE_KEY, JSON.stringify({
+          lastView: state.view,
+          boardFilter: state.boardFilter,
+          liveFilter: state.liveFilter,
+          commandMode: state.commandMode,
+        }));
+      }
+
+      function loadUiPrefs() {
+        const raw = safeReadLocalStorage(UI_PREFS_STORAGE_KEY);
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          const lastView = String(parsed && parsed.lastView || "");
+          const boardFilter = String(parsed && parsed.boardFilter || "");
+          const liveFilter = String(parsed && parsed.liveFilter || "");
+          const commandMode = String(parsed && parsed.commandMode || "");
+          if (isKnownView(lastView)) state.view = lastView;
+          if (boardFilter) state.boardFilter = boardFilter;
+          if (liveFilter === "all" || liveFilter === "tasks" || liveFilter === "runtime" || liveFilter === "human" || liveFilter === "alerts") {
+            state.liveFilter = liveFilter;
+          }
+          if (commandMode === "human" || commandMode === "command") state.commandMode = commandMode;
+        } catch {
+          // ignore invalid persisted payload
+        }
+      }
+
+      function syncUrlState() {
+        let url = null;
+        try {
+          url = new URL(window.location.href);
+        } catch {
+          url = null;
+        }
+        if (!url) return;
+        const params = url.searchParams;
+        params.set("view", state.view);
+        if (state.boardFilter) params.set("board", state.boardFilter);
+        else params.delete("board");
+        if (state.boardFilter.startsWith("status:")) params.set("status", state.boardFilter.slice("status:".length));
+        else params.delete("status");
+        if (state.liveFilter && state.liveFilter !== "all") params.set("live", state.liveFilter);
+        else params.delete("live");
+        if (state.view === "detail" && state.selectedTaskId) params.set("task", state.selectedTaskId);
+        else params.delete("task");
+        if (state.drawerOpen && state.drawerTaskId) {
+          params.set("drawerTask", state.drawerTaskId);
+          if (state.drawerContextLabel) params.set("drawerCtx", state.drawerContextLabel);
+        } else {
+          params.delete("drawerTask");
+          params.delete("drawerCtx");
+        }
+        const nextUrl = url.pathname + (params.toString() ? "?" + params.toString() : "");
+        try {
+          history.replaceState(null, "", nextUrl);
+        } catch {
+          // ignore history errors
+        }
+      }
+
+      function applyRouteState() {
+        let url = null;
+        try {
+          url = new URL(window.location.href);
+        } catch {
+          url = null;
+        }
+        if (!url) return;
+        const view = String(url.searchParams.get("view") || "");
+        const board = String(url.searchParams.get("board") || "");
+        const status = String(url.searchParams.get("status") || "");
+        const live = String(url.searchParams.get("live") || "");
+        const task = String(url.searchParams.get("task") || "");
+        const drawerTask = String(url.searchParams.get("drawerTask") || "");
+        const drawerCtx = String(url.searchParams.get("drawerCtx") || "");
+        if (isKnownView(view)) state.view = view;
+        if (board) state.boardFilter = board;
+        else if (status) state.boardFilter = "status:" + status;
+        if (live === "all" || live === "tasks" || live === "runtime" || live === "human" || live === "alerts") {
+          state.liveFilter = live;
+        }
+        if (task) state.selectedTaskId = task;
+        if (drawerTask) {
+          state.drawerOpen = true;
+          state.drawerTaskId = drawerTask;
+          state.drawerContextLabel = drawerCtx || "Agent Logs";
+        }
+      }
+
+      function viewLabel(view) {
+        return viewMeta[view] ? viewMeta[view].breadcrumb : viewMeta.overview.breadcrumb;
+      }
+
+      function updateHeaderMeta() {
+        const meta = viewMeta[state.view] || viewMeta.overview;
+        let breadcrumb = meta.breadcrumb;
+        let title = meta.title;
+        if (state.view === "detail" && state.selectedTaskId) {
+          const taskChip = boardShortTaskId(state.selectedTaskId);
+          breadcrumb = (state.detailOriginLabel || "Task Board") + " > " + taskChip;
+          title = "Task Drilldown " + taskChip;
+        }
+        if (state.drawerOpen && state.drawerTaskId) {
+          const taskChip = boardShortTaskId(state.drawerTaskId);
+          breadcrumb = viewLabel(state.view) + " > " + taskChip + " > " + (state.drawerContextLabel || "Agent Logs");
+        }
+        if (headerViewKeyEl) headerViewKeyEl.textContent = breadcrumb;
+        if (headerScreenTitleEl) headerScreenTitleEl.textContent = title;
+      }
+
+      function setView(view, options) {
+        const nextView = isKnownView(view) ? view : "overview";
+        const source = options && isKnownView(options.sourceView) ? options.sourceView : state.view;
+        if (nextView === "detail" && state.selectedTaskId) {
+          state.detailOriginView = source;
+          state.detailOriginLabel = viewLabel(source);
+        }
+        state.view = nextView;
         navButtons.forEach((button) => {
-          const isActive = button.dataset.view === view;
+          const isActive = button.dataset.view === nextView;
           button.classList.toggle("active", isActive);
           if (isActive) button.setAttribute("aria-current", "page");
           else button.removeAttribute("aria-current");
         });
-        const meta = viewMeta[view] || viewMeta.overview;
-        if (headerViewKeyEl) headerViewKeyEl.textContent = meta.breadcrumb;
-        if (headerScreenTitleEl) headerScreenTitleEl.textContent = meta.title;
-        if (view === "live") {
+        if (nextView === "live") {
           state.liveAutoScroll = true;
           state.liveRenderedKey = "";
+        } else if (state.drawerOpen) {
+          state.drawerOpen = false;
+          state.drawerTaskId = "";
+          state.drawerContextLabel = "";
+          state.drawerDetail = null;
+          state.drawerLoading = false;
+          renderTaskDrawer();
         }
+        updateHeaderMeta();
+        syncUrlState();
+        persistUiPrefs();
         closeSidebarOverlay();
         requestRender("user");
+      }
+
+      function openTaskDetail(taskId, sourceView) {
+        const normalizedTaskId = String(taskId || "").trim();
+        if (!normalizedTaskId) return;
+        state.selectedTaskId = normalizedTaskId;
+        state.detailOriginView = isKnownView(sourceView) ? sourceView : state.view;
+        state.detailOriginLabel = viewLabel(state.detailOriginView);
+        setView("detail", { sourceView: state.detailOriginView });
+      }
+
+      function closeTaskDrawer() {
+        state.drawerOpen = false;
+        state.drawerTaskId = "";
+        state.drawerContextLabel = "";
+        state.drawerDetail = null;
+        state.drawerLoading = false;
+        if (taskDrawerEl instanceof HTMLElement) {
+          taskDrawerEl.setAttribute("hidden", "");
+          taskDrawerEl.setAttribute("aria-hidden", "true");
+        }
+        syncUrlState();
+        updateHeaderMeta();
+      }
+
+      function renderTaskDrawer() {
+        if (!(taskDrawerEl instanceof HTMLElement) || !(taskDrawerContentEl instanceof HTMLElement)) return;
+        if (!state.drawerOpen || !state.drawerTaskId) {
+          taskDrawerEl.setAttribute("hidden", "");
+          taskDrawerEl.setAttribute("aria-hidden", "true");
+          return;
+        }
+        taskDrawerEl.removeAttribute("hidden");
+        taskDrawerEl.setAttribute("aria-hidden", "false");
+        if (taskDrawerPathEl instanceof HTMLElement) {
+          taskDrawerPathEl.textContent = (state.drawerContextLabel || "Task Context") + " • " + boardShortTaskId(state.drawerTaskId);
+        }
+        if (taskDrawerTitleEl instanceof HTMLElement) {
+          taskDrawerTitleEl.textContent = state.drawerDetail && state.drawerDetail.title
+            ? String(state.drawerDetail.title)
+            : boardShortTaskId(state.drawerTaskId);
+        }
+        if (state.drawerLoading) {
+          taskDrawerContentEl.innerHTML = '<div class="loading">Loading task context...</div>';
+          return;
+        }
+        const detail = asObject(state.drawerDetail);
+        const events = Array.isArray(detail.recentEvents) ? detail.recentEvents.slice(-16).reverse() : [];
+        taskDrawerContentEl.innerHTML = [
+          '<div class="task-drawer-grid">',
+          '<div class="task-drawer-meta"><strong>Task</strong><div class="muted">' + escapeHtml(String(detail.taskId || state.drawerTaskId)) + "</div></div>",
+          '<div class="task-drawer-meta"><strong>Status</strong><div class="muted">' + escapeHtml(String(detail.status || "unknown")) + "</div></div>",
+          '<div class="task-drawer-meta"><strong>Current Agent</strong><div class="muted">' + escapeHtml(String(detail.currentAgent || "[none]")) + "</div></div>",
+          '<div class="task-drawer-meta"><strong>Updated</strong><div class="muted">' + escapeHtml(fmtDateTime(detail.updatedAt || "")) + "</div></div>",
+          '<div class="actions"><button type="button" class="btn approve" data-open-task="' + escapeHtml(String(detail.taskId || state.drawerTaskId)) + '">Open Full Detail</button>',
+          '<button type="button" class="btn" data-open-review>Open Review Queue</button></div>',
+          events.length
+            ? '<pre class="event-raw">' + escapeHtml(events.join("\n")) + "</pre>"
+            : '<div class="empty">No logs available for this task.</div>',
+          "</div>",
+        ].join("");
+      }
+
+      async function openTaskDrawer(taskId, contextLabel) {
+        const normalizedTaskId = String(taskId || "").trim();
+        if (!normalizedTaskId) return;
+        state.drawerOpen = true;
+        state.drawerTaskId = normalizedTaskId;
+        state.drawerContextLabel = String(contextLabel || "Agent Logs");
+        state.drawerLoading = true;
+        state.drawerDetail = null;
+        renderTaskDrawer();
+        updateHeaderMeta();
+        syncUrlState();
+        try {
+          const detail = await api("/api/tasks/" + encodeURIComponent(normalizedTaskId));
+          state.drawerDetail = detail;
+        } catch (error) {
+          state.drawerDetail = {
+            taskId: normalizedTaskId,
+            title: "Task context unavailable",
+            status: "unknown",
+            currentAgent: "[none]",
+            recentEvents: [
+              error instanceof Error ? error.message : "Unable to load task details.",
+            ],
+            updatedAt: "",
+          };
+        } finally {
+          state.drawerLoading = false;
+          renderTaskDrawer();
+        }
       }
 
       async function api(path) {
@@ -3885,6 +4496,7 @@ export function buildWebUiHtml(): string {
         const subtitleRaw = config && config.subtitle ? String(config.subtitle) : "";
         const subtitle = subtitleRaw ? '<div class="stat-sub">' + escapeHtml(subtitleRaw) + "</div>" : "";
         const view = config && config.view ? String(config.view) : "tasks";
+        const statFilter = config && config.statFilter ? String(config.statFilter) : "";
         const icon = config && config.icon ? String(config.icon) : "total";
         const label = config && config.label ? String(config.label) : "Metric";
         return [
@@ -3897,7 +4509,7 @@ export function buildWebUiHtml(): string {
           '<p class="stat-value ' + valueTone + '">' + escapeHtml(value) + "</p>",
           subtitle,
           "</div>",
-          '<button type="button" class="stat-link" data-stat-view="' + escapeHtml(view) + '">Details</button>',
+          '<button type="button" class="stat-link" data-stat-view="' + escapeHtml(view) + '"' + (statFilter ? ' data-stat-filter="' + escapeHtml(statFilter) + '"' : "") + '>Details</button>',
           "</article>",
         ].join("");
       }
@@ -4205,7 +4817,8 @@ export function buildWebUiHtml(): string {
             subtitle: Number(counts.waitingHuman || 0) > 0 ? "Human action required" : "Queue empty",
             valueTone: Number(counts.waitingHuman || 0) > 0 ? "attention" : "review",
             icon: "review",
-            view: "review",
+            view: "board",
+            statFilter: "status:waiting_human",
             waitingHot: Number(counts.waitingHuman || 0) > 0,
           },
           {
@@ -4215,6 +4828,7 @@ export function buildWebUiHtml(): string {
             valueTone: Number(counts.failed || 0) > 0 ? "error" : "working",
             icon: "failed",
             view: "board",
+            statFilter: "status:blocked",
           },
           {
             label: "Token / Cost",
@@ -4435,7 +5049,8 @@ export function buildWebUiHtml(): string {
       function boardTaskMatchesFilter(task, filterQuery) {
         const query = String(filterQuery || "").trim().toLowerCase();
         if (!query) return true;
-        const fields = [
+        const tokens = query.split(/\s+/).filter(Boolean);
+        const haystack = [
           task.taskId,
           task.title,
           task.project,
@@ -4443,8 +5058,45 @@ export function buildWebUiHtml(): string {
           task.nextAgent,
           task.currentStage,
           task.status,
-        ];
-        return fields.some((value) => String(value || "").toLowerCase().includes(query));
+        ].join(" ").toLowerCase();
+        const tokenCount = Number(task && task.consumption && task.consumption.estimatedTotalTokens || 0);
+        const status = String(task.status || "").toLowerCase();
+        const statusAliases = {
+          human_review: "waiting_human",
+          review_required: "waiting_human",
+        };
+
+        for (const token of tokens) {
+          if (token.startsWith("status:")) {
+            const rawStatus = token.slice("status:".length);
+            const normalized = statusAliases[rawStatus] || rawStatus;
+            if (normalized === "blocked") {
+              if (!(status === "failed" || status === "blocked" || status === "archived")) return false;
+            } else if (normalized === "active") {
+              if (!(status === "in_progress" || status === "waiting_agent")) return false;
+            } else if (status !== normalized) {
+              return false;
+            }
+            continue;
+          }
+          if (token.startsWith("agent:")) {
+            const agentQuery = token.slice("agent:".length);
+            const agentHay = (String(task.currentAgent || "") + " " + String(task.nextAgent || "")).toLowerCase();
+            if (!agentHay.includes(agentQuery)) return false;
+            continue;
+          }
+          if (token === "tokens:high" || token === "consumption:high") {
+            if (!(tokenCount >= 120000)) return false;
+            continue;
+          }
+          if (token.startsWith("id:")) {
+            const idNeedle = token.slice("id:".length);
+            if (!String(task.taskId || "").toLowerCase().includes(idNeedle)) return false;
+            continue;
+          }
+          if (fuzzyScore(token, haystack) <= 0) return false;
+        }
+        return true;
       }
 
       function renderBoardCard(task, mode, laneId) {
@@ -4545,6 +5197,13 @@ export function buildWebUiHtml(): string {
         contentEl.innerHTML = [
           '<div id="board-root" class="mode-' + escapeHtml(mode) + '">',
           '<div class="toolbar"><div class="muted">Auto-updating board: cards move on each poll and realtime event.</div><div class="board-controls"><div class="board-view-toggle" role="group" aria-label="Board mode"><button type="button" class="board-toggle-btn' + (mode === "kanban" ? " active" : "") + '" data-board-mode="kanban">Kanban</button><button type="button" class="board-toggle-btn' + (mode === "agent" ? " active" : "") + '" data-board-mode="agent">Agent Lanes</button></div><label class="board-filter" for="board-filter"><input id="board-filter" class="field-input" placeholder="Filter by task ID or responsible agent..." value="' + escapeHtml(state.boardFilter || "") + '" /></label><div class="muted">' + fmtNumber(tasks.length) + " of " + fmtNumber(allTasks.length) + " tasks</div></div></div>",
+          '<div class="board-controls" style="margin-bottom:10px;">',
+          '<span class="muted">Quick Filters:</span>',
+          '<button type="button" class="btn' + (state.boardFilter === "status:blocked" ? " approve" : "") + '" data-board-preset="blocked">Blocked Tasks</button>',
+          '<button type="button" class="btn' + (state.boardFilter === "tokens:high" ? " approve" : "") + '" data-board-preset="consumption">High Consumption</button>',
+          '<button type="button" class="btn' + (state.boardFilter === "status:waiting_human" ? " approve" : "") + '" data-board-preset="my-reviews">My Reviews</button>',
+          '<button type="button" class="btn" data-board-preset="clear">Clear</button>',
+          "</div>",
           '<div class="board-columns">',
           columns.map((column) => renderBoardColumn(column, byColumn[column.id] || [], mode)).join(""),
           "</div>",
@@ -4846,7 +5505,7 @@ export function buildWebUiHtml(): string {
             ? '<pre class="event-raw">' + escapeHtml(rawPayload || "{}") + "</pre>"
             : "";
           return [
-            '<article class="' + escapeHtml(classes.join(" ")) + '">',
+            '<article class="' + escapeHtml(classes.join(" ")) + '"' + (item.taskId ? ' data-open-task-drawer="' + escapeHtml(item.taskId) + '" data-drawer-context="Agent Logs"' : "") + (item.taskId ? ' role="button" tabindex="0"' : "") + '>',
             '<div class="head">',
             '<div class="title-wrap"><span class="event-icon" aria-hidden="true">' + renderEventIcon(item.iconKey) + "</span><div><div class=\"title\">" + escapeHtml(item.title) + "</div><span class=\"pill " + escapeHtml(tone === "alert" ? "alert" : tone) + "\">" + escapeHtml(item.group) + "</span></div></div>",
             '<div class="time">' + escapeHtml(fmtRelativeTime(item.at)) + "</div>",
@@ -5032,6 +5691,12 @@ export function buildWebUiHtml(): string {
           return;
         }
 
+        const closeTaskDrawerTarget = target.closest("[data-close-task-drawer]");
+        if (closeTaskDrawerTarget instanceof HTMLElement && closeTaskDrawerTarget.dataset.closeTaskDrawer !== undefined) {
+          closeTaskDrawer();
+          return;
+        }
+
         const confirmCommandTarget = target.closest("[data-confirm-command]");
         if (confirmCommandTarget instanceof HTMLElement && confirmCommandTarget.dataset.confirmCommand !== undefined) {
           const payload = state.commandConfirm;
@@ -5067,6 +5732,14 @@ export function buildWebUiHtml(): string {
           const mode = snippetTarget instanceof HTMLElement ? String(snippetTarget.dataset.commandMode || "") : "";
           const shouldClosePalette = Boolean(snippetTarget instanceof HTMLElement && snippetTarget.dataset.closeCommandPalette !== undefined);
           applyCommandSnippet(snippet, mode, shouldClosePalette);
+          return;
+        }
+
+        const omniTarget = target.closest("[data-omni-index]");
+        const omniIndexRaw = omniTarget instanceof HTMLElement ? String(omniTarget.dataset.omniIndex || "") : "";
+        if (omniIndexRaw) {
+          const omniIndex = Number(omniIndexRaw);
+          if (Number.isFinite(omniIndex)) applyOmniSelection(omniIndex);
           return;
         }
 
@@ -5113,8 +5786,25 @@ export function buildWebUiHtml(): string {
           if (state.boardMode !== normalizedMode) {
             state.boardMode = normalizedMode;
             state.boardRenderedKey = "";
+            syncUrlState();
+            persistUiPrefs();
             requestRender("user");
           }
+          return;
+        }
+
+        const boardPresetTarget = target.closest("[data-board-preset]");
+        const boardPreset = boardPresetTarget instanceof HTMLElement ? String(boardPresetTarget.dataset.boardPreset || "") : "";
+        if (boardPreset) {
+          if (boardPreset === "blocked") state.boardFilter = "status:blocked";
+          else if (boardPreset === "consumption") state.boardFilter = "tokens:high";
+          else if (boardPreset === "my-reviews") state.boardFilter = "status:waiting_human";
+          else state.boardFilter = "";
+          state.boardRenderedKey = "";
+          syncUrlState();
+          persistUiPrefs();
+          if (state.view !== "board") setView("board");
+          else requestRender("user");
           return;
         }
 
@@ -5137,6 +5827,11 @@ export function buildWebUiHtml(): string {
         const statViewTarget = target.closest("[data-stat-view]");
         const statView = statViewTarget instanceof HTMLElement ? String(statViewTarget.dataset.statView || "") : "";
         if (statView === "overview" || statView === "tasks" || statView === "board" || statView === "review" || statView === "detail" || statView === "live" || statView === "analytics") {
+          const statFilter = statViewTarget instanceof HTMLElement ? String(statViewTarget.dataset.statFilter || "") : "";
+          if (statView === "board" && statFilter) {
+            state.boardFilter = statFilter;
+            state.boardRenderedKey = "";
+          }
           setView(statView);
           return;
         }
@@ -5146,6 +5841,8 @@ export function buildWebUiHtml(): string {
         if (liveFilter === "all" || liveFilter === "tasks" || liveFilter === "runtime" || liveFilter === "human" || liveFilter === "alerts") {
           state.liveFilter = liveFilter;
           state.liveRenderedKey = "";
+          syncUrlState();
+          persistUiPrefs();
           requestRender("user");
           return;
         }
@@ -5175,8 +5872,17 @@ export function buildWebUiHtml(): string {
         const openTaskTarget = target.closest("[data-open-task]");
         const taskId = openTaskTarget instanceof HTMLElement ? openTaskTarget.dataset.openTask : "";
         if (taskId) {
-          state.selectedTaskId = taskId;
-          setView("detail");
+          openTaskDetail(taskId, state.view);
+          return;
+        }
+
+        const openTaskDrawerTarget = target.closest("[data-open-task-drawer]");
+        const drawerTaskId = openTaskDrawerTarget instanceof HTMLElement ? String(openTaskDrawerTarget.dataset.openTaskDrawer || "") : "";
+        if (drawerTaskId && state.view === "live") {
+          const drawerContext = openTaskDrawerTarget instanceof HTMLElement
+            ? String(openTaskDrawerTarget.dataset.drawerContext || "Agent Logs")
+            : "Agent Logs";
+          void openTaskDrawer(drawerTaskId, drawerContext);
           return;
         }
 
@@ -5262,10 +5968,16 @@ export function buildWebUiHtml(): string {
         }
         if (target instanceof HTMLInputElement && target.id === "command-palette-filter") {
           state.commandPaletteQuery = target.value || "";
+          state.omniActiveIndex = 0;
           renderCommandPalette();
+          void refreshOmniTasksCache(false).then(() => {
+            if (state.commandPaletteOpen) renderCommandPalette();
+          });
         }
         if (target instanceof HTMLInputElement && target.id === "board-filter") {
           state.boardFilter = target.value || "";
+          syncUrlState();
+          persistUiPrefs();
           if (state.view === "board") requestRender("user");
         }
         if (target instanceof HTMLInputElement && target.id === "global-search-input") {
@@ -5300,6 +6012,26 @@ export function buildWebUiHtml(): string {
           else openCommandPalette(commandInputEl instanceof HTMLInputElement ? commandInputEl.value : "");
           return;
         }
+        const keyTarget = event.target;
+        if (state.commandPaletteOpen && (keyTarget instanceof HTMLInputElement && keyTarget.id === "command-palette-filter")) {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            const delta = event.key === "ArrowDown" ? 1 : -1;
+            const total = Array.isArray(state.omniResults) ? state.omniResults.length : 0;
+            if (total > 0) {
+              state.omniActiveIndex = ((state.omniActiveIndex + delta) % total + total) % total;
+              renderCommandPalette();
+              const activeEl = document.querySelector('[data-omni-index="' + String(state.omniActiveIndex) + '"]');
+              if (activeEl instanceof HTMLElement) activeEl.scrollIntoView({ block: "nearest" });
+            }
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            applyOmniSelection(state.omniActiveIndex);
+            return;
+          }
+        }
         if (event.key === "Escape") {
           if (state.commandConfirm) {
             closeCommandConfirm();
@@ -5320,6 +6052,10 @@ export function buildWebUiHtml(): string {
             state.liveExpandedLogKey = "";
             state.liveRenderedKey = "";
             requestRender("user");
+            return;
+          }
+          if (state.drawerOpen) {
+            closeTaskDrawer();
             return;
           }
           if (state.view === "detail") {
@@ -5368,13 +6104,19 @@ export function buildWebUiHtml(): string {
           }
         }
 
-        const keyTarget = event.target;
         if (keyTarget instanceof HTMLElement && keyTarget.classList.contains("board-card") && (event.key === "Enter" || event.key === " ")) {
           const taskId = String(keyTarget.dataset.openTask || "");
           if (taskId) {
             event.preventDefault();
-            state.selectedTaskId = taskId;
-            setView("detail");
+            openTaskDetail(taskId, "board");
+            return;
+          }
+        }
+        if (keyTarget instanceof HTMLElement && keyTarget.classList.contains("event-card") && (event.key === "Enter" || event.key === " ")) {
+          const taskId = String(keyTarget.dataset.openTaskDrawer || "");
+          if (taskId && state.view === "live") {
+            event.preventDefault();
+            void openTaskDrawer(taskId, String(keyTarget.dataset.drawerContext || "Agent Logs"));
             return;
           }
         }
@@ -5414,10 +6156,13 @@ export function buildWebUiHtml(): string {
         if (target instanceof HTMLSelectElement && target.id === "board-mode") {
           state.boardMode = target.value === "agent" ? "agent" : "kanban";
           state.boardRenderedKey = "";
+          syncUrlState();
+          persistUiPrefs();
           requestRender("user");
         }
         if (target instanceof HTMLSelectElement && target.id === "web-command-mode") {
           state.commandMode = target.value === "human" ? "human" : "command";
+          persistUiPrefs();
           pushCommandLog("Switched command mode to " + state.commandMode + ".", "system");
         }
       });
@@ -5487,6 +6232,11 @@ export function buildWebUiHtml(): string {
         }
       }
 
+      loadUiPrefs();
+      applyRouteState();
+      if (state.selectedTaskId && state.view !== "detail" && state.view !== "live") {
+        state.view = "detail";
+      }
       if (commandModeEl instanceof HTMLSelectElement) {
         commandModeEl.value = state.commandMode;
       }
@@ -5499,9 +6249,13 @@ export function buildWebUiHtml(): string {
       if (globalSearchInputEl instanceof HTMLInputElement) {
         globalSearchInputEl.value = state.search;
       }
-      const initialMeta = viewMeta[state.view] || viewMeta.overview;
-      if (headerViewKeyEl) headerViewKeyEl.textContent = initialMeta.breadcrumb;
-      if (headerScreenTitleEl) headerScreenTitleEl.textContent = initialMeta.title;
+      navButtons.forEach((button) => {
+        const isActive = button.dataset.view === state.view;
+        button.classList.toggle("active", isActive);
+        if (isActive) button.setAttribute("aria-current", "page");
+        else button.removeAttribute("aria-current");
+      });
+      updateHeaderMeta();
       setHeaderNotificationCount(0);
       setRuntimeStatusPill({ isAlive: true, provider: "Local LLM" });
       setConnectivityIndicator(false, "Connecting");
@@ -5512,6 +6266,11 @@ export function buildWebUiHtml(): string {
       renderCommandSuggestions("");
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
+      syncUrlState();
+      persistUiPrefs();
+      if (state.drawerOpen && state.drawerTaskId) {
+        void openTaskDrawer(state.drawerTaskId, state.drawerContextLabel || "Agent Logs");
+      }
       setInterval(() => {
         requestRender("poll");
         if (state.view !== "overview") void refreshGlobalSnapshot();
