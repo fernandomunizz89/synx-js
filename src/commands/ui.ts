@@ -15,8 +15,8 @@ export const uiCommand = new Command("ui")
   .description("Start local web UI for observability and human review")
   .option("--host <host>", "host bind address", "127.0.0.1")
   .option("--port <port>", "port number", parsePort, 4317)
-  .option("--enable-actions", "enable approve/reprove/cancel API actions", false)
-  .action(async (options: { host: string; port: number; enableActions?: boolean }) => {
+  .option("--read-only", "disable approve/reprove/cancel API actions", false)
+  .action(async (options: { host: string; port: number; readOnly?: boolean }) => {
     await ensureGlobalInitialized();
     await ensureProjectInitialized();
 
@@ -24,11 +24,11 @@ export const uiCommand = new Command("ui")
       host: options.host,
       port: options.port,
       html: buildWebUiHtml(),
-      enableMutations: Boolean(options.enableActions),
+      enableMutations: !Boolean(options.readOnly),
     });
 
     console.log(`\nSYNX Web UI running at ${started.baseUrl}`);
-    console.log(`- Read-only mode: ${options.enableActions ? "off (actions enabled)" : "on"}`);
+    console.log(`- Read-only mode: ${options.readOnly ? "on" : "off (actions enabled)"}`);
     console.log("- Press Ctrl+C to stop.");
 
     await new Promise<void>((resolve) => {

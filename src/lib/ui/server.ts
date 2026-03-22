@@ -2,6 +2,8 @@ import http from "node:http";
 import { URL } from "node:url";
 import { approveTaskService, cancelTaskService, reproveTaskService } from "../services/task-services.js";
 import { getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
+import { applyTaskRollback } from "../services/task-rollback.js";
+import { loadTaskMeta } from "../task.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -151,13 +153,19 @@ export function createUiRequestHandler(options: {
         const body = await parseJsonBody(req);
         const reason = normalizeString(body.reason);
         const rollbackMode = normalizeString(body.rollbackMode) === "task" ? "task" : "none";
-        const result = await reproveTaskService({ taskId, reason, rollbackMode });
-        sendJson(res, 200, { ok: true, data: { ...result, status: "reproved" } });
+        const rollbackSummary = rollbackMode === "task" ? await applyTaskRollback(taskId) : null;
+        const result = await reproveTaskService({ taskId, reason, rollbackMode, rollbackSummary });
+        sendJson(res, 200, { ok: true, data: { ...result, status: "reproved", rollbackSummary } });
         return;
       }
 
       if (method === "POST" && cancelMatch) {
         const taskId = decodeURIComponent(cancelMatch[1]);
+        const meta = await loadTaskMeta(taskId);
+        if (!["new", "in_progress", "waiting_agent"].includes(meta.status)) {
+          sendJson(res, 400, { ok: false, error: `Task ${taskId} is in status '${meta.status}' and cannot be cancelled.` });
+          return;
+        }
         const body = await parseJsonBody(req);
         await cancelTaskService({
           taskId,
