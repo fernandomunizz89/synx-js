@@ -121,6 +121,16 @@ synx status        # focused view: current or latest task
 synx status --all  # full history
 ```
 
+### Start the local web UI
+
+```bash
+synx ui
+synx ui --read-only
+synx ui --host 127.0.0.1 --port 4317
+```
+
+The web UI exposes Overview, Tasks, Review Queue, Task Detail, Live Stream, and Analytics views with local-only API/SSE.
+
 ### Approve / Reprove
 
 ```bash
@@ -198,4 +208,5 @@ npm run check         # TypeScript type check
 |---|---|
 | [FEATURES.md](docs/FEATURES.md) | Full capability list |
 | [MANUAL.md](docs/MANUAL.md) | Day-to-day operation, recovery flows, environment variables |
+| [WEB-UI.md](docs/WEB-UI.md) | Local web UI operation guide (`synx ui`) |
 | [IMPLEMENTATION-NOTES.md](docs/IMPLEMENTATION-NOTES.md) | Architecture decisions and iteration history |

@@ -9,6 +9,7 @@
 - Task type flags for `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
 - Per-task E2E preferences via `--e2e`, `--e2e-framework`, `--qa-objective`.
 - `status` defaults to focused view (current or latest task); `--all` for full history.
+- `ui` starts a local observability and human-review web surface (`Overview`, `Tasks`, `Review Queue`, `Task Detail`, `Live Stream`, `Analytics`), with optional read-only mode.
 
 ## Setup & Configuration
 

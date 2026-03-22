@@ -149,6 +149,35 @@ To list all tasks/history:
 synx status --all
 ```
 
+## Web observability UI (`synx ui`)
+
+Use this command when you want a browser-based operational view with review actions:
+
+```bash
+synx ui
+```
+
+Useful options:
+
+```bash
+synx ui --read-only         # disables approve/reprove/cancel/runtime commands
+synx ui --host 127.0.0.1    # default bind host
+synx ui --port 4317         # default port
+```
+
+What it provides:
+- Overview (engine + queue + consumption snapshot)
+- Tasks (search + quick drill-down)
+- Review Queue
+- Task Detail (events, artifacts, human actions)
+- Live Stream (SSE-backed runtime/event stream)
+- Analytics (top tasks/agents/projects + timeline)
+
+Operational notes:
+- it binds locally by default (`127.0.0.1`)
+- API and SSE are served from the same process as the command
+- read-only mode is recommended when you only need monitoring
+
 ## Final human step
 When a task reaches `waiting_human`, you can either approve or reprove it.
 
