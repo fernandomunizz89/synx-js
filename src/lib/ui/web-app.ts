@@ -1334,44 +1334,155 @@ export function buildWebUiHtml(): string {
         display: grid;
         gap: var(--space-2);
       }
+      #board-root {
+        display: grid;
+        gap: var(--space-2);
+      }
+      #board-root.mode-kanban .board-columns,
+      #board-root.mode-agent .board-columns {
+        animation: board-fade-in 0.18s ease;
+      }
+      @keyframes board-fade-in {
+        from { opacity: 0.55; transform: translateY(2px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
       .board-columns {
-        display: flex;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(280px, 1fr);
         gap: var(--space-3);
         overflow-x: auto;
-        padding-bottom: 6px;
+        padding-bottom: 8px;
+        transition: opacity 0.2s ease;
       }
       .board-mode {
         display: inline-flex;
         align-items: center;
         gap: var(--space-2);
       }
+      .board-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .board-view-toggle {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        background: var(--surface-soft);
+      }
+      .board-toggle-btn {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        min-height: 34px;
+        padding: 0 var(--space-3);
+        cursor: pointer;
+      }
+      .board-toggle-btn.active {
+        background: color-mix(in srgb, var(--color-accent-working) 22%, var(--surface-strong));
+        color: var(--fg);
+      }
+      .board-filter {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        min-height: 34px;
+        padding: 0 var(--space-2);
+        min-width: min(320px, 45vw);
+      }
+      .board-filter input {
+        border: 0;
+        background: transparent;
+        padding: 0;
+      }
+      .board-filter input:focus-visible {
+        outline: none;
+      }
       .board-column {
-        min-width: 270px;
-        max-width: 320px;
+        min-width: 0;
         border: 1px solid var(--border);
         border-radius: var(--radius-md);
-        background: var(--surface-soft);
-        padding: var(--space-3);
+        background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+        padding: var(--space-2);
+        display: grid;
+        grid-template-rows: auto auto minmax(140px, 1fr);
+        gap: var(--space-2);
+        transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+      }
+      .board-column-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: color-mix(in srgb, var(--surface-soft) 94%, transparent);
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
+        border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
       }
       .board-column h3 {
-        margin: 0 0 6px;
-        font-size: 0.97rem;
+        margin: 0;
+        font-size: 0.91rem;
       }
       .board-column .meta {
-        margin-bottom: 10px;
+        margin: 0;
+        padding: 0 var(--space-1);
+        font-size: 0.76rem;
+      }
+      .board-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 22px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--border);
+        color: var(--fg);
+        font-size: 0.72rem;
+        font-weight: var(--type-label-weight);
+        background: var(--surface);
       }
       .board-stack {
         display: grid;
         gap: var(--space-2);
+        align-content: start;
+      }
+      .board-empty {
+        border: 1px dashed var(--border);
+        border-radius: var(--radius-sm);
+        min-height: 96px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        font-size: 0.8rem;
+        background: color-mix(in srgb, var(--surface) 74%, transparent);
       }
       .board-card {
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
-        background: var(--surface);
+        background: color-mix(in srgb, var(--surface) 90%, transparent);
         padding: var(--space-3);
-        transition: transform 0.16s ease, border-color 0.16s ease;
+        transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
         display: grid;
         gap: var(--space-2);
+        cursor: pointer;
+        animation: board-card-enter 0.22s ease both;
+      }
+      @keyframes board-card-enter {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
       }
       .board-card:hover {
         transform: translateY(-1px);
@@ -1389,6 +1500,58 @@ export function buildWebUiHtml(): string {
         font-weight: 700;
         letter-spacing: 0.02em;
       }
+      .board-ticket {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .priority-badge {
+        border-radius: var(--radius-pill);
+        padding: 2px 7px;
+        border: 1px solid var(--border);
+        font-size: 0.66rem;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .priority-badge.p0 {
+        color: var(--color-accent-error);
+        border-color: color-mix(in srgb, var(--color-accent-error) 56%, var(--border));
+        background: color-mix(in srgb, var(--color-accent-error) 14%, var(--surface));
+      }
+      .priority-badge.p1 {
+        color: var(--color-accent-attention);
+        border-color: color-mix(in srgb, var(--color-accent-attention) 56%, var(--border));
+        background: color-mix(in srgb, var(--color-accent-attention) 14%, var(--surface));
+      }
+      .priority-badge.p2 {
+        color: var(--color-accent-working);
+        border-color: color-mix(in srgb, var(--color-accent-working) 56%, var(--border));
+        background: color-mix(in srgb, var(--color-accent-working) 12%, var(--surface));
+      }
+      .priority-badge.p3 {
+        color: var(--muted);
+      }
+      .agent-mini {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+        font-size: 0.66rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        color: var(--fg);
+      }
+      .agent-mini.dispatcher { color: #8bc4ff; }
+      .agent-mini.research { color: #84e7df; }
+      .agent-mini.architect { color: #b6a0ff; }
+      .agent-mini.coder { color: #67d0ff; }
+      .agent-mini.qa { color: #96efc7; }
+      .agent-mini.human { color: #ffc979; }
+      .agent-mini.blocked { color: #ff96a5; }
       .board-card .title {
         margin: 0;
         font-size: 0.94rem;
@@ -1417,23 +1580,72 @@ export function buildWebUiHtml(): string {
       .board-chip.strong {
         color: var(--fg);
       }
+      .board-progress {
+        display: grid;
+        gap: 6px;
+      }
+      .board-progress-track {
+        width: 100%;
+        height: 5px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+        overflow: hidden;
+      }
+      .board-progress-fill {
+        height: 100%;
+        border-radius: inherit;
+        width: 0%;
+        background: var(--color-accent-working);
+        transition: width 0.25s ease;
+      }
+      .board-progress-fill.done { background: var(--color-accent-online); }
+      .board-progress-fill.review { background: var(--color-accent-attention); }
+      .board-progress-fill.blocked { background: var(--color-accent-error); }
+      .board-progress-meta {
+        color: var(--muted);
+        font-size: 0.72rem;
+      }
       .board-card .foot {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--space-2);
       }
-      .board-card .owner {
-        font-size: 0.8rem;
+      .board-card .next-owner {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.76rem;
         color: var(--fg);
-        font-weight: 600;
       }
       .board-card .updated {
         font-size: 0.78rem;
         color: var(--muted);
       }
+      .agent-avatar {
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.58rem;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        color: var(--fg);
+        background: color-mix(in srgb, var(--surface-strong) 88%, transparent);
+      }
+      .agent-avatar.human {
+        border-color: color-mix(in srgb, var(--color-accent-attention) 48%, var(--border));
+        color: var(--color-accent-attention);
+      }
       .board-card.waiting_human {
         border-color: color-mix(in srgb, var(--status-waiting-fg) 36%, var(--border));
+        background: color-mix(in srgb, var(--status-waiting-bg) 30%, var(--surface));
+      }
+      .board-card.human-focus {
+        border-color: color-mix(in srgb, var(--color-accent-attention) 62%, var(--border));
       }
       .board-card.done {
         border-color: color-mix(in srgb, var(--status-done-fg) 32%, var(--border));
@@ -1460,6 +1672,10 @@ export function buildWebUiHtml(): string {
       }
       .board-column.kanban-blocked {
         border-top: 3px solid color-mix(in srgb, var(--status-failed-fg) 40%, var(--border));
+      }
+      .board-column.agent-human {
+        border-color: color-mix(in srgb, var(--color-accent-attention) 52%, var(--border));
+        background: color-mix(in srgb, var(--status-waiting-bg) 26%, var(--surface-soft));
       }
       .event-card {
         border: 1px solid var(--border);
@@ -1622,6 +1838,14 @@ export function buildWebUiHtml(): string {
           width: 100%;
           justify-content: space-between;
         }
+        .board-controls {
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .board-filter {
+          min-width: 0;
+          width: 100%;
+        }
         .command-quick {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1713,6 +1937,7 @@ export function buildWebUiHtml(): string {
         commandRefOpen: false,
         commandRefQuery: "",
         boardMode: "kanban",
+        boardFilter: "",
         themePreference: initialThemePreference,
         themeResolved: initialThemeResolved,
         renderedViews: {},
@@ -2694,11 +2919,11 @@ export function buildWebUiHtml(): string {
         const context = [currentAgent, nextAgent, stage].join(" ");
 
         if (status === "done") return "done";
-        if (status === "failed" || status === "blocked" || status === "archived") return "failed";
+        if (status === "failed" || status === "blocked" || status === "archived") return "blocked";
         if (task.humanApprovalRequired || status === "waiting_human" || context.includes("human review")) return "human";
         if (context.includes("dispatcher")) return "dispatcher";
-        if (context.includes("planner")) return "planner";
         if (context.includes("research")) return "research";
+        if (context.includes("planner") || context.includes("architect")) return "architect";
         if (context.includes("qa")) return "qa";
         if (
           context.includes("expert")
@@ -2708,12 +2933,13 @@ export function buildWebUiHtml(): string {
           || context.includes("back")
           || context.includes("mobile")
           || context.includes("seo")
+          || context.includes("coder")
           || status === "waiting_agent"
           || status === "in_progress"
         ) {
-          return "experts";
+          return "coder";
         }
-        return "new";
+        return "dispatcher";
       }
 
       function boardKanbanColumnForTask(task) {
@@ -2728,7 +2954,106 @@ export function buildWebUiHtml(): string {
         return "todo";
       }
 
-      function renderBoardCard(task, mode) {
+      function boardShortTaskId(taskId) {
+        const raw = String(taskId || "");
+        const numbers = raw.match(/\d+/g);
+        if (numbers && numbers.length) {
+          const numeric = Number(numbers[numbers.length - 1] || 0);
+          if (Number.isFinite(numeric) && numeric > 0) {
+            return "#TX-" + String(Math.floor(numeric)).padStart(3, "0");
+          }
+        }
+        const compact = raw.replace(/[^a-z0-9]/gi, "").toUpperCase();
+        return "#" + (compact.slice(-6) || "TASK");
+      }
+
+      function boardPriorityMeta(task) {
+        const status = String(task.status || "");
+        const type = String(task.type || "").toLowerCase();
+        if (status === "failed" || status === "blocked" || status === "archived") return { label: "P0", klass: "p0" };
+        if (status === "waiting_human") return { label: "P1", klass: "p1" };
+        if (type === "bug") return { label: "P1", klass: "p1" };
+        if (status === "in_progress") return { label: "P2", klass: "p2" };
+        return { label: "P3", klass: "p3" };
+      }
+
+      function boardAgentRole(value) {
+        const raw = String(value || "").toLowerCase();
+        if (!raw) return "generic";
+        if (raw.includes("dispatcher")) return "dispatcher";
+        if (raw.includes("research")) return "research";
+        if (raw.includes("architect") || raw.includes("planner")) return "architect";
+        if (raw.includes("qa")) return "qa";
+        if (raw.includes("human")) return "human";
+        if (raw.includes("failed") || raw.includes("blocked")) return "blocked";
+        if (
+          raw.includes("coder")
+          || raw.includes("engineer")
+          || raw.includes("expert")
+          || raw.includes("specialist")
+          || raw.includes("front")
+          || raw.includes("back")
+          || raw.includes("mobile")
+          || raw.includes("seo")
+        ) return "coder";
+        return "generic";
+      }
+
+      function boardAgentInitials(value, fallback) {
+        const base = String(value || "").trim();
+        if (!base) return fallback || "AG";
+        const parts = base.split(/[\s_-]+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return base.slice(0, 2).toUpperCase();
+      }
+
+      function renderAgentAvatar(value, fallback, extraClass) {
+        const role = boardAgentRole(value || fallback);
+        const initials = boardAgentInitials(value || fallback, role === "human" ? "HU" : "AG");
+        const label = String(value || fallback || "agent");
+        return '<span class="' + escapeHtml(extraClass || "agent-avatar") + " " + escapeHtml(role) + '" title="' + escapeHtml(label) + '">' + escapeHtml(initials) + "</span>";
+      }
+
+      function boardProgressMeta(task, mode) {
+        if (mode === "kanban") {
+          const column = boardKanbanColumnForTask(task);
+          const ordered = ["backlog", "todo", "progress", "review", "done"];
+          if (column === "blocked") return { percent: 100, text: "blocked", tone: "blocked" };
+          const index = Math.max(0, ordered.indexOf(column));
+          const completed = index + 1;
+          const total = ordered.length;
+          const percent = Math.round((completed / total) * 100);
+          const tone = column === "done" ? "done" : (column === "review" ? "review" : "working");
+          return { percent, text: completed + "/" + total + " steps", tone };
+        }
+        const column = boardColumnForTask(task);
+        const ordered = ["dispatcher", "research", "architect", "coder", "qa", "human"];
+        if (column === "blocked") return { percent: 100, text: "blocked", tone: "blocked" };
+        if (column === "done") return { percent: 100, text: ordered.length + "/" + ordered.length + " steps", tone: "done" };
+        const index = Math.max(0, ordered.indexOf(column));
+        const completed = index + 1;
+        const total = ordered.length;
+        const percent = Math.round((completed / total) * 100);
+        const tone = column === "human" ? "review" : "working";
+        return { percent, text: completed + "/" + total + " steps", tone };
+      }
+
+      function boardTaskMatchesFilter(task, filterQuery) {
+        const query = String(filterQuery || "").trim().toLowerCase();
+        if (!query) return true;
+        const fields = [
+          task.taskId,
+          task.title,
+          task.project,
+          task.currentAgent,
+          task.nextAgent,
+          task.currentStage,
+          task.status,
+        ];
+        return fields.some((value) => String(value || "").toLowerCase().includes(query));
+      }
+
+      function renderBoardCard(task, mode, laneId) {
         const stage = String(task.currentStage || "unscoped");
         const currentAgent = String(task.currentAgent || "unassigned");
         const nextAgent = String(task.nextAgent || "n/a");
@@ -2736,47 +3061,72 @@ export function buildWebUiHtml(): string {
         const type = String(task.type || "Task");
         const tokens = fmtNumber(task.consumption && task.consumption.estimatedTotalTokens);
         const updatedAt = fmtRelativeTime(task.updatedAt);
-        const owner = mode === "kanban"
-          ? currentAgent
-          : currentAgent + " → " + nextAgent;
+        const priority = boardPriorityMeta(task);
+        const progress = boardProgressMeta(task, mode);
+        const shortId = boardShortTaskId(task.taskId);
+        const boardStatus = String(task.status || "").toLowerCase();
+        const humanFocus = mode === "agent" && laneId === "human" ? " human-focus" : "";
         const chips = [
+          taskStatusBadge(task.status),
           '<span class="board-chip strong">' + escapeHtml(project) + "</span>",
           '<span class="board-chip">' + escapeHtml(type) + "</span>",
           '<span class="board-chip">' + escapeHtml(stage) + "</span>",
           '<span class="board-chip">tokens ' + escapeHtml(tokens) + "</span>",
         ];
-        if (task.humanApprovalRequired || task.status === "waiting_human") {
+        if (task.humanApprovalRequired || boardStatus === "waiting_human") {
           chips.push('<span class="board-chip strong">needs review</span>');
         }
         return [
-          '<article class="board-card ' + escapeHtml(task.status) + '">',
-          '<div class="head"><div class="id">' + escapeHtml(task.taskId) + "</div>" + taskStatusBadge(task.status) + "</div>",
-          '<h4 class="title"><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title || task.taskId) + "</button></h4>",
+          '<article class="board-card ' + escapeHtml(task.status) + humanFocus + '" data-open-task="' + escapeHtml(task.taskId) + '" role="button" tabindex="0" aria-label="Open task detail for ' + escapeHtml(task.taskId) + '">',
+          '<div class="head">',
+          '<div class="board-ticket"><span class="id">' + escapeHtml(shortId) + '</span><span class="priority-badge ' + escapeHtml(priority.klass) + '">' + escapeHtml(priority.label) + "</span></div>",
+          renderAgentAvatar(currentAgent, "agent", "agent-mini"),
+          "</div>",
+          '<h4 class="title">' + escapeHtml(task.title || task.taskId) + "</h4>",
           '<div class="chip-row">' + chips.join("") + "</div>",
-          '<div class="foot"><div class="owner">' + escapeHtml(owner) + '</div><div class="updated">' + escapeHtml(updatedAt) + "</div></div>",
+          '<div class="board-progress"><div class="board-progress-track"><div class="board-progress-fill ' + escapeHtml(progress.tone) + '" style="width:' + String(progress.percent) + '%;"></div></div><div class="board-progress-meta">' + escapeHtml(progress.text) + "</div></div>",
+          '<div class="foot"><div class="updated">updated ' + escapeHtml(updatedAt) + '</div><div class="next-owner">' + renderAgentAvatar(nextAgent, "next", "agent-avatar") + '<span>Next ' + escapeHtml(nextAgent) + "</span></div></div>",
           "</article>",
         ].join("");
       }
 
+      function renderBoardColumn(column, cards, mode) {
+        const laneClass = mode === "agent" && column.id === "human" ? " agent-human" : "";
+        const columnClass = String(column.klass || "") + laneClass;
+        const cardHtml = cards.length
+          ? cards.map((task) => renderBoardCard(task, mode, column.id)).join("")
+          : '<div class="board-empty">No tasks in this lane.</div>';
+        return [
+          '<section class="board-column ' + escapeHtml(columnClass.trim()) + '">',
+          '<div class="board-column-head"><h3>' + escapeHtml(column.title) + '</h3><span class="board-count">' + fmtNumber(cards.length) + "</span></div>",
+          '<div class="meta muted">' + escapeHtml(column.hint) + "</div>",
+          '<div class="board-stack">',
+          cardHtml,
+          "</div>",
+          "</section>",
+        ].join("");
+      }
+
       async function renderBoard() {
-        const tasks = await api("/api/tasks");
+        const allTasks = await api("/api/tasks");
         const mode = state.boardMode === "agent" ? "agent" : "kanban";
-        const key = mode + "::" + tasks
+        const filter = String(state.boardFilter || "").trim().toLowerCase();
+        const tasks = filter ? allTasks.filter((task) => boardTaskMatchesFilter(task, filter)) : allTasks;
+        const key = mode + "::" + filter + "::" + tasks
           .map((task) => [task.taskId, task.status, task.currentAgent, task.nextAgent, task.currentStage, task.updatedAt].join("|"))
           .join(";");
         if (state.boardRenderedKey === key && document.getElementById("board-root")) return;
 
         const columns = mode === "agent"
           ? [
-            { id: "new", title: "New Queue", hint: "Newly created or not yet assigned", klass: "" },
             { id: "dispatcher", title: "Dispatcher", hint: "Task routing and orchestration", klass: "" },
-            { id: "planner", title: "Planner", hint: "Plan decomposition and sequencing", klass: "" },
-            { id: "research", title: "Researcher", hint: "External discovery and grounding", klass: "" },
-            { id: "experts", title: "Experts", hint: "Implementation by SYNX specialists", klass: "" },
+            { id: "research", title: "Research", hint: "External discovery and grounding", klass: "" },
+            { id: "architect", title: "Architect", hint: "Planning and architecture decisions", klass: "" },
+            { id: "coder", title: "Coder", hint: "Implementation by coding specialists", klass: "" },
             { id: "qa", title: "QA", hint: "Validation and retry loops", klass: "" },
             { id: "human", title: "Human Review", hint: "Waiting for approve/reprove", klass: "" },
             { id: "done", title: "Done", hint: "Completed successfully", klass: "" },
-            { id: "failed", title: "Failed/Blocked", hint: "Needs intervention", klass: "" },
+            { id: "blocked", title: "Blocked", hint: "Failed or blocked tasks", klass: "" },
           ]
           : [
             { id: "backlog", title: "Backlog", hint: "Newly created requests", klass: "kanban-backlog" },
@@ -2799,24 +3149,10 @@ export function buildWebUiHtml(): string {
         }
 
         contentEl.innerHTML = [
-          '<div id="board-root">',
-          '<div class="toolbar"><div class="muted">Auto-updating board: cards move on each poll and realtime event.</div><div class="board-mode"><label for="board-mode" class="muted">View</label><select id="board-mode" class="field-select"><option value="kanban"' + (mode === "kanban" ? " selected" : "") + '>Jira Kanban</option><option value="agent"' + (mode === "agent" ? " selected" : "") + '>Agent Lanes</option></select><div class="muted">' + fmtNumber(tasks.length) + " tasks</div></div></div>",
+          '<div id="board-root" class="mode-' + escapeHtml(mode) + '">',
+          '<div class="toolbar"><div class="muted">Auto-updating board: cards move on each poll and realtime event.</div><div class="board-controls"><div class="board-view-toggle" role="group" aria-label="Board mode"><button type="button" class="board-toggle-btn' + (mode === "kanban" ? " active" : "") + '" data-board-mode="kanban">Kanban</button><button type="button" class="board-toggle-btn' + (mode === "agent" ? " active" : "") + '" data-board-mode="agent">Agent Lanes</button></div><label class="board-filter" for="board-filter"><input id="board-filter" class="field-input" placeholder="Filter by task ID or responsible agent..." value="' + escapeHtml(state.boardFilter || "") + '" /></label><div class="muted">' + fmtNumber(tasks.length) + " of " + fmtNumber(allTasks.length) + " tasks</div></div></div>",
           '<div class="board-columns">',
-          columns.map((column) => {
-            const cards = byColumn[column.id] || [];
-            const cardHtml = cards.length
-              ? cards.map((task) => renderBoardCard(task, mode)).join("")
-              : '<div class="empty">No tasks in this lane.</div>';
-            return [
-              '<section class="board-column ' + escapeHtml(column.klass || "") + '">',
-              "<h3>" + escapeHtml(column.title) + "</h3>",
-              '<div class="meta muted">' + escapeHtml(column.hint) + " • " + fmtNumber(cards.length) + "</div>",
-              '<div class="board-stack">',
-              cardHtml,
-              "</div>",
-              "</section>",
-            ].join("");
-          }).join(""),
+          columns.map((column) => renderBoardColumn(column, byColumn[column.id] || [], mode)).join(""),
           "</div>",
           "</div>",
         ].join("");
@@ -3201,6 +3537,18 @@ export function buildWebUiHtml(): string {
           return;
         }
 
+        const boardModeTarget = target.closest("[data-board-mode]");
+        const boardMode = boardModeTarget instanceof HTMLElement ? String(boardModeTarget.dataset.boardMode || "") : "";
+        if (boardMode === "kanban" || boardMode === "agent") {
+          const normalizedMode = boardMode === "agent" ? "agent" : "kanban";
+          if (state.boardMode !== normalizedMode) {
+            state.boardMode = normalizedMode;
+            state.boardRenderedKey = "";
+            requestRender("user");
+          }
+          return;
+        }
+
         const themeTarget = target.closest("[data-theme-option]");
         const themeOption = themeTarget instanceof HTMLElement ? themeTarget.dataset.themeOption : "";
         if (themeOption === "light" || themeOption === "dark" || themeOption === "system") {
@@ -3324,6 +3672,10 @@ export function buildWebUiHtml(): string {
           state.commandRefQuery = target.value || "";
           renderCommandReference();
         }
+        if (target instanceof HTMLInputElement && target.id === "board-filter") {
+          state.boardFilter = target.value || "";
+          if (state.view === "board") requestRender("user");
+        }
         if (target instanceof HTMLInputElement && target.id === "global-search-input") {
           state.search = target.value || "";
         }
@@ -3336,6 +3688,16 @@ export function buildWebUiHtml(): string {
         if (event.key === "Escape") {
           closeSidebarOverlay();
           return;
+        }
+        const keyTarget = event.target;
+        if (keyTarget instanceof HTMLElement && keyTarget.classList.contains("board-card") && (event.key === "Enter" || event.key === " ")) {
+          const taskId = String(keyTarget.dataset.openTask || "");
+          if (taskId) {
+            event.preventDefault();
+            state.selectedTaskId = taskId;
+            setView("detail");
+            return;
+          }
         }
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) return;
