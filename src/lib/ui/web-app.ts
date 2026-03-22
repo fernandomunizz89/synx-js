@@ -486,6 +486,9 @@ export function buildWebUiHtml(): string {
         font-size: 1rem;
         font-weight: 700;
       }
+      #react-header-search-root {
+        display: contents;
+      }
       .global-search {
         display: flex;
         align-items: center;
@@ -2856,7 +2859,6 @@ export function buildWebUiHtml(): string {
       const connectivityLabelEl = document.getElementById("connectivity-label");
       const headerNotifCountEl = document.getElementById("header-notif-count");
       const runtimeStatusPillEl = document.getElementById("runtime-status-pill");
-      const globalSearchInputEl = document.getElementById("global-search-input");
       const locale = (() => {
         try {
           return Intl.DateTimeFormat().resolvedOptions().locale || (navigator && navigator.language) || undefined;
@@ -2874,6 +2876,19 @@ export function buildWebUiHtml(): string {
         analytics: { breadcrumb: "Analytics", title: "Runtime Analytics" },
       };
       const UI_PREFS_STORAGE_KEY = "synx-ui-prefs-v1";
+
+      function resolveGlobalSearchInput() {
+        const reactInput = document.getElementById("global-search-input-react");
+        if (reactInput instanceof HTMLInputElement) return reactInput;
+        const fallbackInput = document.getElementById("global-search-input");
+        if (fallbackInput instanceof HTMLInputElement) return fallbackInput;
+        return null;
+      }
+
+      function isGlobalSearchInput(target) {
+        return target instanceof HTMLInputElement
+          && (target.id === "global-search-input" || target.id === "global-search-input-react");
+      }
 
       function safeReadLocalStorage(key) {
         try {
@@ -5661,6 +5676,8 @@ export function buildWebUiHtml(): string {
 
         contentEl.innerHTML = [
           '<div id="board-root" class="mode-' + escapeHtml(mode) + '">',
+          '<div id="react-task-board-root"></div>',
+          '<div id="board-fallback">',
           '<div class="toolbar"><div class="muted">Auto-updating board: cards move on each poll and realtime event.</div><div class="board-controls"><div class="board-view-toggle" role="group" aria-label="Board mode"><button type="button" class="board-toggle-btn' + (mode === "kanban" ? " active" : "") + '" data-board-mode="kanban">Kanban</button><button type="button" class="board-toggle-btn' + (mode === "agent" ? " active" : "") + '" data-board-mode="agent">Agent Lanes</button></div><label class="board-filter" for="board-filter"><input id="board-filter" class="field-input" placeholder="Filter by task ID or responsible agent..." value="' + escapeHtml(state.boardFilter || "") + '" /></label><div class="muted">' + fmtNumber(tasks.length) + " of " + fmtNumber(allTasks.length) + " tasks</div></div></div>",
           '<div class="board-controls" style="margin-bottom:10px;">',
           '<span class="muted">Quick Filters:</span>',
@@ -5673,8 +5690,32 @@ export function buildWebUiHtml(): string {
           columns.map((column) => renderBoardColumn(column, byColumn[column.id] || [], mode)).join(""),
           "</div>",
           "</div>",
+          "</div>",
         ].join("");
+        mountReactTaskBoardIfReady();
         state.boardRenderedKey = key;
+      }
+
+      function mountReactTaskBoardIfReady() {
+        const root = document.getElementById("react-task-board-root");
+        if (!(root instanceof HTMLElement)) return false;
+        const ui = window.__synxReactUi;
+        if (!ui || typeof ui.mountSynxTaskBoard !== "function") return false;
+        try {
+          const mounted = ui.mountSynxTaskBoard({
+            rootId: "react-task-board-root",
+            fallbackId: "board-fallback",
+            initialMode: state.boardMode === "agent" ? "agent" : "kanban",
+            initialFilter: state.boardFilter || "",
+          });
+          return Boolean(mounted);
+        } catch {
+          return false;
+        }
+      }
+
+      function isReactBoardMounted() {
+        return Boolean(document.querySelector("#react-task-board-root [data-react-board='mounted']"));
       }
 
       async function renderReviewQueue() {
@@ -6362,6 +6403,28 @@ export function buildWebUiHtml(): string {
         state.analyticsRenderedKey = analyticsKey;
       }
 
+      window.addEventListener("synx-react-board-state", (event) => {
+        const detail = event && event.detail && typeof event.detail === "object" ? event.detail : null;
+        if (!detail) return;
+        const mode = String(detail.mode || "");
+        const filter = String(detail.filter || "");
+        const normalizedMode = mode === "agent" ? "agent" : "kanban";
+        if (state.boardMode !== normalizedMode) {
+          state.boardMode = normalizedMode;
+        }
+        if (state.boardFilter !== filter) {
+          state.boardFilter = filter;
+        }
+        syncUrlState();
+        persistUiPrefs();
+      });
+
+      window.addEventListener("synx-react-ui-ready", () => {
+        if (state.view === "board") {
+          mountReactTaskBoardIfReady();
+        }
+      });
+
       document.addEventListener("click", (event) => {
         const target = event.target;
         // Accept SVG/icon clicks inside buttons and links, not only HTMLElement targets.
@@ -6715,7 +6778,7 @@ export function buildWebUiHtml(): string {
           persistUiPrefs();
           if (state.view === "board") requestRender("user");
         }
-        if (target instanceof HTMLInputElement && target.id === "global-search-input") {
+        if (isGlobalSearchInput(target)) {
           state.search = target.value || "";
         }
         if (target instanceof HTMLInputElement && target.id === "analytics-from") {
@@ -6870,7 +6933,7 @@ export function buildWebUiHtml(): string {
         }
         const target = event.target;
         if (!(target instanceof HTMLInputElement)) return;
-        if (target.id !== "global-search-input" || event.key !== "Enter") return;
+        if (!isGlobalSearchInput(target) || event.key !== "Enter") return;
         event.preventDefault();
         state.search = target.value.trim();
         if (state.view !== "tasks") setView("tasks");
@@ -6985,7 +7048,11 @@ export function buildWebUiHtml(): string {
                 if (state.view === "review" && (type === "task.review_required" || type === "task.decision_recorded" || type === "task.updated")) {
                   requestRender("poll");
                 }
-                if (state.view === "board" && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
+                if (
+                  state.view === "board"
+                  && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")
+                  && !isReactBoardMounted()
+                ) {
                   requestRender("poll");
                 }
                 if (state.view === "analytics" && (type === "task.updated" || type === "task.decision_recorded" || type === "metrics.updated")) {
@@ -7022,6 +7089,7 @@ export function buildWebUiHtml(): string {
       if (commandPaletteFilterEl instanceof HTMLInputElement) {
         commandPaletteFilterEl.value = state.commandPaletteQuery;
       }
+      const globalSearchInputEl = resolveGlobalSearchInput();
       if (globalSearchInputEl instanceof HTMLInputElement) {
         globalSearchInputEl.value = state.search;
       }
@@ -7056,15 +7124,28 @@ export function buildWebUiHtml(): string {
     </script>
     <script type="module">
       (async () => {
-        const root = document.getElementById("react-task-assistant-root");
-        if (!(root instanceof HTMLElement)) return;
         try {
           const module = await import("/ui-assets/task-assistant.react.js");
-          if (!module || typeof module.mountSynxTaskAssistant !== "function") return;
-          const mounted = module.mountSynxTaskAssistant({ rootId: "react-task-assistant-root" });
-          if (!mounted) return;
-          const fallback = document.getElementById("simple-action-fallback");
-          if (fallback instanceof HTMLElement) fallback.setAttribute("hidden", "");
+          if (!module || typeof module !== "object") return;
+          window.__synxReactUi = module;
+          window.dispatchEvent(new CustomEvent("synx-react-ui-ready"));
+
+          if (typeof module.mountSynxTaskAssistant === "function") {
+            const mountedAssistant = module.mountSynxTaskAssistant({ rootId: "react-task-assistant-root" });
+            if (mountedAssistant) {
+              const fallback = document.getElementById("simple-action-fallback");
+              if (fallback instanceof HTMLElement) fallback.setAttribute("hidden", "");
+            }
+          }
+          if (typeof module.mountSynxHeaderSearch === "function") {
+            const fallbackInput = document.getElementById("global-search-input");
+            const initialValue = fallbackInput instanceof HTMLInputElement ? fallbackInput.value : "";
+            module.mountSynxHeaderSearch({
+              rootId: "react-header-search-root",
+              fallbackId: "header-search-fallback",
+              initialValue,
+            });
+          }
         } catch {
           // Keep legacy fallback visible if React asset is unavailable.
         }

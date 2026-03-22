@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 
 type SimpleAction =
   | "new"
@@ -22,6 +22,18 @@ type TaskSummary = {
 
 type TaskDetail = TaskSummary & {
   recentEvents?: string[];
+};
+
+type BoardMode = "kanban" | "agent";
+
+type BoardTask = TaskSummary & {
+  project?: string;
+  type?: string;
+  nextAgent?: string;
+  humanApprovalRequired?: boolean;
+  consumption?: {
+    estimatedTotalTokens?: number;
+  };
 };
 
 type ApiEnvelope<T> = {
@@ -60,6 +72,123 @@ function shortTaskId(taskId: string): string {
   const match = String(taskId || "").match(/(\d+)/);
   if (!match) return taskId;
   return `#TX-${match[1].padStart(3, "0")}`;
+}
+
+function boardColumnForTask(task: BoardTask): string {
+  const status = String(task.status || "");
+  const currentAgent = String(task.currentAgent || "").toLowerCase();
+  const nextAgent = String(task.nextAgent || "").toLowerCase();
+  const stage = String(task.currentStage || "").toLowerCase();
+  const context = [currentAgent, nextAgent, stage].join(" ");
+
+  if (status === "done") return "done";
+  if (status === "failed" || status === "blocked" || status === "archived") return "blocked";
+  if (task.humanApprovalRequired || status === "waiting_human" || context.includes("human review")) return "human";
+  if (context.includes("dispatcher")) return "dispatcher";
+  if (context.includes("research")) return "research";
+  if (context.includes("planner") || context.includes("architect")) return "architect";
+  if (context.includes("qa")) return "qa";
+  if (
+    context.includes("expert")
+    || context.includes("specialist")
+    || context.includes("engineer")
+    || context.includes("front")
+    || context.includes("back")
+    || context.includes("mobile")
+    || context.includes("seo")
+    || context.includes("coder")
+    || status === "waiting_agent"
+    || status === "in_progress"
+  ) {
+    return "coder";
+  }
+  return "dispatcher";
+}
+
+function boardKanbanColumnForTask(task: BoardTask): string {
+  const status = String(task.status || "");
+  const stage = String(task.currentStage || "").toLowerCase();
+  if (status === "done") return "done";
+  if (status === "failed" || status === "blocked" || status === "archived") return "blocked";
+  if (status === "waiting_human" || task.humanApprovalRequired || stage.includes("review")) return "review";
+  if (status === "in_progress") return "progress";
+  if (status === "waiting_agent") return "todo";
+  if (status === "new") return "backlog";
+  return "todo";
+}
+
+function boardTaskMatchesFilter(task: BoardTask, filterQuery: string): boolean {
+  const query = String(filterQuery || "").trim().toLowerCase();
+  if (!query) return true;
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const haystack = [
+    task.taskId,
+    task.title,
+    task.project,
+    task.currentAgent,
+    task.nextAgent,
+    task.currentStage,
+    task.status,
+  ].join(" ").toLowerCase();
+  const tokenCount = Number(task?.consumption?.estimatedTotalTokens || 0);
+  const status = String(task.status || "").toLowerCase();
+
+  for (const token of tokens) {
+    if (token.startsWith("status:")) {
+      const rawStatus = token.slice("status:".length);
+      const normalized = rawStatus === "human_review" || rawStatus === "review_required"
+        ? "waiting_human"
+        : rawStatus;
+      if (normalized === "blocked") {
+        if (!(status === "failed" || status === "blocked" || status === "archived")) return false;
+      } else if (normalized === "active") {
+        if (!(status === "in_progress" || status === "waiting_agent")) return false;
+      } else if (status !== normalized) {
+        return false;
+      }
+      continue;
+    }
+    if (token.startsWith("agent:")) {
+      const agentQuery = token.slice("agent:".length);
+      const agentHay = (String(task.currentAgent || "") + " " + String(task.nextAgent || "")).toLowerCase();
+      if (!agentHay.includes(agentQuery)) return false;
+      continue;
+    }
+    if (token === "tokens:high" || token === "consumption:high") {
+      if (!(tokenCount >= 120000)) return false;
+      continue;
+    }
+    if (token.startsWith("id:")) {
+      const idNeedle = token.slice("id:".length);
+      if (!String(task.taskId || "").toLowerCase().includes(idNeedle)) return false;
+      continue;
+    }
+    if (!haystack.includes(token)) return false;
+  }
+  return true;
+}
+
+function boardColumns(mode: BoardMode): Array<{ id: string; title: string; hint: string; klass?: string }> {
+  if (mode === "agent") {
+    return [
+      { id: "dispatcher", title: "Dispatcher", hint: "Task routing and orchestration" },
+      { id: "research", title: "Research", hint: "External discovery and grounding" },
+      { id: "architect", title: "Architect", hint: "Planning and architecture decisions" },
+      { id: "coder", title: "Coder", hint: "Implementation by coding specialists" },
+      { id: "qa", title: "QA", hint: "Validation and retry loops" },
+      { id: "human", title: "Human Review", hint: "Waiting for approve/reprove" },
+      { id: "done", title: "Done", hint: "Completed successfully" },
+      { id: "blocked", title: "Blocked", hint: "Failed or blocked tasks" },
+    ];
+  }
+  return [
+    { id: "backlog", title: "Backlog", hint: "Newly created requests", klass: "kanban-backlog" },
+    { id: "todo", title: "To Do", hint: "Queued for next agent execution", klass: "kanban-todo" },
+    { id: "progress", title: "In Progress", hint: "Active implementation / execution", klass: "kanban-progress" },
+    { id: "review", title: "In Review", hint: "Waiting for human decision", klass: "kanban-review" },
+    { id: "done", title: "Done", hint: "Completed successfully", klass: "kanban-done" },
+    { id: "blocked", title: "Blocked", hint: "Failed, blocked or archived", klass: "kanban-blocked" },
+  ];
 }
 
 function parseCreatedTaskId(lines: Array<{ message?: string }> = []): string {
@@ -381,11 +510,209 @@ function TaskAssistantApp(): React.JSX.Element {
   );
 }
 
+function HeaderSearchApp(props: { initialValue: string }): React.JSX.Element {
+  const [search, setSearch] = useState(props.initialValue);
+  return (
+    <label className="global-search" htmlFor="global-search-input-react">
+      <span className="search-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+      </span>
+      <input
+        id="global-search-input-react"
+        className="field-input"
+        autoComplete="off"
+        placeholder="Buscar tarefas, agentes, eventos ou IDs..."
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function TaskBoardApp(props: { initialMode: BoardMode; initialFilter: string }): React.JSX.Element {
+  const [mode, setMode] = useState<BoardMode>(props.initialMode);
+  const [filter, setFilter] = useState(props.initialFilter);
+  const [allTasks, setAllTasks] = useState<BoardTask[]>([]);
+
+  const refreshTasks = useCallback(async () => {
+    const rows = await requestJson<BoardTask[]>("/api/tasks");
+    setAllTasks(Array.isArray(rows) ? rows : []);
+  }, []);
+
+  useEffect(() => {
+    void refreshTasks();
+  }, [refreshTasks]);
+
+  useEffect(() => {
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource("/api/stream");
+      const refresh = () => {
+        void refreshTasks();
+      };
+      source.addEventListener("task.updated", refresh);
+      source.addEventListener("task.review_required", refresh);
+      source.addEventListener("task.decision_recorded", refresh);
+    } catch {
+      source = null;
+    }
+    return () => {
+      if (source) source.close();
+    };
+  }, [refreshTasks]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("synx-react-board-state", {
+      detail: { mode, filter },
+    }));
+  }, [mode, filter]);
+
+  const tasks = useMemo(() => {
+    const normalized = String(filter || "").trim().toLowerCase();
+    return normalized ? allTasks.filter((task) => boardTaskMatchesFilter(task, normalized)) : allTasks;
+  }, [allTasks, filter]);
+
+  const columns = useMemo(() => boardColumns(mode), [mode]);
+  const byColumn = useMemo(() => {
+    const map: Record<string, BoardTask[]> = {};
+    for (const column of columns) map[column.id] = [];
+    for (const task of tasks) {
+      const columnId = mode === "agent" ? boardColumnForTask(task) : boardKanbanColumnForTask(task);
+      if (!Array.isArray(map[columnId])) map[columnId] = [];
+      map[columnId].push(task);
+    }
+    for (const column of columns) {
+      map[column.id].sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+    }
+    return map;
+  }, [columns, mode, tasks]);
+
+  return (
+    <div className={`mode-${mode}`} data-react-board="mounted">
+      <div className="toolbar">
+        <div className="muted">Realtime board: atualiza com eventos e filtros sem recarregar.</div>
+        <div className="board-controls">
+          <div className="board-view-toggle" role="group" aria-label="Board mode">
+            <button type="button" className={`board-toggle-btn${mode === "kanban" ? " active" : ""}`} onClick={() => setMode("kanban")}>Kanban</button>
+            <button type="button" className={`board-toggle-btn${mode === "agent" ? " active" : ""}`} onClick={() => setMode("agent")}>Agent Lanes</button>
+          </div>
+          <label className="board-filter" htmlFor="board-filter-react">
+            <input
+              id="board-filter-react"
+              className="field-input"
+              placeholder="Filter by task ID or responsible agent..."
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            />
+          </label>
+          <div className="muted">{tasks.length} of {allTasks.length} tasks</div>
+        </div>
+      </div>
+
+      <div className="board-controls" style={{ marginBottom: "10px" }}>
+        <span className="muted">Quick Filters:</span>
+        <button type="button" className={`btn${filter === "status:blocked" ? " approve" : ""}`} onClick={() => setFilter("status:blocked")}>Blocked Tasks</button>
+        <button type="button" className={`btn${filter === "tokens:high" ? " approve" : ""}`} onClick={() => setFilter("tokens:high")}>High Consumption</button>
+        <button type="button" className={`btn${filter === "status:waiting_human" ? " approve" : ""}`} onClick={() => setFilter("status:waiting_human")}>My Reviews</button>
+        <button type="button" className="btn" onClick={() => setFilter("")}>Clear</button>
+      </div>
+
+      <div className="board-columns">
+        {columns.map((column) => {
+          const cards = byColumn[column.id] || [];
+          const laneClass = mode === "agent" && column.id === "human" ? " agent-human" : "";
+          const columnClass = `${column.klass || ""}${laneClass}`.trim();
+          return (
+            <section className={`board-column ${columnClass}`} key={column.id}>
+              <div className="board-column-head">
+                <h3>{column.title}</h3>
+                <span className="board-count">{cards.length}</span>
+              </div>
+              <div className="meta muted">{column.hint}</div>
+              <div className="board-stack">
+                {cards.length ? cards.map((task) => (
+                  <article
+                    key={task.taskId}
+                    className={`board-card ${task.status || ""}`}
+                    data-open-task={task.taskId}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open task detail for ${task.taskId}`}
+                  >
+                    <div className="head">
+                      <div className="board-ticket">
+                        <span className="id">{shortTaskId(task.taskId)}</span>
+                      </div>
+                    </div>
+                    <h4 className="title">{task.title || task.taskId}</h4>
+                    <div className="chip-row">
+                      <span className={`status ${task.status || "unknown"}`}>{task.status || "unknown"}</span>
+                      <span className="board-chip strong">{task.project || "General"}</span>
+                      <span className="board-chip">{task.currentStage || "unscoped"}</span>
+                    </div>
+                    <div className="foot">
+                      <div className="updated">updated {formatRelative(task.updatedAt)}</div>
+                      <div className="next-owner">
+                        <span>Next {task.nextAgent || "n/a"}</span>
+                      </div>
+                    </div>
+                  </article>
+                )) : <div className="board-empty">No tasks in this lane.</div>}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const islandRoots = new WeakMap<HTMLElement, Root>();
+
+function renderIsland(rootElement: HTMLElement, node: React.JSX.Element): void {
+  let root = islandRoots.get(rootElement);
+  if (!root) {
+    root = createRoot(rootElement);
+    islandRoots.set(rootElement, root);
+  }
+  root.render(node);
+}
+
 export function mountSynxTaskAssistant(options?: { rootId?: string }): boolean {
   const rootId = String(options?.rootId || "react-task-assistant-root");
   const rootElement = document.getElementById(rootId);
   if (!(rootElement instanceof HTMLElement)) return false;
-  const root = createRoot(rootElement);
-  root.render(<TaskAssistantApp />);
+  renderIsland(rootElement, <TaskAssistantApp />);
+  return true;
+}
+
+export function mountSynxHeaderSearch(options?: { rootId?: string; fallbackId?: string; initialValue?: string }): boolean {
+  const rootId = String(options?.rootId || "react-header-search-root");
+  const fallbackId = String(options?.fallbackId || "header-search-fallback");
+  const rootElement = document.getElementById(rootId);
+  if (!(rootElement instanceof HTMLElement)) return false;
+  const fallback = document.getElementById(fallbackId);
+  if (fallback instanceof HTMLElement) fallback.setAttribute("hidden", "");
+  renderIsland(rootElement, <HeaderSearchApp initialValue={String(options?.initialValue || "")} />);
+  return true;
+}
+
+export function mountSynxTaskBoard(options?: {
+  rootId?: string;
+  fallbackId?: string;
+  initialMode?: BoardMode;
+  initialFilter?: string;
+}): boolean {
+  const rootId = String(options?.rootId || "react-task-board-root");
+  const fallbackId = String(options?.fallbackId || "board-fallback");
+  const rootElement = document.getElementById(rootId);
+  if (!(rootElement instanceof HTMLElement)) return false;
+  const fallback = document.getElementById(fallbackId);
+  if (fallback instanceof HTMLElement) fallback.setAttribute("hidden", "");
+  const initialMode = options?.initialMode === "agent" ? "agent" : "kanban";
+  renderIsland(rootElement, <TaskBoardApp initialMode={initialMode} initialFilter={String(options?.initialFilter || "")} />);
   return true;
 }

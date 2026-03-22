@@ -56,6 +56,8 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('id="app-sidebar"');
     expect(html).toContain('id="header-screen-title"');
     expect(html).toContain('id="header-view-key"');
+    expect(html).toContain('id="react-header-search-root"');
+    expect(html).toContain('id="header-search-fallback"');
     expect(html).toContain('id="global-search-input"');
     expect(html).toContain('id="connectivity-indicator"');
     expect(html).toContain('id="runtime-status-pill"');
@@ -68,6 +70,11 @@ describe("lib/ui/web-app", () => {
     expect(html).not.toContain('setInterval(() => {');
     expect(html).toContain("refreshSimpleProgress()");
     expect(html).toContain('new EventSource("/api/stream")');
+    expect(html).toContain('id="react-task-board-root"');
+    expect(html).toContain('id="board-fallback"');
+    expect(html).toContain("mountReactTaskBoardIfReady()");
+    expect(html).toContain("synx-react-board-state");
+    expect(html).toContain("synx-react-ui-ready");
     expect(html).toContain("refreshGlobalSnapshot()");
     expect(html).toContain("/api/stream");
     expect(html).toContain("/approve");

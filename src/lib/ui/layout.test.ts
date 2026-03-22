@@ -21,6 +21,8 @@ describe("lib/ui/layout", () => {
     const header = buildHeader();
     expect(header).toContain("app-header");
     expect(header).toContain('id="header-screen-title"');
+    expect(header).toContain('id="react-header-search-root"');
+    expect(header).toContain('id="header-search-fallback"');
     expect(header).toContain('id="global-search-input"');
     expect(header).toContain('id="connectivity-indicator"');
     expect(header).toContain('id="header-notif-count"');

@@ -70,6 +70,9 @@ describe.sequential("lib/ui/server", () => {
       expect(rootResponse.status).toBe(200);
       expect(await rootResponse.text()).toContain("ui");
 
+      const reactAssetResponse = await fetch(`${server.baseUrl}/ui-assets/task-assistant.react.js`);
+      expect([200, 404]).toContain(reactAssetResponse.status);
+
       const overviewResponse = await fetch(`${server.baseUrl}/api/overview`);
       expect(overviewResponse.status).toBe(200);
       const overview = await overviewResponse.json() as { ok: boolean; data: { counts: { total: number } } };
