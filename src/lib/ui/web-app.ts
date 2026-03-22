@@ -222,6 +222,7 @@ export function buildWebUiHtml(): string {
         <button data-view="review">Review Queue</button>
         <button data-view="detail">Task Detail</button>
         <button data-view="live">Live Stream</button>
+        <button data-view="analytics">Analytics</button>
       </nav>
       <section class="card">
         <div id="content"></div>
@@ -435,6 +436,7 @@ export function buildWebUiHtml(): string {
           if (state.view === "review") await renderReviewQueue();
           if (state.view === "detail") await renderDetail();
           if (state.view === "live") renderLive();
+          if (state.view === "analytics") await renderAnalytics();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown UI error";
           contentEl.innerHTML = '<div class="error">Failed to load view: ' + escapeHtml(message) + "</div>";
@@ -469,6 +471,61 @@ export function buildWebUiHtml(): string {
             "</tr>",
           ].join("")).join(""),
           "</tbody></table>",
+        ].join("");
+      }
+
+      async function renderAnalytics() {
+        const report = await api("/api/metrics/advanced?limit=12&days=30");
+        const topTaskRows = (report.tasks || []).slice(0, 6).map((row) => {
+          return "<tr>"
+            + "<td>" + escapeHtml(row.title || row.taskId || "") + "</td>"
+            + "<td>" + escapeHtml(row.project || "") + "</td>"
+            + "<td>" + fmtNumber(row.estimatedTotalTokens) + "</td>"
+            + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
+            + "</tr>";
+        }).join("");
+        const topAgentRows = (report.agents || []).slice(0, 6).map((row) => {
+          return "<tr>"
+            + "<td>" + escapeHtml(row.agent || "") + "</td>"
+            + "<td>" + fmtNumber(row.stageCount) + "</td>"
+            + "<td>" + fmtNumber(row.estimatedTotalTokens) + "</td>"
+            + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
+            + "<td>" + (Number(row.approvalRate || 0) * 100).toFixed(1) + "%</td>"
+            + "</tr>";
+        }).join("");
+        const topProjectRows = (report.projects || []).slice(0, 6).map((row) => {
+          return "<tr>"
+            + "<td>" + escapeHtml(row.project || "") + "</td>"
+            + "<td>" + fmtNumber(row.taskCount) + "</td>"
+            + "<td>" + fmtNumber(row.estimatedTotalTokens) + "</td>"
+            + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
+            + "</tr>";
+        }).join("");
+        const timelineRows = (report.timeline || []).slice(-8).map((row) => {
+          return "<tr>"
+            + "<td>" + escapeHtml(row.date || "") + "</td>"
+            + "<td>" + fmtNumber(row.taskCount) + "</td>"
+            + "<td>" + fmtNumber(row.estimatedTotalTokens) + "</td>"
+            + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
+            + "</tr>";
+        }).join("");
+        const bottleneck = (report.bottlenecks || [])[0] || null;
+        const qaLoops = report.qaLoops || { tasksWithQa: 0, totalQaLoops: 0, avgQaLoopsPerTask: 0 };
+        contentEl.innerHTML = [
+          '<div class="grid">',
+          '<div class="metric"><div class="muted">Tasks with QA</div><strong>' + fmtNumber(qaLoops.tasksWithQa) + "</strong></div>",
+          '<div class="metric"><div class="muted">Total QA Loops</div><strong>' + fmtNumber(qaLoops.totalQaLoops) + "</strong></div>",
+          '<div class="metric"><div class="muted">Avg QA Loops/Task</div><strong>' + Number(qaLoops.avgQaLoopsPerTask || 0).toFixed(2) + "</strong></div>",
+          '<div class="metric"><div class="muted">Top Bottleneck</div><strong>' + escapeHtml(bottleneck ? bottleneck.stage : "N/A") + "</strong></div>",
+          "</div>",
+          '<h3 style="margin:18px 0 8px;">Top Tasks by Consumption</h3>',
+          topTaskRows ? '<table><thead><tr><th>Task</th><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topTaskRows + "</tbody></table>" : '<div class="empty">No task analytics yet.</div>',
+          '<h3 style="margin:18px 0 8px;">Top Agents</h3>',
+          topAgentRows ? '<table><thead><tr><th>Agent</th><th>Stages</th><th>Tokens</th><th>Cost</th><th>Approval Rate</th></tr></thead><tbody>' + topAgentRows + "</tbody></table>" : '<div class="empty">No agent analytics yet.</div>',
+          '<h3 style="margin:18px 0 8px;">Top Projects</h3>',
+          topProjectRows ? '<table><thead><tr><th>Project</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topProjectRows + "</tbody></table>" : '<div class="empty">No project analytics yet.</div>',
+          '<h3 style="margin:18px 0 8px;">30-day Timeline</h3>',
+          timelineRows ? '<table><thead><tr><th>Date</th><th>Tasks</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + timelineRows + "</tbody></table>" : '<div class="empty">No timeline points yet.</div>',
         ].join("");
       }
 
@@ -585,6 +642,9 @@ export function buildWebUiHtml(): string {
                 }
                 if (state.view === "review" && type === "task.review_required") {
                   void renderReviewQueue();
+                }
+                if (state.view === "analytics" && (type === "task.updated" || type === "task.decision_recorded" || type === "metrics.updated")) {
+                  void renderAnalytics();
                 }
               } catch {
                 // ignore malformed stream event payloads

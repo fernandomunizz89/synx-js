@@ -86,6 +86,38 @@ describe.sequential("lib/ui/server", () => {
       expect(taskDetail.ok).toBe(true);
       expect(taskDetail.data.taskId).toBe(created.taskId);
 
+      const tasksMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/tasks`);
+      expect(tasksMetricsResponse.status).toBe(200);
+      const tasksMetrics = await tasksMetricsResponse.json() as { ok: boolean; data: unknown[] };
+      expect(tasksMetrics.ok).toBe(true);
+      expect(Array.isArray(tasksMetrics.data)).toBe(true);
+
+      const agentsMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/agents`);
+      expect(agentsMetricsResponse.status).toBe(200);
+      const agentsMetrics = await agentsMetricsResponse.json() as { ok: boolean; data: unknown[] };
+      expect(agentsMetrics.ok).toBe(true);
+      expect(Array.isArray(agentsMetrics.data)).toBe(true);
+
+      const projectsMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/projects`);
+      expect(projectsMetricsResponse.status).toBe(200);
+      const projectsMetrics = await projectsMetricsResponse.json() as { ok: boolean; data: unknown[] };
+      expect(projectsMetrics.ok).toBe(true);
+      expect(Array.isArray(projectsMetrics.data)).toBe(true);
+
+      const timelineMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/timeline`);
+      expect(timelineMetricsResponse.status).toBe(200);
+      const timelineMetrics = await timelineMetricsResponse.json() as { ok: boolean; data: unknown[] };
+      expect(timelineMetrics.ok).toBe(true);
+      expect(Array.isArray(timelineMetrics.data)).toBe(true);
+
+      const advancedMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/advanced`);
+      expect(advancedMetricsResponse.status).toBe(200);
+      const advancedMetrics = await advancedMetricsResponse.json() as { ok: boolean; data: { tasks?: unknown[]; agents?: unknown[]; projects?: unknown[] } };
+      expect(advancedMetrics.ok).toBe(true);
+      expect(Array.isArray(advancedMetrics.data.tasks)).toBe(true);
+      expect(Array.isArray(advancedMetrics.data.agents)).toBe(true);
+      expect(Array.isArray(advancedMetrics.data.projects)).toBe(true);
+
       const streamController = new AbortController();
       const streamResponse = await fetch(`${server.baseUrl}/api/stream`, {
         signal: streamController.signal,

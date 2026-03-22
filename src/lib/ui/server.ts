@@ -6,6 +6,13 @@ import { applyTaskRollback } from "../services/task-rollback.js";
 import { loadTaskMeta } from "../task.js";
 import { createUiRealtime, type UiStreamEvent } from "./realtime.js";
 import { writeRuntimeControl } from "../runtime.js";
+import {
+  getAdvancedAnalyticsReport,
+  getAgentConsumptionRanking,
+  getMetricsTimeline,
+  getProjectConsumptionRanking,
+  getTaskConsumptionRanking,
+} from "../observability/analytics.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -155,6 +162,43 @@ export function createUiRequestHandler(options: {
         const hoursRaw = Number(incomingUrl.searchParams.get("hours") || "24");
         const hours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? hoursRaw : 24;
         sendJson(res, 200, { ok: true, data: await getMetricsOverview(hours) });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/metrics/tasks") {
+        const limitRaw = Number(incomingUrl.searchParams.get("limit") || "25");
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 25;
+        sendJson(res, 200, { ok: true, data: await getTaskConsumptionRanking(limit) });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/metrics/agents") {
+        const limitRaw = Number(incomingUrl.searchParams.get("limit") || "25");
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 25;
+        sendJson(res, 200, { ok: true, data: await getAgentConsumptionRanking(limit) });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/metrics/projects") {
+        const limitRaw = Number(incomingUrl.searchParams.get("limit") || "25");
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 25;
+        sendJson(res, 200, { ok: true, data: await getProjectConsumptionRanking(limit) });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/metrics/timeline") {
+        const daysRaw = Number(incomingUrl.searchParams.get("days") || "30");
+        const days = Number.isFinite(daysRaw) && daysRaw > 0 ? daysRaw : 30;
+        sendJson(res, 200, { ok: true, data: await getMetricsTimeline(days) });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/metrics/advanced") {
+        const limitRaw = Number(incomingUrl.searchParams.get("limit") || "25");
+        const daysRaw = Number(incomingUrl.searchParams.get("days") || "30");
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 25;
+        const days = Number.isFinite(daysRaw) && daysRaw > 0 ? daysRaw : 30;
+        sendJson(res, 200, { ok: true, data: await getAdvancedAnalyticsReport({ limit, days }) });
         return;
       }
 

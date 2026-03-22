@@ -10,7 +10,9 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('data-view="review"');
     expect(html).toContain('data-view="detail"');
     expect(html).toContain('data-view="live"');
+    expect(html).toContain('data-view="analytics"');
     expect(html).toContain("/api/overview");
+    expect(html).toContain("/api/metrics/advanced");
     expect(html).toContain("setInterval(render, state.pollMs)");
     expect(html).toContain("/api/stream");
     expect(html).toContain("/approve");
