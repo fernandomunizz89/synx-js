@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   loadResolvedProjectConfig: vi.fn<() => Promise<{ projectName: string }>>(),
-  createTask: vi.fn<() => Promise<{ taskId: string; taskPath: string }>>(),
-  loadTaskMeta: vi.fn<() => Promise<any>>(),
-  saveTaskMeta: vi.fn<() => Promise<void>>(),
-  writeJson: vi.fn<() => Promise<void>>(),
-  recordPipelineApproval: vi.fn<() => Promise<void>>(),
-  recordPipelineReproval: vi.fn<() => Promise<void>>(),
-  logTaskEvent: vi.fn<() => Promise<void>>(),
+  createTask: vi.fn<(input: unknown) => Promise<{ taskId: string; taskPath: string }>>(),
+  loadTaskMeta: vi.fn<(taskId: string) => Promise<any>>(),
+  saveTaskMeta: vi.fn<(taskId: string, meta: unknown) => Promise<void>>(),
+  writeJson: vi.fn<(filePath: string, value: unknown) => Promise<void>>(),
+  recordPipelineApproval: vi.fn<(taskId: string, pipelineId: string, completedSteps: unknown[]) => Promise<void>>(),
+  recordPipelineReproval: vi.fn<(taskId: string, pipelineId: string, completedSteps: unknown[], reason: string) => Promise<void>>(),
+  logTaskEvent: vi.fn<(taskDir: string, message: string) => Promise<void>>(),
   taskDir: vi.fn<(taskId: string) => string>(),
   repoRoot: vi.fn<() => string>(),
-  loadPipelineState: vi.fn<() => Promise<any>>(),
-  requestTaskCancel: vi.fn<() => Promise<void>>(),
+  loadPipelineState: vi.fn<(taskId: string) => Promise<any>>(),
+  requestTaskCancel: vi.fn<(request: unknown) => Promise<void>>(),
   nowIso: vi.fn<() => string>(),
 }));
 
