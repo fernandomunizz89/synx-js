@@ -11,8 +11,10 @@ export function buildWebUiHtml(): string {
         --synx-cyan: #00ffff;
         --synx-magenta: #ff00ff;
         --synx-purple-soft: #c89bff;
-        --bg: #eff4f2;
-        --bg-elev: #e8efec;
+        --bg: #f4f7fb;
+        --bg-elev: #edf2f8;
+        --bg-glow-left: rgba(79, 139, 255, 0.15);
+        --bg-glow-right: rgba(255, 79, 216, 0.12);
         --fg: #0f2230;
         --accent: #0d8f66;
         --accent-soft: #d7f4e9;
@@ -49,6 +51,8 @@ export function buildWebUiHtml(): string {
         color-scheme: dark;
         --bg: #0a1119;
         --bg-elev: #131f2d;
+        --bg-glow-left: rgba(0, 255, 255, 0.12);
+        --bg-glow-right: rgba(255, 0, 255, 0.1);
         --fg: #e4edf8;
         --accent: #1fe3a4;
         --accent-soft: rgba(31, 227, 164, 0.14);
@@ -94,8 +98,8 @@ export function buildWebUiHtml(): string {
         margin: 0;
         font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", system-ui, sans-serif;
         background:
-          radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--synx-cyan) 11%, transparent) 0%, transparent 32%),
-          radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--synx-magenta) 10%, transparent) 0%, transparent 34%),
+          radial-gradient(circle at 14% 10%, var(--bg-glow-left) 0%, transparent 32%),
+          radial-gradient(circle at 85% 15%, var(--bg-glow-right) 0%, transparent 34%),
           linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
         background-repeat: no-repeat;
         min-height: 100vh;
@@ -247,16 +251,21 @@ export function buildWebUiHtml(): string {
         display: grid;
         justify-items: center;
         text-align: center;
+        overflow-x: auto;
       }
       .logo-ascii {
         margin: 0 auto;
         font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-        font-size: clamp(7.5px, 1.05vw, 11px);
-        line-height: 1.05;
+        font-size: 11px;
+        line-height: 1;
         white-space: pre;
-        max-width: 100%;
-        overflow-x: auto;
-        letter-spacing: 0.01em;
+        display: inline-block;
+        max-width: none;
+        overflow-x: visible;
+        letter-spacing: 0;
+        font-variant-ligatures: none;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
         background: var(--title-gradient);
         -webkit-background-clip: text;
         background-clip: text;
@@ -924,6 +933,9 @@ export function buildWebUiHtml(): string {
         }
         .theme-btn {
           flex: 1;
+        }
+        .logo-ascii {
+          font-size: 9px;
         }
         .command-quick {
           grid-template-columns: 1fr;
