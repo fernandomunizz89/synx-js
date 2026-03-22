@@ -22,6 +22,7 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("Cost Curve (30d)");
     expect(html).toContain("Token Curve (30d)");
     expect(html).toContain("Duration Curve (30d)");
+    expect(html).toContain("overview-root");
   });
 
   it("includes phase 5 UX hardening markers for loading, accessibility, and retries", () => {
@@ -30,6 +31,8 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('id="content" role="region" aria-live="polite" aria-busy="false"');
     expect(html).toContain('id="feedback" class="feedback" role="status" aria-live="polite"');
     expect(html).toContain("showLoading(");
+    expect(html).toContain("renderedViews");
+    expect(html).toContain("setTextIfChanged(");
     expect(html).toContain("Loading task list...");
     expect(html).toContain('data-retry-render');
     expect(html).toContain('class="table-wrap"');
@@ -38,5 +41,17 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("renderCurveChart(");
     expect(html).toContain("@media (max-width: 940px)");
     expect(html).toContain("@media (max-width: 640px)");
+    expect(html).toContain("reviewRenderedKey");
+    expect(html).toContain("liveRenderedCount");
+    expect(html).toContain('id="review-root"');
+    expect(html).toContain('id="live-root"');
+    expect(html).toContain('id="review-reason"');
+    expect(html).toContain('id="review-rollback"');
+    expect(html).toContain('data-task-id="');
+    expect(html).toContain('target.closest("[data-task-action]")');
+    expect(html).toContain('target.closest("[data-open-task]")');
+    expect(html).toContain('target.closest("[data-runtime-action]")');
+    expect(html).toContain("Task moved to waiting_human and needs your decision (");
+    expect(html).toContain("Task state changed (");
   });
 });

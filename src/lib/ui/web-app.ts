@@ -246,6 +246,113 @@ export function buildWebUiHtml(): string {
         font-size: 0.82rem;
         margin-top: 6px;
       }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 12px;
+        background: #fff;
+        color: var(--fg);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .btn.approve {
+        border-color: #138a67;
+        background: #e0f5ec;
+        color: #095f45;
+      }
+      .btn.reprove {
+        border-color: #c98a09;
+        background: #fff3d7;
+        color: #734f03;
+      }
+      .btn.cancel {
+        border-color: #c33b46;
+        background: #fde8ea;
+        color: #7f1e28;
+      }
+      .review-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: #fff;
+      }
+      .review-card:last-child {
+        margin-bottom: 0;
+      }
+      .review-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 6px;
+      }
+      .review-card-meta {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        color: var(--muted);
+        font-size: 0.9rem;
+        margin-bottom: 10px;
+      }
+      .review-toolbar {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+        background: #f8fbfa;
+      }
+      .event-feed {
+        display: grid;
+        gap: 10px;
+      }
+      .event-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        background: #fff;
+      }
+      .event-card .head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .event-card .title {
+        font-weight: 700;
+      }
+      .event-card .time {
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      .event-card .summary {
+        color: #284258;
+        font-size: 0.95rem;
+      }
+      .event-card .details {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 3px 8px;
+      }
+      .pill.runtime { background: #e8f0ff; color: #184c96; }
+      .pill.task { background: #e0f5ec; color: #095f45; }
+      .pill.review { background: #fff3d7; color: #734f03; }
+      .pill.metrics { background: #ecf1f5; color: #20445e; }
       .sr-only {
         border: 0 !important;
         clip: rect(0 0 0 0) !important;
@@ -324,6 +431,12 @@ export function buildWebUiHtml(): string {
         liveEvents: [],
         realtimeConnected: false,
         reviewAlertAt: "",
+        reviewDraftReason: "",
+        reviewRollbackMode: "none",
+        reviewRenderedKey: "",
+        liveRenderedCount: -1,
+        liveRenderedConnected: null,
+        renderedViews: {},
       };
       const contentEl = document.getElementById("content");
       const pollStatusEl = document.getElementById("poll-status");
@@ -454,6 +567,119 @@ export function buildWebUiHtml(): string {
         contentEl.innerHTML = '<div class="loading" role="status">' + escapeHtml(message || "Loading...") + "</div>";
       }
 
+      function setTextIfChanged(id, value) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const next = String(value || "");
+        if (el.textContent !== next) el.textContent = next;
+      }
+
+      function asObject(value) {
+        return value && typeof value === "object" ? value : {};
+      }
+
+      function eventTone(eventType) {
+        if (eventType === "task.review_required") return "review";
+        if (eventType === "task.decision_recorded" || eventType === "task.updated") return "task";
+        if (eventType === "metrics.updated") return "metrics";
+        return "runtime";
+      }
+
+      function eventTitle(eventType, rawEvent) {
+        if (eventType === "task.review_required") return "Human Review Needed";
+        if (eventType === "task.decision_recorded") return "Human Decision Recorded";
+        if (eventType === "metrics.updated") return "Metrics Updated";
+        if (eventType === "task.updated") return rawEvent === "task.created" ? "Task Created" : "Task Updated";
+        if (eventType === "runtime.updated") {
+          if (rawEvent === "engine.started") return "Engine Started";
+          if (rawEvent === "engine.stopped") return "Engine Stopped";
+          if (rawEvent === "engine.paused") return "Engine Paused";
+          if (rawEvent === "engine.resumed") return "Engine Resumed";
+          return "Runtime Updated";
+        }
+        return "Event";
+      }
+
+      function eventSummary(event) {
+        const payloadObj = asObject(event.payload);
+        const rawPayload = asObject(payloadObj.payload);
+        const rawEvent = String(payloadObj.rawEvent || event.type || "");
+        const stage = String(rawPayload.currentStage || event.stage || "");
+        const currentAgent = String(rawPayload.currentAgent || "");
+        const nextAgent = String(rawPayload.nextAgent || rawPayload.returnedTo || "");
+        const reason = String(rawPayload.reason || payloadObj.reason || "");
+
+        if (event.type === "task.review_required") {
+          const context = [
+            stage ? "stage " + stage : "",
+            currentAgent ? "agent " + currentAgent : "",
+          ].filter(Boolean).join(" | ");
+          return context
+            ? "Task moved to waiting_human and needs your decision (" + context + ")."
+            : "Task moved to waiting_human and needs your decision.";
+        }
+        if (event.type === "task.decision_recorded") {
+          const decision = String(rawPayload.decision || "");
+          if (decision === "approved") return "Task approved and marked as done.";
+          if (decision === "reproved") {
+            const rollbackMode = String(rawPayload.rollbackMode || "");
+            const toAgent = nextAgent ? "returning to " + nextAgent : "returning to implementation flow";
+            const rollback = rollbackMode ? " | rollback: " + rollbackMode : "";
+            const why = reason ? " | reason: " + reason : "";
+            return "Task reproved, " + toAgent + rollback + why + ".";
+          }
+          return "Human decision captured in runtime events.";
+        }
+        if (event.type === "metrics.updated") {
+          const prev = Number(payloadObj.previousCount || 0);
+          const curr = Number(payloadObj.currentCount || 0);
+          if (Number.isFinite(prev) && Number.isFinite(curr)) {
+            return "Metrics samples changed from " + prev + " to " + curr + ".";
+          }
+          return "Metrics snapshots were updated.";
+        }
+        if (event.type === "runtime.updated") {
+          const requestedBy = String(rawPayload.requestedBy || "");
+          const reasonText = String(rawPayload.reason || "");
+          if (rawEvent === "engine.started") return "Orchestrator loop is now running.";
+          if (rawEvent === "engine.stopped") return "Orchestrator loop was stopped.";
+          if (rawEvent === "engine.paused") return "Processing loop is paused.";
+          if (rawEvent === "engine.resumed") return "Processing loop resumed.";
+          if (rawEvent === "engine.stop_requested") {
+            const context = [requestedBy ? "requestedBy=" + requestedBy : "", reasonText ? "reason=" + reasonText : ""]
+              .filter(Boolean)
+              .join(" | ");
+            return context ? "Graceful stop was requested (" + context + ")." : "Graceful stop was requested.";
+          }
+          return "Runtime state changed.";
+        }
+        if (event.type === "task.updated") {
+          const status = String(rawPayload.status || "");
+          if (rawEvent === "task.created") {
+            const title = String(rawPayload.title || "");
+            const project = String(rawPayload.project || "");
+            const parts = [title ? "title: " + title : "", project ? "project: " + project : ""]
+              .filter(Boolean)
+              .join(" | ");
+            return parts ? "A new task entered the queue (" + parts + ")." : "A new task entered the queue.";
+          }
+          if (rawEvent === "task.cancel_requested") {
+            return reason
+              ? "Cancellation was requested for task (reason: " + reason + ")."
+              : "Cancellation was requested for task.";
+          }
+          const context = [
+            status ? "status " + status : "",
+            stage ? "stage " + stage : "",
+            currentAgent ? "agent " + currentAgent : "",
+            nextAgent ? "next " + nextAgent : "",
+            reason ? "reason " + reason : "",
+          ].filter(Boolean).join(" | ");
+          return context ? "Task state changed (" + context + ")." : "Task state changed in the execution flow.";
+        }
+        return "System event received.";
+      }
+
       function setView(view) {
         state.view = view;
         navButtons.forEach((button) => {
@@ -501,22 +727,37 @@ export function buildWebUiHtml(): string {
         const topSlowStage = metrics.stageSummary && metrics.stageSummary[0] ? metrics.stageSummary[0] : null;
         const runtime = overview.runtime || {};
         const healthLabel = runtime.isAlive ? "Alive" : "Stopped";
-        contentEl.innerHTML = [
-          '<div class="grid">',
-          '<div class="metric"><div class="muted">Engine</div><strong>' + healthLabel + '</strong></div>',
-          '<div class="metric"><div class="muted">Active Tasks</div><strong>' + fmtNumber(overview.counts.active) + '</strong></div>',
-          '<div class="metric"><div class="muted">Waiting Human</div><strong>' + fmtNumber(overview.counts.waitingHuman) + '</strong></div>',
-          '<div class="metric"><div class="muted">Done</div><strong>' + fmtNumber(overview.counts.done) + '</strong></div>',
-          '<div class="metric"><div class="muted">Failed</div><strong>' + fmtNumber(overview.counts.failed) + '</strong></div>',
-          '<div class="metric"><div class="muted">Estimated Tokens</div><strong>' + fmtNumber(overview.consumption.estimatedTotalTokens) + '</strong></div>',
-          '<div class="metric"><div class="muted">Estimated Cost</div><strong>' + fmtCost(overview.consumption.estimatedCostUsd) + '</strong></div>',
-          '<div class="metric"><div class="muted">Review Queue</div><strong>' + fmtNumber(overview.reviewQueueCount) + '</strong></div>',
-          '</div>',
-          '<div class="card" style="margin-top: 14px; box-shadow: none; border: 1px solid var(--border);">',
-          '<p>Last heartbeat: <code>' + escapeHtml(runtime.lastHeartbeatAt || "N/A") + '</code></p>',
-          '<p style="margin-top: 8px;">Top slow stage (24h): <strong>' + escapeHtml(topSlowStage ? topSlowStage.stage : "N/A") + "</strong></p>",
-          '</div>',
-        ].join("");
+        if (!document.getElementById("overview-root")) {
+          contentEl.innerHTML = [
+            '<div id="overview-root">',
+            '<div class="grid">',
+            '<div class="metric"><div class="muted">Engine</div><strong id="overview-engine"></strong></div>',
+            '<div class="metric"><div class="muted">Active Tasks</div><strong id="overview-active"></strong></div>',
+            '<div class="metric"><div class="muted">Waiting Human</div><strong id="overview-waiting"></strong></div>',
+            '<div class="metric"><div class="muted">Done</div><strong id="overview-done"></strong></div>',
+            '<div class="metric"><div class="muted">Failed</div><strong id="overview-failed"></strong></div>',
+            '<div class="metric"><div class="muted">Estimated Tokens</div><strong id="overview-tokens"></strong></div>',
+            '<div class="metric"><div class="muted">Estimated Cost</div><strong id="overview-cost"></strong></div>',
+            '<div class="metric"><div class="muted">Review Queue</div><strong id="overview-review-queue"></strong></div>',
+            '</div>',
+            '<div class="card" style="margin-top: 14px; box-shadow: none; border: 1px solid var(--border);">',
+            '<p>Last heartbeat: <code id="overview-heartbeat"></code></p>',
+            '<p style="margin-top: 8px;">Top slow stage (24h): <strong id="overview-slow-stage"></strong></p>',
+            '</div>',
+            "</div>",
+          ].join("");
+        }
+
+        setTextIfChanged("overview-engine", healthLabel);
+        setTextIfChanged("overview-active", fmtNumber(overview.counts.active));
+        setTextIfChanged("overview-waiting", fmtNumber(overview.counts.waitingHuman));
+        setTextIfChanged("overview-done", fmtNumber(overview.counts.done));
+        setTextIfChanged("overview-failed", fmtNumber(overview.counts.failed));
+        setTextIfChanged("overview-tokens", fmtNumber(overview.consumption.estimatedTotalTokens));
+        setTextIfChanged("overview-cost", fmtCost(overview.consumption.estimatedCostUsd));
+        setTextIfChanged("overview-review-queue", fmtNumber(overview.reviewQueueCount));
+        setTextIfChanged("overview-heartbeat", runtime.lastHeartbeatAt || "N/A");
+        setTextIfChanged("overview-slow-stage", topSlowStage ? topSlowStage.stage : "N/A");
       }
 
       function renderTaskRows(tasks) {
@@ -560,27 +801,49 @@ export function buildWebUiHtml(): string {
 
       async function renderReviewQueue() {
         const queue = await api("/api/review-queue");
+        const queueKey = queue.map((task) => [task.taskId, task.status, task.updatedAt, task.currentStage].join("|")).join(";");
         if (!queue.length) {
-          contentEl.innerHTML = '<div class="empty">No tasks waiting for human review.</div>';
+          if (state.reviewRenderedKey !== "" || document.getElementById("review-root")) {
+            contentEl.innerHTML = '<div class="empty">No tasks waiting for human review.</div>';
+          }
+          state.reviewRenderedKey = "";
           return;
         }
+        if (state.reviewRenderedKey === queueKey && document.getElementById("review-root")) {
+          return;
+        }
+        const reasonValue = escapeHtml(state.reviewDraftReason || "");
+        const rollbackValue = state.reviewRollbackMode === "task" ? "task" : "none";
         contentEl.innerHTML = [
-          '<div class="table-wrap">',
-          "<table>",
-          '<caption class="sr-only">Tasks waiting for human review</caption>',
-          "<thead><tr><th>Task</th><th>Status</th><th>Type</th><th>Updated</th></tr></thead>",
-          "<tbody>",
+          '<div id="review-root">',
+          '<div class="review-toolbar">',
+          '<div class="muted" style="margin-bottom:8px;">Review controls apply to reprove actions in this queue. Approve can run directly.</div>',
+          '<textarea id="review-reason" rows="2" style="width:100%; border:1px solid var(--border); border-radius:8px; padding:8px; font:inherit;" placeholder="Reason for reprove (required to reprove)">' + reasonValue + "</textarea>",
+          '<div class="actions" style="margin-top:8px;">',
+          '<select id="review-rollback" style="border:1px solid var(--border); border-radius:8px; padding:8px;">',
+          '<option value="none"' + (rollbackValue === "none" ? " selected" : "") + '>Rollback: none</option>',
+          '<option value="task"' + (rollbackValue === "task" ? " selected" : "") + '>Rollback: task-scoped</option>',
+          "</select>",
+          '<div class="muted">Queue size: ' + fmtNumber(queue.length) + "</div>",
+          "</div>",
+          "</div>",
           queue.map((task) => [
-            "<tr>",
-            '<td><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + "</button><br/><small>" + escapeHtml(task.taskId) + "</small></td>",
-            "<td>" + taskStatusBadge(task.status) + "</td>",
-            "<td>" + escapeHtml(task.type) + "</td>",
-            "<td>" + escapeHtml(task.updatedAt) + "</td>",
-            "</tr>",
+            '<article class="review-card">',
+            '<div class="review-card-header">',
+            '<div><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + "</button><br/><small>" + escapeHtml(task.taskId) + "</small></div>",
+            taskStatusBadge(task.status),
+            "</div>",
+            '<div class="review-card-meta"><span>Type: ' + escapeHtml(task.type) + "</span><span>Updated: " + escapeHtml(task.updatedAt) + "</span></div>",
+            '<div class="actions">',
+            '<button type="button" class="btn approve" data-task-action="approve" data-task-id="' + escapeHtml(task.taskId) + '">Approve</button>',
+            '<button type="button" class="btn reprove" data-task-action="reprove" data-task-id="' + escapeHtml(task.taskId) + '">Reprove</button>',
+            '<button type="button" class="btn" data-open-task="' + escapeHtml(task.taskId) + '">Open Detail</button>',
+            "</div>",
+            "</article>",
           ].join("")).join(""),
-          "</tbody></table>",
           "</div>",
         ].join("");
+        state.reviewRenderedKey = queueKey;
       }
 
       async function renderDetail() {
@@ -645,7 +908,8 @@ export function buildWebUiHtml(): string {
           ? "Loading overview..."
           : "";
 
-        if (loadingMessage) showLoading(loadingMessage);
+        const alreadyRendered = Boolean(state.renderedViews[state.view]);
+        if (loadingMessage && !alreadyRendered) showLoading(loadingMessage);
         try {
           if (state.view === "overview") await renderOverview();
           if (state.view === "tasks") await renderTasks();
@@ -653,9 +917,11 @@ export function buildWebUiHtml(): string {
           if (state.view === "detail") await renderDetail();
           if (state.view === "live") renderLive();
           if (state.view === "analytics") await renderAnalytics();
+          state.renderedViews[state.view] = true;
           contentEl.setAttribute("aria-busy", "false");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown UI error";
+          state.renderedViews[state.view] = false;
           contentEl.setAttribute("aria-busy", "false");
           contentEl.innerHTML = [
             '<div class="error" role="alert">Failed to load view: ' + escapeHtml(message) + "</div>",
@@ -667,35 +933,57 @@ export function buildWebUiHtml(): string {
 
       function renderLive() {
         const rows = state.liveEvents.slice().reverse();
+        if (
+          state.liveRenderedCount === rows.length
+          && state.liveRenderedConnected === state.realtimeConnected
+          && document.getElementById("live-root")
+        ) {
+          return;
+        }
         const controls = [
-          '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">',
-          '<button data-runtime-action="pause" style="padding:8px 10px; border-radius:8px; border:1px solid #c38b0f; background:#fff3db; color:#734f03; font-weight:700; cursor:pointer;">Pause Engine</button>',
-          '<button data-runtime-action="resume" style="padding:8px 10px; border-radius:8px; border:1px solid #138a67; background:#e0f5ec; color:#095f45; font-weight:700; cursor:pointer;">Resume Engine</button>',
-          '<button data-runtime-action="stop" style="padding:8px 10px; border-radius:8px; border:1px solid #c33b46; background:#fde8ea; color:#7f1e28; font-weight:700; cursor:pointer;">Graceful Stop</button>',
+          '<div class="actions" style="margin-bottom:10px;">',
+          '<button type="button" class="btn" data-runtime-action="pause">Pause Engine</button>',
+          '<button type="button" class="btn approve" data-runtime-action="resume">Resume Engine</button>',
+          '<button type="button" class="btn cancel" data-runtime-action="stop">Graceful Stop</button>',
           "</div>",
         ].join("");
         if (!rows.length) {
-          contentEl.innerHTML = controls + '<div class="empty">Waiting realtime events from <code>/api/stream</code>...</div>';
+          contentEl.innerHTML = '<div id="live-root">' + controls + '<div class="empty">Waiting realtime events from <code>/api/stream</code>...</div></div>';
+          state.liveRenderedCount = 0;
+          state.liveRenderedConnected = state.realtimeConnected;
           return;
         }
         contentEl.innerHTML = [
+          '<div id="live-root">',
           '<div class="toolbar"><div class="muted">Realtime: ' + (state.realtimeConnected ? "connected" : "disconnected") + '</div></div>',
           controls,
-          '<div class="table-wrap">',
-          "<table>",
-          '<caption class="sr-only">Realtime event stream</caption>',
-          "<thead><tr><th>At</th><th>Type</th><th>Task</th><th>Payload</th></tr></thead>",
-          "<tbody>",
-          rows.map((event) => [
-            "<tr>",
-            "<td>" + escapeHtml(event.at || "") + "</td>",
-            "<td>" + escapeHtml(event.type || "") + "</td>",
-            "<td>" + escapeHtml(event.taskId || "") + "</td>",
-            "<td><code>" + escapeHtml(JSON.stringify(event.payload || {})) + "</code></td>",
-            "</tr>",
-          ].join("")).join(""),
-          "</tbody></table></div>",
+          '<div class="event-feed">',
+          rows.map((event) => {
+            const payloadObj = asObject(event.payload);
+            const rawEvent = String(payloadObj.rawEvent || event.type || "");
+            const source = String(payloadObj.source || "");
+            const tone = eventTone(event.type);
+            const title = eventTitle(event.type, rawEvent);
+            const summary = eventSummary(event);
+            const taskLine = event.taskId ? "Task: " + event.taskId : "Task: n/a";
+            const sourceLine = source ? "Source: " + source : "";
+            const rawLine = rawEvent && rawEvent !== event.type ? "Raw event: " + rawEvent : "";
+            return [
+              '<article class="event-card">',
+              '<div class="head">',
+              '<div class="title"><span class="pill ' + tone + '">' + escapeHtml(event.type) + "</span> " + escapeHtml(title) + "</div>",
+              '<div class="time">' + escapeHtml(event.at || "") + "</div>",
+              "</div>",
+              '<div class="summary">' + escapeHtml(summary) + "</div>",
+              '<div class="details">' + escapeHtml(taskLine + (sourceLine ? " | " + sourceLine : "") + (rawLine ? " | " + rawLine : "")) + "</div>",
+              "</article>",
+            ].join("");
+          }).join(""),
+          "</div>",
+          "</div>",
         ].join("");
+        state.liveRenderedCount = rows.length;
+        state.liveRenderedConnected = state.realtimeConnected;
       }
 
       async function renderAnalytics() {
@@ -786,57 +1074,73 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
 
-        const navView = target.dataset.view;
+        const navTarget = target.closest("[data-view]");
+        const navView = navTarget instanceof HTMLElement ? navTarget.dataset.view : "";
         if (navView) {
           setFeedback("", "info");
           setView(navView);
           return;
         }
 
-        if (target.dataset.retryRender !== undefined) {
+        const retryTarget = target.closest("[data-retry-render]");
+        if (retryTarget instanceof HTMLElement && retryTarget.dataset.retryRender !== undefined) {
           setFeedback("Retrying current section...", "info");
           void render();
           return;
         }
 
-        const taskId = target.dataset.openTask;
+        const openTaskTarget = target.closest("[data-open-task]");
+        const taskId = openTaskTarget instanceof HTMLElement ? openTaskTarget.dataset.openTask : "";
         if (taskId) {
           state.selectedTaskId = taskId;
           setView("detail");
           return;
         }
 
-        const taskAction = target.dataset.taskAction;
+        const taskActionTarget = target.closest("[data-task-action]");
+        const taskAction = taskActionTarget instanceof HTMLElement ? taskActionTarget.dataset.taskAction : "";
         if (taskAction) {
-          const reasonEl = document.getElementById("action-reason");
-          const rollbackEl = document.getElementById("action-rollback");
-          const reason = reasonEl instanceof HTMLTextAreaElement ? reasonEl.value.trim() : "";
-          const rollbackMode = rollbackEl instanceof HTMLSelectElement ? rollbackEl.value : "none";
+          const actionTaskId = taskActionTarget instanceof HTMLElement ? String(taskActionTarget.dataset.taskId || "") : "";
+          const taskIdToUse = actionTaskId || state.selectedTaskId;
+          if (actionTaskId) state.selectedTaskId = actionTaskId;
+
+          const reviewReasonEl = document.getElementById("review-reason");
+          const reviewRollbackEl = document.getElementById("review-rollback");
+          const detailReasonEl = document.getElementById("action-reason");
+          const detailRollbackEl = document.getElementById("action-rollback");
+          const useReviewControls = Boolean(actionTaskId);
+          const reason = useReviewControls
+            ? (reviewReasonEl instanceof HTMLTextAreaElement ? reviewReasonEl.value.trim() : String(state.reviewDraftReason || "").trim())
+            : (detailReasonEl instanceof HTMLTextAreaElement ? detailReasonEl.value.trim() : "");
+          const rollbackMode = useReviewControls
+            ? (reviewRollbackEl instanceof HTMLSelectElement ? reviewRollbackEl.value : state.reviewRollbackMode || "none")
+            : (detailRollbackEl instanceof HTMLSelectElement ? detailRollbackEl.value : "none");
 
           (async () => {
             try {
-              if (!state.selectedTaskId) throw new Error("Select a task first.");
+              if (!taskIdToUse) throw new Error("Select a task first.");
               if (taskAction === "reprove" && !reason) {
                 throw new Error("Reason is required to reprove.");
               }
 
               if (taskAction === "approve") {
-                await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/approve", {});
-                setFeedback("Task approved successfully.", "info");
+                await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/approve", {});
+                setFeedback("Task " + taskIdToUse + " approved successfully.", "info");
               } else if (taskAction === "reprove") {
-                await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/reprove", {
+                await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/reprove", {
                   reason,
                   rollbackMode,
                 });
-                setFeedback("Task reproved and sent back to agent flow.", "info");
+                setFeedback("Task " + taskIdToUse + " reproved and sent back to agent flow.", "info");
               } else if (taskAction === "cancel") {
-                await postApi("/api/tasks/" + encodeURIComponent(state.selectedTaskId) + "/cancel", {
+                await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/cancel", {
                   reason,
                 });
-                setFeedback("Cancellation requested for task.", "info");
+                setFeedback("Cancellation requested for task " + taskIdToUse + ".", "info");
               }
 
               setPollStatus("Last action at " + new Date().toLocaleTimeString());
+              if (taskAction === "reprove") state.reviewDraftReason = "";
               await render();
             } catch (error) {
               const message = error instanceof Error ? error.message : "Action failed";
@@ -846,7 +1150,8 @@ export function buildWebUiHtml(): string {
           return;
         }
 
-        const runtimeAction = target.dataset.runtimeAction;
+        const runtimeActionTarget = target.closest("[data-runtime-action]");
+        const runtimeAction = runtimeActionTarget instanceof HTMLElement ? runtimeActionTarget.dataset.runtimeAction : "";
         if (runtimeAction) {
           (async () => {
             try {
@@ -866,6 +1171,16 @@ export function buildWebUiHtml(): string {
         if (target instanceof HTMLInputElement && target.id === "task-search") {
           state.search = target.value;
           render();
+        }
+        if (target instanceof HTMLTextAreaElement && target.id === "review-reason") {
+          state.reviewDraftReason = target.value;
+        }
+      });
+
+      document.addEventListener("change", (event) => {
+        const target = event.target;
+        if (target instanceof HTMLSelectElement && target.id === "review-rollback") {
+          state.reviewRollbackMode = target.value === "task" ? "task" : "none";
         }
       });
 
@@ -902,7 +1217,7 @@ export function buildWebUiHtml(): string {
                 if (state.view === "overview" && (type === "runtime.updated" || type === "metrics.updated")) {
                   void renderOverview();
                 }
-                if (state.view === "review" && type === "task.review_required") {
+                if (state.view === "review" && (type === "task.review_required" || type === "task.decision_recorded" || type === "task.updated")) {
                   void renderReviewQueue();
                 }
                 if (state.view === "analytics" && (type === "task.updated" || type === "task.decision_recorded" || type === "metrics.updated")) {
