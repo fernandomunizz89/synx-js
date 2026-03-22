@@ -19,6 +19,7 @@ export interface ReproveTaskServiceResult {
   taskId: string;
   targetAgent: AgentName;
   targetStage: string;
+  rollbackStep?: string;
 }
 
 function remediationTarget(taskType: TaskType): {
@@ -152,6 +153,7 @@ export async function reproveTaskService(args: {
   taskId: string;
   reason?: string;
   rollbackMode?: RollbackMode;
+  rollbackStep?: string;
   rollbackSummary?: RollbackSummary | null;
 }): Promise<ReproveTaskServiceResult> {
   const meta = await loadTaskMeta(args.taskId);
@@ -163,6 +165,7 @@ export async function reproveTaskService(args: {
   const createdAt = nowIso();
   const reason = String(args.reason || "").trim();
   const rollbackMode = args.rollbackMode || "none";
+  const rollbackStep = String(args.rollbackStep || "").trim();
   const rollbackSummary = args.rollbackSummary || null;
   const qaDoneRef = `done/${DONE_FILE_NAMES.synxQaEngineer}`;
   const nextInputRef = qaDoneRef;
@@ -195,6 +198,7 @@ export async function reproveTaskService(args: {
       returnedTo: target.agent,
       reason,
       rollbackMode,
+      rollbackStep,
       rollbackSummary,
     },
   });
@@ -207,6 +211,7 @@ export async function reproveTaskService(args: {
       decision: "reproved",
       reason,
       rollbackMode,
+      rollbackStep,
       returnedTo: target.agent,
     },
   });
@@ -218,6 +223,7 @@ export async function reproveTaskService(args: {
       decision: "reproved",
       reason,
       rollbackMode,
+      rollbackStep,
       returnedTo: target.agent,
     },
   });
@@ -233,6 +239,7 @@ export async function reproveTaskService(args: {
     taskId: args.taskId,
     targetAgent: target.agent,
     targetStage: target.stage,
+    rollbackStep,
   };
 }
 

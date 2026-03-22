@@ -55,6 +55,8 @@ describe.sequential("lib/ui/server", () => {
     meta.status = "waiting_human";
     meta.humanApprovalRequired = true;
     await saveTaskMeta(created.taskId, meta);
+    await fs.mkdir(path.join(created.taskPath, "done"), { recursive: true });
+    await fs.writeFile(path.join(created.taskPath, "done", "sample.json"), '{\"ok\":true}\\n', "utf8");
 
     const server = await startUiServer({
       host: "127.0.0.1",
@@ -85,6 +87,13 @@ describe.sequential("lib/ui/server", () => {
       const taskDetail = await taskDetailResponse.json() as { ok: boolean; data: { taskId: string } };
       expect(taskDetail.ok).toBe(true);
       expect(taskDetail.data.taskId).toBe(created.taskId);
+
+      const artifactResponse = await fetch(`${server.baseUrl}/api/tasks/${encodeURIComponent(created.taskId)}/artifact?scope=done&name=sample.json`);
+      expect(artifactResponse.status).toBe(200);
+      const artifactPayload = await artifactResponse.json() as { ok: boolean; data: { name: string; content: string } };
+      expect(artifactPayload.ok).toBe(true);
+      expect(artifactPayload.data.name).toBe("sample.json");
+      expect(artifactPayload.data.content).toContain("\"ok\":true");
 
       const tasksMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/tasks`);
       expect(tasksMetricsResponse.status).toBe(200);

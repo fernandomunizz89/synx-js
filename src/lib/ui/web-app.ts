@@ -1304,9 +1304,20 @@ export function buildWebUiHtml(): string {
         padding: var(--space-3);
         margin-bottom: var(--space-2);
         background: var(--surface);
+        transition: border-color 0.18s ease, transform 0.18s ease;
       }
       .review-card:last-child {
         margin-bottom: 0;
+      }
+      .review-card.waiting {
+        border-color: color-mix(in srgb, var(--color-accent-attention) 52%, var(--border));
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-attention) 26%, transparent);
+        animation: review-pulse 2.2s ease-in-out infinite;
+      }
+      @keyframes review-pulse {
+        0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-attention) 26%, transparent); }
+        70% { box-shadow: 0 0 0 6px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; }
       }
       .review-card-header {
         display: flex;
@@ -1314,6 +1325,30 @@ export function buildWebUiHtml(): string {
         justify-content: space-between;
         gap: var(--space-2);
         margin-bottom: 6px;
+      }
+      .review-evidence {
+        margin: 0 0 var(--space-2);
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+      .quick-reasons {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: var(--space-2);
+      }
+      .quick-reason {
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+        color: var(--muted);
+        border-radius: var(--radius-pill);
+        padding: 4px 9px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .quick-reason:hover {
+        color: var(--fg);
       }
       .review-card-meta {
         display: flex;
@@ -1329,6 +1364,123 @@ export function buildWebUiHtml(): string {
         padding: var(--space-3);
         margin-bottom: var(--space-3);
         background: var(--surface-soft);
+      }
+      .decision-station {
+        display: grid;
+        grid-template-columns: minmax(230px, 0.78fr) minmax(420px, 1.45fr) minmax(250px, 0.85fr);
+        gap: var(--space-3);
+        align-items: start;
+      }
+      .decision-pane {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--surface) 93%, transparent);
+        padding: var(--space-3);
+      }
+      .decision-pane h3 {
+        margin: 0 0 var(--space-2);
+        font-size: 0.9rem;
+      }
+      .decision-pane h4 {
+        margin: var(--space-3) 0 var(--space-2);
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .decision-list {
+        display: grid;
+        gap: 6px;
+      }
+      .decision-list .item {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 8px;
+        background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+      }
+      .decision-list .item strong {
+        font-size: 0.78rem;
+      }
+      .decision-list .item .meta {
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+      .review-panel {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .review-compare {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-2);
+      }
+      .artifact-pane {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
+        min-height: 240px;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+      .artifact-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .artifact-head strong {
+        font-size: 0.8rem;
+      }
+      .artifact-lang {
+        color: var(--muted);
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .artifact-code {
+        margin: 0;
+        padding: 10px;
+        white-space: pre-wrap;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        line-height: 1.45;
+        overflow: auto;
+      }
+      .code-line-key { color: #7ad8ff; }
+      .code-line-string { color: #97f2ce; }
+      .code-line-number { color: #ffc979; }
+      .code-line-keyword { color: #bfa2ff; }
+      .decision-actions {
+        display: grid;
+        gap: var(--space-2);
+      }
+      .decision-actions .btn {
+        justify-content: center;
+      }
+      .decision-actions .btn[disabled] {
+        opacity: 0.68;
+        cursor: wait;
+      }
+      .decision-history {
+        display: grid;
+        gap: 6px;
+      }
+      .decision-history .row {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 8px;
+        background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+      }
+      .decision-history .title {
+        font-size: 0.77rem;
+        font-weight: 700;
+      }
+      .decision-history .reason {
+        margin-top: 3px;
+        font-size: 0.74rem;
+        color: var(--muted);
       }
       .event-feed {
         display: grid;
@@ -1846,6 +1998,12 @@ export function buildWebUiHtml(): string {
           min-width: 0;
           width: 100%;
         }
+        .decision-station {
+          grid-template-columns: 1fr;
+        }
+        .review-compare {
+          grid-template-columns: 1fr;
+        }
         .command-quick {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1938,6 +2096,7 @@ export function buildWebUiHtml(): string {
         commandRefQuery: "",
         boardMode: "kanban",
         boardFilter: "",
+        pendingActionKey: "",
         themePreference: initialThemePreference,
         themeResolved: initialThemeResolved,
         renderedViews: {},
@@ -2262,6 +2421,61 @@ export function buildWebUiHtml(): string {
         if (!feedbackEl) return;
         feedbackEl.textContent = message || "";
         feedbackEl.classList.toggle("error", tone === "error");
+      }
+
+      function setDecisionPending(taskId, action, pending) {
+        const normalizedTaskId = String(taskId || "");
+        const key = normalizedTaskId ? normalizedTaskId + ":" + String(action || "") : "";
+        state.pendingActionKey = pending ? key : "";
+        const buttons = Array.from(document.querySelectorAll("[data-task-action]"));
+        for (const item of buttons) {
+          if (!(item instanceof HTMLButtonElement)) continue;
+          const buttonTaskId = String(item.dataset.taskId || state.selectedTaskId || "");
+          const buttonAction = String(item.dataset.taskAction || "");
+          const sameTask = buttonTaskId === normalizedTaskId;
+          if (!sameTask) continue;
+          if (pending) {
+            item.disabled = true;
+            if (!item.dataset.baseLabel) item.dataset.baseLabel = item.textContent || "";
+            if (buttonAction === action) item.textContent = "Sending...";
+          } else {
+            item.disabled = false;
+            if (item.dataset.baseLabel) item.textContent = item.dataset.baseLabel;
+          }
+        }
+      }
+
+      async function executeTaskAction(taskAction, taskIdToUse, reason, rollbackMode, rollbackStep) {
+        if (!taskIdToUse) throw new Error("Select a task first.");
+        const actionKey = String(taskAction || "");
+        if (state.pendingActionKey) throw new Error("Another decision is still being submitted.");
+        setDecisionPending(taskIdToUse, actionKey, true);
+        try {
+          if (taskAction === "reprove" && !reason) {
+            throw new Error("Reason is required to reprove.");
+          }
+          if (taskAction === "approve") {
+            await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/approve", {});
+            setFeedback("Task " + taskIdToUse + " approved successfully.", "info");
+          } else if (taskAction === "reprove") {
+            await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/reprove", {
+              reason,
+              rollbackMode,
+              rollbackStep,
+            });
+            setFeedback("Task " + taskIdToUse + " reproved and sent back to agent flow.", "info");
+          } else if (taskAction === "cancel") {
+            await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/cancel", {
+              reason,
+            });
+            setFeedback("Cancellation requested for task " + taskIdToUse + ".", "info");
+          }
+          setPollStatus("Last action at " + fmtTimeNow());
+          if (taskAction === "reprove") state.reviewDraftReason = "";
+          requestRender("user");
+        } finally {
+          setDecisionPending(taskIdToUse, actionKey, false);
+        }
       }
 
       function renderCommandLog() {
@@ -2731,6 +2945,138 @@ export function buildWebUiHtml(): string {
         ].join("");
       }
 
+      function reviewEvidenceSnippet(task) {
+        const stage = String(task.currentStage || "").toLowerCase();
+        const title = String(task.title || "task");
+        if (stage.includes("qa")) return "QA concluído para " + title + ". Validar evidências e aprovar rollout.";
+        if (stage.includes("research")) return "Pesquisa finalizada para " + title + ". Confirmar fontes e consistência.";
+        if (stage.includes("front") || stage.includes("back") || stage.includes("mobile")) return "Código gerado para " + title + ". Revisar diffs e riscos.";
+        if (stage.includes("review")) return "Saída pronta para decisão humana em " + title + ".";
+        return "Entrega pronta para revisão humana. Confirme qualidade e aderência ao escopo.";
+      }
+
+      function detectArtifactLanguage(name, content) {
+        const file = String(name || "").toLowerCase();
+        const text = String(content || "");
+        if (file.endsWith(".json")) return "json";
+        if (file.endsWith(".md")) return "markdown";
+        if (file.endsWith(".ts") || file.endsWith(".tsx") || file.endsWith(".js") || file.endsWith(".jsx")) return "typescript";
+        if (file.endsWith(".py")) return "python";
+        if (file.endsWith(".yml") || file.endsWith(".yaml")) return "yaml";
+        if (text.trim().startsWith("{") || text.trim().startsWith("[")) return "json";
+        return "text";
+      }
+
+      function highlightArtifactContent(content, language) {
+        const escaped = escapeHtml(String(content || ""));
+        if (!escaped) return "";
+        let highlighted = escaped;
+        if (language === "json") {
+          highlighted = highlighted
+            .replace(/(&quot;[^&]*&quot;)(\s*:)/g, '<span class="code-line-key">$1</span>$2')
+            .replace(/(:\s*)(&quot;[^&]*&quot;)/g, '$1<span class="code-line-string">$2</span>')
+            .replace(/(:\s*)(-?\d+(\.\d+)?)/g, '$1<span class="code-line-number">$2</span>');
+        } else if (language === "typescript" || language === "python") {
+          highlighted = highlighted
+            .replace(/\b(const|let|var|function|return|if|else|for|while|class|async|await|import|from|export|try|catch|raise|def)\b/g, '<span class="code-line-keyword">$1</span>')
+            .replace(/(&quot;[^&]*&quot;|&#039;[^&]*&#039;)/g, '<span class="code-line-string">$1</span>')
+            .replace(/\b(\d+(\.\d+)?)\b/g, '<span class="code-line-number">$1</span>');
+        }
+        return highlighted;
+      }
+
+      function renderArtifactPane(title, artifact) {
+        const safe = artifact && typeof artifact === "object" ? artifact : {};
+        const name = String(safe.name || title || "artifact.txt");
+        const content = String(safe.content || "No artifact content available.");
+        const language = detectArtifactLanguage(name, content);
+        return [
+          '<article class="artifact-pane">',
+          '<div class="artifact-head"><strong>' + escapeHtml(title) + "</strong><span class=\"artifact-lang\">" + escapeHtml(language) + "</span></div>",
+          '<pre class="artifact-code"><code>' + highlightArtifactContent(content, language) + "</code></pre>",
+          "</article>",
+        ].join("");
+      }
+
+      async function fetchTaskArtifact(taskId, scope, name) {
+        if (!taskId || !scope || !name) return null;
+        try {
+          return await api("/api/tasks/" + encodeURIComponent(taskId) + "/artifact?scope=" + encodeURIComponent(scope) + "&name=" + encodeURIComponent(name));
+        } catch {
+          return null;
+        }
+      }
+
+      async function resolveDecisionArtifacts(detail) {
+        const taskId = String(detail.taskId || "");
+        const safeViews = Array.isArray(detail.views) ? detail.views : [];
+        const safeArtifacts = Array.isArray(detail.artifacts) ? detail.artifacts : [];
+        const safeDone = Array.isArray(detail.doneArtifacts) ? detail.doneArtifacts : [];
+        const safeHuman = Array.isArray(detail.humanArtifacts) ? detail.humanArtifacts : [];
+
+        const inputCandidate = safeViews[0]
+          ? { scope: "views", name: safeViews[0] }
+          : safeArtifacts[0]
+          ? { scope: "artifacts", name: safeArtifacts[0] }
+          : null;
+        const outputCandidate = safeDone[0]
+          ? { scope: "done", name: safeDone[0] }
+          : safeHuman[0]
+          ? { scope: "human", name: safeHuman[0] }
+          : safeArtifacts[1]
+          ? { scope: "artifacts", name: safeArtifacts[1] }
+          : safeArtifacts[0]
+          ? { scope: "artifacts", name: safeArtifacts[0] }
+          : null;
+
+        const [inputArtifact, outputArtifact] = await Promise.all([
+          inputCandidate ? fetchTaskArtifact(taskId, inputCandidate.scope, inputCandidate.name) : Promise.resolve(null),
+          outputCandidate ? fetchTaskArtifact(taskId, outputCandidate.scope, outputCandidate.name) : Promise.resolve(null),
+        ]);
+
+        return {
+          input: inputArtifact || {
+            name: inputCandidate ? inputCandidate.name : "input.txt",
+            content: String(detail.title || ""),
+          },
+          output: outputArtifact || {
+            name: outputCandidate ? outputCandidate.name : "output.txt",
+            content: (detail.recentEvents || []).slice(-8).join("\n"),
+          },
+        };
+      }
+
+      function renderDecisionTimelineRows(history) {
+        const rows = Array.isArray(history) ? history.slice().reverse().slice(0, 8) : [];
+        if (!rows.length) return '<div class="empty">No timeline yet.</div>';
+        return '<div class="decision-list">' + rows.map((row) => [
+          '<article class="item">',
+          "<strong>" + escapeHtml(String(row.stage || "stage")) + "</strong>",
+          '<div class="meta">' + escapeHtml(String(row.agent || "agent")) + " • " + escapeHtml(fmtRelativeTime(row.endedAt || row.startedAt || "")) + "</div>",
+          "</article>",
+        ].join("")).join("") + "</div>";
+      }
+
+      function renderDecisionHistoryRows(detail) {
+        const events = Array.isArray(detail.recentEvents) ? detail.recentEvents : [];
+        const rows = events
+          .filter((line) => /approve|reprove|rollback|decision|human/i.test(String(line)))
+          .slice(-6)
+          .reverse();
+        if (!rows.length) return '<div class="empty">No human decisions recorded yet.</div>';
+        return '<div class="decision-history">' + rows.map((line) => {
+          const text = String(line || "");
+          const title = text.split("|")[0] || text;
+          const reason = text.includes("Reason:") ? text.split("Reason:")[1] : "";
+          return [
+            '<article class="row">',
+            '<div class="title">' + escapeHtml(title.trim()) + "</div>",
+            '<div class="reason">' + escapeHtml((reason || text).trim()) + "</div>",
+            "</article>",
+          ].join("");
+        }).join("") + "</div>";
+      }
+
       async function postApi(path, payload) {
         const response = await fetch(path, {
           method: "POST",
@@ -3177,8 +3523,13 @@ export function buildWebUiHtml(): string {
         contentEl.innerHTML = [
           '<div id="review-root">',
           '<div class="review-toolbar">',
-          '<div class="muted" style="margin-bottom:8px;">Review controls apply to reprove actions in this queue. Approve can run directly.</div>',
+          '<div class="muted" style="margin-bottom:8px;">Review Inbox: only waiting_human tasks. Approve or reprove with explicit feedback.</div>',
           '<textarea id="review-reason" class="field-input" rows="2" placeholder="Reason for reprove (required to reprove)">' + reasonValue + "</textarea>",
+          '<div class="quick-reasons">',
+          '<button type="button" class="quick-reason" data-quick-reason="Hallucination">Alucinação</button>',
+          '<button type="button" class="quick-reason" data-quick-reason="Logic error">Erro de Lógica</button>',
+          '<button type="button" class="quick-reason" data-quick-reason="Out of scope">Fora do Escopo</button>',
+          "</div>",
           '<div class="actions" style="margin-top:8px;">',
           '<select id="review-rollback" class="field-select">',
           '<option value="none"' + (rollbackValue === "none" ? " selected" : "") + '>Rollback: none</option>',
@@ -3188,11 +3539,12 @@ export function buildWebUiHtml(): string {
           "</div>",
           "</div>",
           queue.map((task) => [
-            '<article class="review-card">',
+            '<article class="review-card waiting">',
             '<div class="review-card-header">',
             '<div><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + "</button><br/><small>" + escapeHtml(task.taskId) + "</small></div>",
             taskStatusBadge(task.status),
             "</div>",
+            '<p class="review-evidence">' + escapeHtml(reviewEvidenceSnippet(task)) + "</p>",
             '<div class="review-card-meta"><span>Type: ' + escapeHtml(task.type) + "</span><span>Updated: " + escapeHtml(fmtDateTime(task.updatedAt)) + "</span></div>",
             '<div class="actions">',
             '<button type="button" class="btn approve" data-task-action="approve" data-task-id="' + escapeHtml(task.taskId) + '">Approve</button>',
@@ -3215,6 +3567,7 @@ export function buildWebUiHtml(): string {
 
         const detail = await api("/api/tasks/" + encodeURIComponent(state.selectedTaskId));
         const eventLines = Array.isArray(detail.recentEvents) ? detail.recentEvents : [];
+        const artifacts = await resolveDecisionArtifacts(detail);
         const detailKey = [
           detail.taskId,
           detail.status,
@@ -3227,48 +3580,95 @@ export function buildWebUiHtml(): string {
           (detail.views || []).length,
           (detail.doneArtifacts || []).length,
           (detail.humanArtifacts || []).length,
+          artifacts.input && artifacts.input.name ? String(artifacts.input.name) : "",
+          artifacts.output && artifacts.output.name ? String(artifacts.output.name) : "",
           state.reviewAlertAt,
         ].join("|");
         if (state.detailRenderedKey === detailKey && document.getElementById("detail-root")) return;
         const canReview = Boolean(detail.humanApprovalRequired) || detail.status === "waiting_human";
         const canCancel = ["new", "in_progress", "waiting_agent"].includes(detail.status);
+        const rollbackStepOptions = [
+          '<option value="">Rollback step: latest</option>',
+          ...(Array.isArray(detail.history) ? detail.history.map((row, index) => {
+            const stage = String(row.stage || "stage");
+            return '<option value="' + escapeHtml(stage) + '">' + escapeHtml(String(index + 1) + ". " + stage) + "</option>";
+          }) : []),
+        ].join("");
         const actionPanel = (canReview || canCancel)
           ? [
-            '<h3 class="section-title">Human Actions</h3>',
-            '<div class="panel-block">',
+            '<div class="decision-actions">',
+            '<h3>Decision Commands</h3>',
             '<textarea id="action-reason" class="field-input" rows="3" placeholder="Reason (required for reprove, optional for cancel)"></textarea>',
+            '<div class="quick-reasons">',
+            '<button type="button" class="quick-reason" data-quick-reason="Hallucination">Alucinação</button>',
+            '<button type="button" class="quick-reason" data-quick-reason="Logic error">Erro de Lógica</button>',
+            '<button type="button" class="quick-reason" data-quick-reason="Out of scope">Fora do Escopo</button>',
+            "</div>",
             '<div class="actions" style="margin-top: 8px;">',
             '<select id="action-rollback" class="field-select">',
             '<option value="none">Rollback: none</option>',
             '<option value="task">Rollback: task-scoped</option>',
             '</select>',
-            canReview ? '<button type="button" class="btn approve" data-task-action="approve">Approve</button>' : "",
-            canReview ? '<button type="button" class="btn reprove" data-task-action="reprove">Reprove</button>' : "",
-            canCancel ? '<button type="button" class="btn cancel" data-task-action="cancel">Cancel Task</button>' : "",
+            '<select id="action-rollback-step" class="field-select">' + rollbackStepOptions + "</select>",
             "</div>",
+            canReview ? '<button type="button" class="btn approve" data-task-action="approve" data-task-id="' + escapeHtml(detail.taskId) + '" title="Ctrl/Cmd + Enter">Approve</button>' : "",
+            canReview ? '<button type="button" class="btn reprove" data-task-action="reprove" data-task-id="' + escapeHtml(detail.taskId) + '">Reprove</button>' : "",
+            canCancel ? '<button type="button" class="btn cancel" data-task-action="cancel" data-task-id="' + escapeHtml(detail.taskId) + '">Cancel Task</button>' : "",
+            '<div class="muted">Shortcut: Ctrl/Cmd + Enter approve • Esc closes review</div>',
             "</div>",
+            '<h4>Decision History</h4>',
+            renderDecisionHistoryRows(detail),
+            "<h4>Artifacts</h4>",
+            '<p class="muted">Views: ' + escapeHtml((detail.views || []).join(", ") || "[none]") + '</p>',
+            '<p class="muted">Done: ' + escapeHtml((detail.doneArtifacts || []).join(", ") || "[none]") + '</p>',
+            '<p class="muted">Human: ' + escapeHtml((detail.humanArtifacts || []).join(", ") || "[none]") + '</p>',
+            '<p class="muted">Status: ' + escapeHtml(detail.status) + "</p>",
           ].join("")
-          : '<h3 class="section-title">Human Actions</h3><div class="empty">No manual action available for this task status.</div>';
+          : [
+            '<div class="decision-actions">',
+            '<h3>Decision Commands</h3>',
+            '<div class="empty">No manual action available for this task status.</div>',
+            '<h4>Decision History</h4>',
+            renderDecisionHistoryRows(detail),
+            "</div>",
+          ].join("");
         const reviewSignal = state.reviewAlertAt
           ? '<p class="review-alert">Attention: new task entered waiting_human at ' + escapeHtml(state.reviewAlertAt) + "</p>"
           : "";
+        const historyRows = renderDecisionTimelineRows(detail.history);
+        const currentAgentLabel = String(detail.currentAgent || "[none]");
+        const senderAgent = currentAgentLabel && currentAgentLabel !== "[none]"
+          ? currentAgentLabel
+          : String((detail.history && detail.history.length ? detail.history[detail.history.length - 1].agent : "") || "[none]");
         contentEl.innerHTML = [
           '<div id="detail-root">',
-          '<div class="toolbar"><div><strong>' + escapeHtml(detail.title) + '</strong><div class="muted">' + escapeHtml(detail.taskId) + '</div></div></div>',
-          '<div class="grid">',
-          '<div class="metric"><div class="muted">Status</div><strong>' + escapeHtml(detail.status) + "</strong></div>",
-          '<div class="metric"><div class="muted">Current Stage</div><strong>' + escapeHtml(detail.currentStage || "[none]") + "</strong></div>",
-          '<div class="metric"><div class="muted">Current Agent</div><strong>' + escapeHtml(detail.currentAgent || "[none]") + "</strong></div>",
-          '<div class="metric"><div class="muted">Estimated Cost</div><strong>' + fmtCost(detail.consumption && detail.consumption.estimatedCostUsd) + "</strong></div>",
-          "</div>",
-          '<h3 class="section-title">Recent Events</h3>',
-          eventLines.length ? "<pre>" + escapeHtml(eventLines.join("\\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
+          '<div class="toolbar"><div><strong>' + escapeHtml(detail.title) + '</strong><div class="muted">' + escapeHtml(detail.taskId) + "</div></div>" + taskStatusBadge(detail.status) + "</div>",
           reviewSignal,
+          '<div class="decision-station">',
+          '<aside class="decision-pane">',
+          "<h3>Context</h3>",
+          '<div class="decision-list">',
+          '<article class="item"><strong>ID</strong><div class="meta">' + escapeHtml(detail.taskId) + "</div></article>",
+          '<article class="item"><strong>Sent by</strong><div class="meta">' + escapeHtml(senderAgent) + "</div></article>",
+          '<article class="item"><strong>Current stage</strong><div class="meta">' + escapeHtml(detail.currentStage || "[none]") + "</div></article>",
+          '<article class="item"><strong>Updated</strong><div class="meta">' + escapeHtml(fmtDateTime(detail.updatedAt)) + "</div></article>",
+          "</div>",
+          "<h4>Timeline</h4>",
+          historyRows,
+          "</aside>",
+          '<section class="decision-pane review-panel">',
+          "<h3>Review Panel</h3>",
+          '<div class="review-compare">',
+          renderArtifactPane("Input Original", artifacts.input),
+          renderArtifactPane("Output da IA", artifacts.output),
+          "</div>",
+          '<h4>Recent Events</h4>',
+          eventLines.length ? "<pre>" + escapeHtml(eventLines.slice(-20).join("\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
+          "</section>",
+          '<aside class="decision-pane">',
           actionPanel,
-          '<h3 class="section-title">Artifacts</h3>',
-          '<p class="muted">Views: ' + escapeHtml((detail.views || []).join(", ") || "[none]") + '</p>',
-          '<p class="muted">Done: ' + escapeHtml((detail.doneArtifacts || []).join(", ") || "[none]") + '</p>',
-          '<p class="muted">Human: ' + escapeHtml((detail.humanArtifacts || []).join(", ") || "[none]") + '</p>',
+          "</aside>",
+          "</div>",
           "</div>",
         ].join("");
         state.detailRenderedKey = detailKey;
@@ -3593,6 +3993,23 @@ export function buildWebUiHtml(): string {
           return;
         }
 
+        const quickReasonTarget = target.closest("[data-quick-reason]");
+        const quickReason = quickReasonTarget instanceof HTMLElement ? String(quickReasonTarget.dataset.quickReason || "") : "";
+        if (quickReason) {
+          const reviewReasonEl = document.getElementById("review-reason");
+          const detailReasonEl = document.getElementById("action-reason");
+          if (detailReasonEl instanceof HTMLTextAreaElement && state.view === "detail") {
+            detailReasonEl.value = quickReason;
+            detailReasonEl.focus();
+            state.reviewDraftReason = quickReason;
+          } else if (reviewReasonEl instanceof HTMLTextAreaElement) {
+            reviewReasonEl.value = quickReason;
+            reviewReasonEl.focus();
+            state.reviewDraftReason = quickReason;
+          }
+          return;
+        }
+
         const taskActionTarget = target.closest("[data-task-action]");
         const taskAction = taskActionTarget instanceof HTMLElement ? taskActionTarget.dataset.taskAction : "";
         if (taskAction) {
@@ -3604,6 +4021,7 @@ export function buildWebUiHtml(): string {
           const reviewRollbackEl = document.getElementById("review-rollback");
           const detailReasonEl = document.getElementById("action-reason");
           const detailRollbackEl = document.getElementById("action-rollback");
+          const detailRollbackStepEl = document.getElementById("action-rollback-step");
           const useReviewControls = Boolean(actionTaskId);
           const reason = useReviewControls
             ? (reviewReasonEl instanceof HTMLTextAreaElement ? reviewReasonEl.value.trim() : String(state.reviewDraftReason || "").trim())
@@ -3611,33 +4029,13 @@ export function buildWebUiHtml(): string {
           const rollbackMode = useReviewControls
             ? (reviewRollbackEl instanceof HTMLSelectElement ? reviewRollbackEl.value : state.reviewRollbackMode || "none")
             : (detailRollbackEl instanceof HTMLSelectElement ? detailRollbackEl.value : "none");
+          const rollbackStep = !useReviewControls && detailRollbackStepEl instanceof HTMLSelectElement
+            ? String(detailRollbackStepEl.value || "")
+            : "";
 
           (async () => {
             try {
-              if (!taskIdToUse) throw new Error("Select a task first.");
-              if (taskAction === "reprove" && !reason) {
-                throw new Error("Reason is required to reprove.");
-              }
-
-              if (taskAction === "approve") {
-                await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/approve", {});
-                setFeedback("Task " + taskIdToUse + " approved successfully.", "info");
-              } else if (taskAction === "reprove") {
-                await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/reprove", {
-                  reason,
-                  rollbackMode,
-                });
-                setFeedback("Task " + taskIdToUse + " reproved and sent back to agent flow.", "info");
-              } else if (taskAction === "cancel") {
-                await postApi("/api/tasks/" + encodeURIComponent(taskIdToUse) + "/cancel", {
-                  reason,
-                });
-                setFeedback("Cancellation requested for task " + taskIdToUse + ".", "info");
-              }
-
-              setPollStatus("Last action at " + fmtTimeNow());
-              if (taskAction === "reprove") state.reviewDraftReason = "";
-              requestRender("user");
+              await executeTaskAction(taskAction, taskIdToUse, reason, rollbackMode, rollbackStep);
             } catch (error) {
               const message = error instanceof Error ? error.message : "Action failed";
               setFeedback(message, "error");
@@ -3682,11 +4080,33 @@ export function buildWebUiHtml(): string {
         if (target instanceof HTMLTextAreaElement && target.id === "review-reason") {
           state.reviewDraftReason = target.value;
         }
+        if (target instanceof HTMLTextAreaElement && target.id === "action-reason") {
+          state.reviewDraftReason = target.value;
+        }
       });
 
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
+          if (state.view === "detail") {
+            state.selectedTaskId = "";
+            setView("review");
+            return;
+          }
           closeSidebarOverlay();
+          return;
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          if (state.view === "detail" && state.selectedTaskId && !state.pendingActionKey) {
+            event.preventDefault();
+            const detailReasonEl = document.getElementById("action-reason");
+            const detailRollbackEl = document.getElementById("action-rollback");
+            const detailRollbackStepEl = document.getElementById("action-rollback-step");
+            const reason = detailReasonEl instanceof HTMLTextAreaElement ? detailReasonEl.value.trim() : "";
+            const rollbackMode = detailRollbackEl instanceof HTMLSelectElement ? detailRollbackEl.value : "none";
+            const rollbackStep = detailRollbackStepEl instanceof HTMLSelectElement ? String(detailRollbackStepEl.value || "") : "";
+            void executeTaskAction("approve", state.selectedTaskId, reason, rollbackMode, rollbackStep)
+              .catch((error) => setFeedback(error instanceof Error ? error.message : "Action failed", "error"));
+          }
           return;
         }
         const keyTarget = event.target;

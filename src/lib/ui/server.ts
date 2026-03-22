@@ -1,4 +1,5 @@
 import http from "node:http";
+import path from "node:path";
 import { URL } from "node:url";
 import { approveTaskService, cancelTaskService, reproveTaskService } from "../services/task-services.js";
 import { getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
@@ -15,6 +16,8 @@ import {
 } from "../observability/analytics.js";
 import { parseHumanInputCommand, parseInlineCommand, type InlineCommand } from "../start-inline-command.js";
 import { runInlineCommand } from "../start/command-handler.js";
+import { exists, readText } from "../fs.js";
+import { taskDir } from "../paths.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -238,6 +241,53 @@ export function createUiRequestHandler(options: {
         return;
       }
 
+      const artifactRouteMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/artifact$/);
+      if (method === "GET" && artifactRouteMatch) {
+        const taskId = decodeURIComponent(artifactRouteMatch[1]);
+        const scope = normalizeString(incomingUrl.searchParams.get("scope"));
+        const name = normalizeString(incomingUrl.searchParams.get("name"));
+        if (!name) {
+          sendJson(res, 400, { ok: false, error: "Artifact name is required." });
+          return;
+        }
+        if (name.includes("..") || name.includes("/") || name.includes("\\")) {
+          sendJson(res, 400, { ok: false, error: "Invalid artifact name." });
+          return;
+        }
+
+        const scopeDir = scope === "views"
+          ? "views"
+          : scope === "artifacts"
+          ? "artifacts"
+          : scope === "done"
+          ? "done"
+          : scope === "human"
+          ? "human"
+          : "";
+        if (!scopeDir) {
+          sendJson(res, 400, { ok: false, error: "Invalid artifact scope." });
+          return;
+        }
+
+        const artifactPath = path.join(taskDir(taskId), scopeDir, name);
+        if (!(await exists(artifactPath))) {
+          sendJson(res, 404, { ok: false, error: `Artifact ${name} not found in ${scopeDir}.` });
+          return;
+        }
+
+        const content = await readText(artifactPath);
+        sendJson(res, 200, {
+          ok: true,
+          data: {
+            taskId,
+            scope: scopeDir,
+            name,
+            content,
+          },
+        });
+        return;
+      }
+
       const taskRouteMatch = pathname.match(/^\/api\/tasks\/([^/]+)$/);
       if (method === "GET" && taskRouteMatch) {
         const taskId = decodeURIComponent(taskRouteMatch[1]);
@@ -278,10 +328,11 @@ export function createUiRequestHandler(options: {
         await assertTaskExists(taskId);
         const body = await parseJsonBody(req);
         const reason = normalizeString(body.reason);
+        const rollbackStep = normalizeString(body.rollbackStep);
         const rollbackMode = normalizeString(body.rollbackMode) === "task" ? "task" : "none";
         const rollbackSummary = rollbackMode === "task" ? await applyTaskRollback(taskId) : null;
-        const result = await reproveTaskService({ taskId, reason, rollbackMode, rollbackSummary });
-        sendJson(res, 200, { ok: true, data: { ...result, status: "reproved", rollbackSummary } });
+        const result = await reproveTaskService({ taskId, reason, rollbackMode, rollbackStep, rollbackSummary });
+        sendJson(res, 200, { ok: true, data: { ...result, status: "reproved", rollbackSummary, rollbackStep } });
         return;
       }
 

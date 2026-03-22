@@ -76,6 +76,10 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('id="live-root"');
     expect(html).toContain('id="review-reason"');
     expect(html).toContain('id="review-rollback"');
+    expect(html).toContain('id="action-rollback-step"');
+    expect(html).toContain('data-quick-reason="Hallucination"');
+    expect(html).toContain("decision-station");
+    expect(html).toContain("review-panel");
     expect(html).toContain('data-task-id="');
     expect(html).toContain('target.closest("[data-task-action]")');
     expect(html).toContain('target.closest("[data-open-task]")');
@@ -112,6 +116,9 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("bindSystemThemeSync(");
     expect(html).toContain("requestRender(");
     expect(html).toContain("executeWebCommand(");
+    expect(html).toContain("executeTaskAction(");
+    expect(html).toContain("setDecisionPending(");
+    expect(html).toContain("/artifact?scope=");
     expect(html).toContain("pushCommandLog(");
     expect(html).toContain("Intl.NumberFormat");
     expect(html).toContain("Intl.DateTimeFormat");
