@@ -123,8 +123,9 @@ export function buildWebUiHtml(): string {
         z-index: 20;
       }
       main {
-        width: min(1380px, calc(100vw - 28px));
-        margin: 14px auto;
+        width: calc(100vw - 12px);
+        max-width: none;
+        margin: 6px auto;
         padding: 0;
       }
       .app-shell {
@@ -737,8 +738,10 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 10px;
         background: var(--surface);
-        padding: 9px 10px;
+        padding: 10px;
         transition: transform 0.16s ease, border-color 0.16s ease;
+        display: grid;
+        gap: 8px;
       }
       .board-card:hover {
         transform: translateY(-1px);
@@ -747,17 +750,57 @@ export function buildWebUiHtml(): string {
       .board-card .head {
         display: flex;
         justify-content: space-between;
-        gap: 8px;
-        align-items: flex-start;
+        gap: 10px;
+        align-items: center;
       }
       .board-card .id {
         color: var(--muted);
         font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .board-card .title {
+        margin: 0;
+        font-size: 0.94rem;
+        line-height: 1.32;
       }
       .board-card .summary {
-        margin-top: 6px;
         color: var(--muted);
-        font-size: 0.84rem;
+        font-size: 0.82rem;
+      }
+      .board-card .chip-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .board-chip {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 2px 7px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--muted);
+        background: var(--surface-soft);
+      }
+      .board-chip.strong {
+        color: var(--fg);
+      }
+      .board-card .foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .board-card .owner {
+        font-size: 0.8rem;
+        color: var(--fg);
+        font-weight: 600;
+      }
+      .board-card .updated {
+        font-size: 0.78rem;
+        color: var(--muted);
       }
       .board-card.waiting_human {
         border-color: color-mix(in srgb, var(--status-waiting-fg) 36%, var(--border));
@@ -1173,6 +1216,9 @@ export function buildWebUiHtml(): string {
         minimumFractionDigits: 2,
         maximumFractionDigits: 4,
       });
+      const relativeTimeFormatter = typeof Intl.RelativeTimeFormat === "function"
+        ? new Intl.RelativeTimeFormat(locale || undefined, { numeric: "auto" })
+        : null;
       const commandCatalog = [
         { mode: "command", name: "help", usage: "help", description: "Show command guide and usage hints." },
         { mode: "command", name: "status", usage: "status", description: "Show concise runtime status." },
@@ -1218,6 +1264,23 @@ export function buildWebUiHtml(): string {
         const date = new Date(raw);
         if (!Number.isFinite(date.getTime())) return raw;
         return dateTimeFormatter.format(date);
+      }
+
+      function fmtRelativeTime(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "unknown";
+        const date = new Date(raw);
+        const ts = date.getTime();
+        if (!Number.isFinite(ts)) return raw;
+        const deltaMs = ts - Date.now();
+        const absMs = Math.abs(deltaMs);
+        if (!relativeTimeFormatter) return fmtDateTime(raw);
+        const minute = 60 * 1000;
+        const hour = 60 * minute;
+        const day = 24 * hour;
+        if (absMs >= day) return relativeTimeFormatter.format(Math.round(deltaMs / day), "day");
+        if (absMs >= hour) return relativeTimeFormatter.format(Math.round(deltaMs / hour), "hour");
+        return relativeTimeFormatter.format(Math.round(deltaMs / minute), "minute");
       }
 
       function escapeHtml(value) {
@@ -1804,6 +1867,36 @@ export function buildWebUiHtml(): string {
         return "todo";
       }
 
+      function renderBoardCard(task, mode) {
+        const stage = String(task.currentStage || "unscoped");
+        const currentAgent = String(task.currentAgent || "unassigned");
+        const nextAgent = String(task.nextAgent || "n/a");
+        const project = String(task.project || "General");
+        const type = String(task.type || "Task");
+        const tokens = fmtNumber(task.consumption && task.consumption.estimatedTotalTokens);
+        const updatedAt = fmtRelativeTime(task.updatedAt);
+        const owner = mode === "kanban"
+          ? currentAgent
+          : currentAgent + " → " + nextAgent;
+        const chips = [
+          '<span class="board-chip strong">' + escapeHtml(project) + "</span>",
+          '<span class="board-chip">' + escapeHtml(type) + "</span>",
+          '<span class="board-chip">' + escapeHtml(stage) + "</span>",
+          '<span class="board-chip">tokens ' + escapeHtml(tokens) + "</span>",
+        ];
+        if (task.humanApprovalRequired || task.status === "waiting_human") {
+          chips.push('<span class="board-chip strong">needs review</span>');
+        }
+        return [
+          '<article class="board-card ' + escapeHtml(task.status) + '">',
+          '<div class="head"><div class="id">' + escapeHtml(task.taskId) + "</div>" + taskStatusBadge(task.status) + "</div>",
+          '<h4 class="title"><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title || task.taskId) + "</button></h4>",
+          '<div class="chip-row">' + chips.join("") + "</div>",
+          '<div class="foot"><div class="owner">' + escapeHtml(owner) + '</div><div class="updated">' + escapeHtml(updatedAt) + "</div></div>",
+          "</article>",
+        ].join("");
+      }
+
       async function renderBoard() {
         const tasks = await api("/api/tasks");
         const mode = state.boardMode === "agent" ? "agent" : "kanban";
@@ -1851,19 +1944,7 @@ export function buildWebUiHtml(): string {
           columns.map((column) => {
             const cards = byColumn[column.id] || [];
             const cardHtml = cards.length
-              ? cards.map((task) => {
-                const stage = String(task.currentStage || "[none]");
-                const currentAgent = String(task.currentAgent || "[none]");
-                const nextAgent = String(task.nextAgent || "[none]");
-                return [
-                  '<article class="board-card ' + escapeHtml(task.status) + '">',
-                  '<div class="head"><div><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + '</button><div class="id">' + escapeHtml(task.taskId) + '</div></div>' + taskStatusBadge(task.status) + "</div>",
-                  '<div class="summary">Current: ' + escapeHtml(currentAgent) + " | Next: " + escapeHtml(nextAgent) + "</div>",
-                  '<div class="summary">Stage: ' + escapeHtml(stage) + " | Tokens: " + fmtNumber(task.consumption && task.consumption.estimatedTotalTokens) + "</div>",
-                  '<div class="summary">Updated: ' + escapeHtml(fmtDateTime(task.updatedAt)) + "</div>",
-                  "</article>",
-                ].join("");
-              }).join("")
+              ? cards.map((task) => renderBoardCard(task, mode)).join("")
               : '<div class="empty">No tasks in this lane.</div>';
             return [
               '<section class="board-column ' + escapeHtml(column.klass || "") + '">',
