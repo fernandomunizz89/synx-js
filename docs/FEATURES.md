@@ -84,3 +84,11 @@
 - `synx status [--all]` for task state overview.
 - `synx doctor` for preflight checks: config, prompts, provider health, stale locks.
 - Structured JSONL logs: `polling-metrics`, `queue-latency`, `provider-throttle`, `stage-metrics`, `provider-model-resolution`.
+
+## Learning Loop
+
+- **Automatic outcome recording** — `synx approve` writes one `LearningEntry` per completed pipeline step; `synx reprove` writes one entry for the last step including the human's feedback reason.
+- **Prompt injection** — before each pipeline step the executor loads the agent's 5 most recent entries and appends a *"Your recent performance"* section to the system prompt.
+- **Append-only JSONL storage** — one file per agent at `.ai-agents/learnings/<agent-id>.jsonl`; no data is ever overwritten or deleted.
+- **`synx learn [agent-id]`** — CLI command showing approval rate, counts, and recent entry history for all agents or a specific one.
+- **Stats API** — `computeLearningStats()` returns `total`, `approved`, `reproved`, `approvalRate`, `mostRecentOutcome`, and `lastTimestamp`.

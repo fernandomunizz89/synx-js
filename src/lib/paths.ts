@@ -47,6 +47,10 @@ export function taskDir(taskId: string): string {
   return path.join(tasksDir(), taskId);
 }
 
+export function learningsDir(): string {
+  return path.join(aiRoot(), "learnings");
+}
+
 export function globalAiRoot(): string {
   return path.join(os.homedir(), ".ai-agents");
 }

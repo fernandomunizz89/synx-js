@@ -10,6 +10,8 @@ import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
 import { exists, readJson, writeJson } from "../lib/fs.js";
 import { taskDir, repoRoot } from "../lib/paths.js";
+import { loadPipelineState } from "../lib/pipeline-state.js";
+import { recordPipelineReproval } from "../lib/learnings.js";
 import { isGitRepository, runCommand } from "../lib/command-runner.js";
 import { nowIso } from "../lib/utils.js";
 import { unique } from "../lib/text-utils.js";
@@ -319,6 +321,13 @@ export const reproveCommand = new Command("reprove")
         rollbackSummary,
       },
     });
+
+    try {
+      const pipelineState = await loadPipelineState(taskId);
+      await recordPipelineReproval(taskId, pipelineState.pipelineId, pipelineState.completedSteps, reason);
+    } catch {
+      // Not a pipeline task or state unavailable — skip learning record
+    }
 
     const detailBits = [
       `Human reprove completed. Task returned to ${target.agent}.`,

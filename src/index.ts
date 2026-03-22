@@ -16,6 +16,7 @@ import { cancelCommand } from "./commands/cancel.js";
 import { reproveCommand } from "./commands/reprove.js";
 import { pipelineCommand } from "./commands/pipeline.js";
 import { agentCommand } from "./commands/agent.js";
+import { learnCommand } from "./commands/learn.js";
 
 loadDotEnvFile();
 
@@ -36,6 +37,7 @@ program.addCommand(cancelCommand);
 program.addCommand(reproveCommand);
 program.addCommand(pipelineCommand);
 program.addCommand(agentCommand);
+program.addCommand(learnCommand);
 
 program.parseAsync(process.argv).catch((error) => {
   console.error("\nError:", error instanceof Error ? error.message : String(error));

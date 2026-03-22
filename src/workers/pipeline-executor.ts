@@ -11,6 +11,7 @@ import { nowIso } from "../lib/utils.js";
 import { taskDir } from "../lib/paths.js";
 import { createProvider } from "../providers/factory.js";
 import { WorkerBase } from "./base.js";
+import { loadRecentLearnings, buildLearningsPromptSection } from "../lib/learnings.js";
 
 export const PIPELINE_EXECUTOR_REQUEST_FILE = "pipeline-executor.request.json";
 export const PIPELINE_EXECUTOR_WORKING_FILE = "pipeline-executor.working.json";
@@ -47,10 +48,14 @@ export class PipelineExecutor extends WorkerBase {
 
     const currentStep = pipeline.steps[currentStepIndex];
 
-    const [prompt, providerChain] = await Promise.all([
+    const [prompt, providerChain, recentLearnings] = await Promise.all([
       resolveStepPrompt(currentStep.agent),
       resolveStepProviderChain(currentStep),
+      loadRecentLearnings(currentStep.agent).catch(() => []),
     ]);
+
+    const learningsSection = buildLearningsPromptSection(recentLearnings);
+    const enrichedPrompt = learningsSection ? `${prompt}${learningsSection}` : prompt;
 
     const input = {
       task: baseInput,
@@ -70,7 +75,7 @@ export class PipelineExecutor extends WorkerBase {
       taskType: baseInput.typeHint,
       taskId,
       stage: `${stage}-step-${currentStepIndex}`,
-      systemPrompt: prompt,
+      systemPrompt: enrichedPrompt,
       input,
       expectedJsonSchemaDescription:
         'JSON object with: summary (string), result (optional object with any fields), nextAgent (optional string)',

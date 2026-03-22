@@ -6,6 +6,8 @@ import { taskDir } from "../lib/paths.js";
 import { confirmAction, selectOption } from "../lib/interactive.js";
 import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
+import { loadPipelineState } from "../lib/pipeline-state.js";
+import { recordPipelineApproval } from "../lib/learnings.js";
 
 export const approveCommand = new Command("approve")
   .description("Approve the final human review and mark the task done")
@@ -76,6 +78,13 @@ export const approveCommand = new Command("approve")
     meta.humanApprovalRequired = false;
     await saveTaskMeta(taskId, meta);
     await logTaskEvent(taskDir(taskId), "Human approval completed. Task marked as done.");
+
+    try {
+      const pipelineState = await loadPipelineState(taskId);
+      await recordPipelineApproval(taskId, pipelineState.pipelineId, pipelineState.completedSteps);
+    } catch {
+      // Not a pipeline task or state unavailable — skip learning record
+    }
 
     console.log(`\nTask approved: ${taskId}`);
     console.log(`Next step: run \`${commandExample("status")}\` to check remaining work.`);
