@@ -221,6 +221,7 @@ export function buildWebUiHtml(): string {
         <button data-view="tasks">Tasks</button>
         <button data-view="review">Review Queue</button>
         <button data-view="detail">Task Detail</button>
+        <button data-view="live">Live Stream</button>
       </nav>
       <section class="card">
         <div id="content"></div>
@@ -232,6 +233,9 @@ export function buildWebUiHtml(): string {
         selectedTaskId: "",
         pollMs: 3000,
         search: "",
+        liveEvents: [],
+        realtimeConnected: false,
+        reviewAlertAt: "",
       };
       const contentEl = document.getElementById("content");
       const navButtons = Array.from(document.querySelectorAll("nav button"));
@@ -402,6 +406,9 @@ export function buildWebUiHtml(): string {
             "</div>",
           ].join("")
           : '<h3 style="margin: 18px 0 8px;">Human Actions</h3><div class="empty">No manual action available for this task status.</div>';
+        const reviewSignal = state.reviewAlertAt
+          ? '<p style="margin-top:8px; color:#7f1e28; font-weight:700;">Attention: new task entered waiting_human at ' + escapeHtml(state.reviewAlertAt) + "</p>"
+          : "";
         contentEl.innerHTML = [
           '<div class="toolbar"><div><strong>' + escapeHtml(detail.title) + '</strong><div class="muted">' + escapeHtml(detail.taskId) + '</div></div></div>',
           '<div class="grid">',
@@ -412,6 +419,7 @@ export function buildWebUiHtml(): string {
           "</div>",
           '<h3 style="margin: 18px 0 8px;">Recent Events</h3>',
           eventLines.length ? "<pre>" + escapeHtml(eventLines.join("\\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
+          reviewSignal,
           actionPanel,
           '<h3 style="margin: 18px 0 8px;">Artifacts</h3>',
           '<p class="muted">Views: ' + escapeHtml((detail.views || []).join(", ") || "[none]") + '</p>',
@@ -426,10 +434,42 @@ export function buildWebUiHtml(): string {
           if (state.view === "tasks") await renderTasks();
           if (state.view === "review") await renderReviewQueue();
           if (state.view === "detail") await renderDetail();
+          if (state.view === "live") renderLive();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown UI error";
           contentEl.innerHTML = '<div class="error">Failed to load view: ' + escapeHtml(message) + "</div>";
         }
+      }
+
+      function renderLive() {
+        const rows = state.liveEvents.slice().reverse();
+        const controls = [
+          '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">',
+          '<button data-runtime-action="pause" style="padding:8px 10px; border-radius:8px; border:1px solid #c38b0f; background:#fff3db; color:#734f03; font-weight:700; cursor:pointer;">Pause Engine</button>',
+          '<button data-runtime-action="resume" style="padding:8px 10px; border-radius:8px; border:1px solid #138a67; background:#e0f5ec; color:#095f45; font-weight:700; cursor:pointer;">Resume Engine</button>',
+          '<button data-runtime-action="stop" style="padding:8px 10px; border-radius:8px; border:1px solid #c33b46; background:#fde8ea; color:#7f1e28; font-weight:700; cursor:pointer;">Graceful Stop</button>',
+          "</div>",
+        ].join("");
+        if (!rows.length) {
+          contentEl.innerHTML = controls + '<div class="empty">Waiting realtime events from <code>/api/stream</code>...</div>';
+          return;
+        }
+        contentEl.innerHTML = [
+          '<div class="toolbar"><div class="muted">Realtime: ' + (state.realtimeConnected ? "connected" : "disconnected") + '</div></div>',
+          controls,
+          "<table>",
+          "<thead><tr><th>At</th><th>Type</th><th>Task</th><th>Payload</th></tr></thead>",
+          "<tbody>",
+          rows.map((event) => [
+            "<tr>",
+            "<td>" + escapeHtml(event.at || "") + "</td>",
+            "<td>" + escapeHtml(event.type || "") + "</td>",
+            "<td>" + escapeHtml(event.taskId || "") + "</td>",
+            "<td><code>" + escapeHtml(JSON.stringify(event.payload || {})) + "</code></td>",
+            "</tr>",
+          ].join("")).join(""),
+          "</tbody></table>",
+        ].join("");
       }
 
       document.addEventListener("click", (event) => {
@@ -484,6 +524,21 @@ export function buildWebUiHtml(): string {
               alert(message);
             }
           })();
+          return;
+        }
+
+        const runtimeAction = target.dataset.runtimeAction;
+        if (runtimeAction) {
+          (async () => {
+            try {
+              await postApi("/api/runtime/" + encodeURIComponent(runtimeAction), {});
+              const badge = document.getElementById("poll-status");
+              if (badge) badge.textContent = "Runtime command sent: " + runtimeAction;
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Runtime action failed";
+              alert(message);
+            }
+          })();
         }
       });
 
@@ -495,7 +550,55 @@ export function buildWebUiHtml(): string {
         }
       });
 
+      function connectRealtime() {
+        try {
+          const source = new EventSource("/api/stream");
+          const badge = document.getElementById("poll-status");
+          source.addEventListener("open", () => {
+            state.realtimeConnected = true;
+            if (badge) badge.textContent = "Realtime connected";
+          });
+          source.addEventListener("error", () => {
+            state.realtimeConnected = false;
+            if (badge) badge.textContent = "Realtime reconnecting...";
+          });
+
+          const types = ["runtime.updated", "task.updated", "task.review_required", "task.decision_recorded", "metrics.updated"];
+          for (const type of types) {
+            source.addEventListener(type, (row) => {
+              try {
+                const parsed = JSON.parse(row.data);
+                state.liveEvents.push(parsed);
+                if (state.liveEvents.length > 160) state.liveEvents = state.liveEvents.slice(-160);
+                if (type === "task.review_required") {
+                  state.reviewAlertAt = new Date().toLocaleTimeString();
+                  if (badge) badge.textContent = "Review required now";
+                }
+                if (parsed && parsed.taskId && state.selectedTaskId && parsed.taskId === state.selectedTaskId && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
+                  if (state.view === "detail") {
+                    void renderDetail();
+                  }
+                }
+                if (state.view === "live") renderLive();
+                if (state.view === "overview" && (type === "runtime.updated" || type === "metrics.updated")) {
+                  void renderOverview();
+                }
+                if (state.view === "review" && type === "task.review_required") {
+                  void renderReviewQueue();
+                }
+              } catch {
+                // ignore malformed stream event payloads
+              }
+            });
+          }
+        } catch {
+          const badge = document.getElementById("poll-status");
+          if (badge) badge.textContent = "Realtime unavailable";
+        }
+      }
+
       setInterval(render, state.pollMs);
+      connectRealtime();
       render();
     </script>
   </body>
