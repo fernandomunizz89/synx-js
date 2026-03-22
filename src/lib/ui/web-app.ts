@@ -7,15 +7,81 @@ export function buildWebUiHtml(): string {
     <title>SYNX Web UI</title>
     <style>
       :root {
+        color-scheme: light;
+        --synx-cyan: #00ffff;
+        --synx-magenta: #ff00ff;
+        --synx-purple-soft: #c89bff;
         --bg: #eff4f2;
+        --bg-elev: #e8efec;
         --fg: #0f2230;
         --accent: #0d8f66;
         --accent-soft: #d7f4e9;
         --card: #ffffff;
+        --surface: #ffffff;
+        --surface-soft: #f8fbfa;
+        --surface-strong: #ffffff;
         --muted: #4e6278;
         --danger: #b2272d;
         --border: #d7e3ea;
         --focus: #0f5fcc;
+        --shadow: 0 12px 30px rgba(15, 34, 48, 0.12);
+        --title-gradient: linear-gradient(90deg, var(--synx-cyan) 0%, var(--synx-magenta) 100%);
+        --status-neutral-bg: #ecf1f5;
+        --status-neutral-fg: #20445e;
+        --status-waiting-bg: #fff4dc;
+        --status-waiting-fg: #7b5600;
+        --status-failed-bg: #ffe5e7;
+        --status-failed-fg: #7f1e28;
+        --status-done-bg: #ddf5eb;
+        --status-done-fg: #145f43;
+        --status-progress-bg: #e8f0ff;
+        --status-progress-fg: #184c96;
+        --pill-runtime-bg: #e8f0ff;
+        --pill-runtime-fg: #184c96;
+        --pill-task-bg: #e0f5ec;
+        --pill-task-fg: #095f45;
+        --pill-review-bg: #fff3d7;
+        --pill-review-fg: #734f03;
+        --pill-metrics-bg: #ecf1f5;
+        --pill-metrics-fg: #20445e;
+      }
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #0a1119;
+        --bg-elev: #131f2d;
+        --fg: #e4edf8;
+        --accent: #1fe3a4;
+        --accent-soft: rgba(31, 227, 164, 0.14);
+        --card: #101925;
+        --surface: #121e2d;
+        --surface-soft: #172433;
+        --surface-strong: #1a2a3b;
+        --muted: #9db0c8;
+        --danger: #ff6c7d;
+        --border: #2d3f54;
+        --focus: #5ca8ff;
+        --shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
+        --status-neutral-bg: #1a2a3e;
+        --status-neutral-fg: #bdd1e8;
+        --status-waiting-bg: #3a2b12;
+        --status-waiting-fg: #ffd081;
+        --status-failed-bg: #47212b;
+        --status-failed-fg: #ff95a3;
+        --status-done-bg: #123a30;
+        --status-done-fg: #8ff5cf;
+        --status-progress-bg: #1a3253;
+        --status-progress-fg: #9ec9ff;
+        --pill-runtime-bg: #1a3253;
+        --pill-runtime-fg: #9ec9ff;
+        --pill-task-bg: #123a30;
+        --pill-task-fg: #8ff5cf;
+        --pill-review-bg: #3a2b12;
+        --pill-review-fg: #ffd081;
+        --pill-metrics-bg: #1a2a3e;
+        --pill-metrics-fg: #bdd1e8;
+      }
+      html[data-theme="light"] {
+        color-scheme: light;
       }
       * {
         box-sizing: border-box;
@@ -26,8 +92,11 @@ export function buildWebUiHtml(): string {
       }
       body {
         margin: 0;
-        font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
-        background: radial-gradient(circle at 8% 12%, #dff2ea 0%, var(--bg) 56%);
+        font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+        background:
+          radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--synx-cyan) 18%, transparent) 0%, transparent 32%),
+          radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--synx-magenta) 16%, transparent) 0%, transparent 28%),
+          linear-gradient(165deg, var(--bg-elev) 0%, var(--bg) 62%);
         color: var(--fg);
         line-height: 1.45;
       }
@@ -35,7 +104,7 @@ export function buildWebUiHtml(): string {
         position: absolute;
         top: -40px;
         left: 12px;
-        background: #fff;
+        background: var(--surface-strong);
         border: 1px solid var(--border);
         border-radius: 8px;
         padding: 8px 10px;
@@ -54,14 +123,83 @@ export function buildWebUiHtml(): string {
       }
       .topbar {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: space-between;
-        gap: 12px;
+        gap: 16px;
         margin-bottom: 16px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--surface) 86%, transparent);
+        box-shadow: var(--shadow);
+        padding: 14px;
+      }
+      .brand-panel {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+      }
+      .synx-logo {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: var(--surface-soft);
+        min-width: 260px;
+      }
+      .logo-ascii {
+        margin: 0;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 11px;
+        line-height: 1.05;
+        white-space: pre;
+        letter-spacing: 0.01em;
+        background: var(--title-gradient);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+      }
+      .logo-tag {
+        margin-top: 8px;
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--synx-purple-soft);
+      }
+      .topbar-controls {
+        display: grid;
+        gap: 8px;
+        min-width: 250px;
+        justify-items: end;
+      }
+      .theme-switch {
+        display: inline-flex;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--surface-soft);
+      }
+      .theme-btn {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        padding: 7px 12px;
+        font-size: 0.84rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .theme-btn.active {
+        background: var(--title-gradient);
+        color: #041018;
       }
       .title-wrap h1 {
         margin: 0 0 2px;
-        font-size: 2rem;
+        font-size: clamp(1.4rem, 3vw, 2rem);
+        letter-spacing: 0.01em;
+        background: var(--title-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        color: transparent;
       }
       .title-wrap p {
         margin: 0;
@@ -70,9 +208,10 @@ export function buildWebUiHtml(): string {
         padding: 8px 12px;
         border-radius: 999px;
         background: var(--accent-soft);
-        color: #0a6749;
+        color: var(--fg);
         font-size: 0.9rem;
-        font-weight: 600;
+        font-weight: 700;
+        border: 1px solid var(--border);
       }
       nav {
         display: grid;
@@ -84,23 +223,24 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 10px 12px;
-        background: #fff;
+        background: var(--surface-strong);
         color: var(--fg);
         font-weight: 600;
         cursor: pointer;
         min-height: 44px;
       }
       nav button.active {
-        border-color: #1a946f;
-        background: #e2f7ef;
-        color: #0a6548;
+        border-color: color-mix(in srgb, var(--synx-cyan) 38%, var(--border));
+        background: linear-gradient(90deg, color-mix(in srgb, var(--synx-cyan) 18%, var(--surface)) 0%, color-mix(in srgb, var(--synx-magenta) 16%, var(--surface)) 100%);
+        color: var(--fg);
       }
       .card {
         background: var(--card);
         border-radius: 16px;
         padding: 20px;
-        box-shadow: 0 8px 24px rgba(17, 32, 52, 0.08);
+        box-shadow: var(--shadow);
         margin-bottom: 16px;
+        border: 1px solid var(--border);
       }
       .grid {
         display: grid;
@@ -111,7 +251,7 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 12px;
-        background: #fff;
+        background: var(--surface);
       }
       .metric strong {
         display: block;
@@ -139,6 +279,41 @@ export function buildWebUiHtml(): string {
         border-radius: 10px;
         padding: 10px 12px;
         font: inherit;
+        background: var(--surface);
+        color: var(--fg);
+      }
+      textarea, select, input {
+        background: var(--surface);
+        color: var(--fg);
+      }
+      .field-input {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        font: inherit;
+      }
+      .field-select {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        background: var(--surface);
+        color: var(--fg);
+        font: inherit;
+      }
+      .panel-block {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        background: var(--surface-soft);
+      }
+      .section-title {
+        margin: 18px 0 8px;
+      }
+      .review-alert {
+        margin-top: 8px;
+        color: var(--status-failed-fg);
+        font-weight: 700;
       }
       table {
         width: 100%;
@@ -158,7 +333,7 @@ export function buildWebUiHtml(): string {
         letter-spacing: 0.04em;
       }
       a, button.link {
-        color: #0a7a5a;
+        color: var(--accent);
         text-decoration: none;
         font-weight: 600;
         background: none;
@@ -172,13 +347,13 @@ export function buildWebUiHtml(): string {
         padding: 4px 8px;
         font-size: 0.78rem;
         font-weight: 700;
-        background: #ecf1f5;
-        color: #20445e;
+        background: var(--status-neutral-bg);
+        color: var(--status-neutral-fg);
       }
-      .status.waiting_human { background: #fff4dc; color: #7b5600; }
-      .status.failed { background: #ffe5e7; color: #7f1e28; }
-      .status.done { background: #ddf5eb; color: #145f43; }
-      .status.in_progress, .status.waiting_agent, .status.new { background: #e8f0ff; color: #184c96; }
+      .status.waiting_human { background: var(--status-waiting-bg); color: var(--status-waiting-fg); }
+      .status.failed { background: var(--status-failed-bg); color: var(--status-failed-fg); }
+      .status.done { background: var(--status-done-bg); color: var(--status-done-fg); }
+      .status.in_progress, .status.waiting_agent, .status.new { background: var(--status-progress-bg); color: var(--status-progress-fg); }
       .error {
         color: var(--danger);
         font-weight: 600;
@@ -186,7 +361,7 @@ export function buildWebUiHtml(): string {
       .feedback {
         min-height: 20px;
         margin-bottom: 10px;
-        color: #16543f;
+        color: var(--fg);
         font-size: 0.92rem;
       }
       .feedback.error {
@@ -209,8 +384,8 @@ export function buildWebUiHtml(): string {
         width: 16px;
         height: 16px;
         border-radius: 999px;
-        border: 2px solid #b8d5c9;
-        border-top-color: #0f8f66;
+        border: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
+        border-top-color: var(--accent);
         animation: spin 0.9s linear infinite;
       }
       @keyframes spin {
@@ -229,14 +404,14 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 10px 10px 8px;
-        background: #fff;
+        background: var(--surface);
       }
       .chart {
         width: 100%;
         height: auto;
         display: block;
         border-radius: 10px;
-        background: linear-gradient(180deg, #f6faf8 0%, #ffffff 70%);
+        background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 38%, var(--surface)) 0%, var(--surface) 70%);
       }
       .chart-legend {
         display: flex;
@@ -255,7 +430,7 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 8px 12px;
-        background: #fff;
+        background: var(--surface-strong);
         color: var(--fg);
         font-weight: 700;
         cursor: pointer;
@@ -280,7 +455,7 @@ export function buildWebUiHtml(): string {
         border-radius: 12px;
         padding: 12px;
         margin-bottom: 10px;
-        background: #fff;
+        background: var(--surface);
       }
       .review-card:last-child {
         margin-bottom: 0;
@@ -305,7 +480,7 @@ export function buildWebUiHtml(): string {
         border-radius: 12px;
         padding: 12px;
         margin-bottom: 12px;
-        background: #f8fbfa;
+        background: var(--surface-soft);
       }
       .event-feed {
         display: grid;
@@ -315,7 +490,7 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 12px;
         padding: 12px;
-        background: #fff;
+        background: var(--surface);
       }
       .event-card .head {
         display: flex;
@@ -332,7 +507,7 @@ export function buildWebUiHtml(): string {
         font-size: 0.86rem;
       }
       .event-card .summary {
-        color: #284258;
+        color: var(--fg);
         font-size: 0.95rem;
       }
       .event-card .details {
@@ -349,10 +524,10 @@ export function buildWebUiHtml(): string {
         font-weight: 700;
         padding: 3px 8px;
       }
-      .pill.runtime { background: #e8f0ff; color: #184c96; }
-      .pill.task { background: #e0f5ec; color: #095f45; }
-      .pill.review { background: #fff3d7; color: #734f03; }
-      .pill.metrics { background: #ecf1f5; color: #20445e; }
+      .pill.runtime { background: var(--pill-runtime-bg); color: var(--pill-runtime-fg); }
+      .pill.task { background: var(--pill-task-bg); color: var(--pill-task-fg); }
+      .pill.review { background: var(--pill-review-bg); color: var(--pill-review-fg); }
+      .pill.metrics { background: var(--pill-metrics-bg); color: var(--pill-metrics-fg); }
       .sr-only {
         border: 0 !important;
         clip: rect(0 0 0 0) !important;
@@ -365,16 +540,31 @@ export function buildWebUiHtml(): string {
       }
       pre {
         white-space: pre-wrap;
-        background: #f4f8fb;
+        background: var(--surface-soft);
         border-radius: 12px;
         padding: 12px;
       }
       code {
-        background: #edf2f7;
+        background: var(--surface-soft);
         padding: 2px 6px;
         border-radius: 6px;
       }
       @media (max-width: 940px) {
+        .topbar {
+          flex-direction: column;
+        }
+        .brand-panel {
+          width: 100%;
+          flex-direction: column;
+        }
+        .synx-logo {
+          width: 100%;
+          min-width: 0;
+        }
+        .topbar-controls {
+          width: 100%;
+          justify-items: start;
+        }
         nav {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
@@ -396,6 +586,12 @@ export function buildWebUiHtml(): string {
         nav {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+        .theme-switch {
+          width: 100%;
+        }
+        .theme-btn {
+          flex: 1;
+        }
       }
     </style>
   </head>
@@ -403,11 +599,29 @@ export function buildWebUiHtml(): string {
     <a class="skip-link" href="#main-content">Skip to content</a>
     <main id="main-content">
       <div class="topbar">
-        <div class="title-wrap">
-          <h1>SYNX Web Observability</h1>
-          <p>Phase 5 - hardened observability, review operations, and analytics</p>
+        <div class="brand-panel">
+          <div class="synx-logo" aria-hidden="true">
+            <pre class="logo-ascii">███████╗██╗   ██╗███╗   ██╗██╗  ██╗
+██╔════╝╚██╗ ██╔╝████╗  ██║╚██╗██╔╝
+███████╗ ╚████╔╝ ██╔██╗ ██║ ╚███╔╝
+╚════██║  ╚██╔╝  ██║╚██╗██║ ██╔██╗
+███████║   ██║   ██║ ╚████║██╔╝ ██╗
+╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝</pre>
+            <div class="logo-tag">[ Synthetic Agent Orchestrator v5.0 ]</div>
+          </div>
+          <div class="title-wrap">
+            <h1>SYNX Mission Control</h1>
+            <p>SYNX Web Observability: runtime, human review e analytics em tempo real</p>
+          </div>
         </div>
-        <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Polling 3s</div>
+        <div class="topbar-controls">
+          <div class="theme-switch" role="group" aria-label="Theme mode">
+            <button type="button" class="theme-btn" data-theme-option="light">Light</button>
+            <button type="button" class="theme-btn active" data-theme-option="system" aria-pressed="true">System</button>
+            <button type="button" class="theme-btn" data-theme-option="dark">Dark</button>
+          </div>
+          <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Polling 3s</div>
+        </div>
       </div>
       <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
       <nav aria-label="SYNX Web UI sections">
@@ -436,12 +650,16 @@ export function buildWebUiHtml(): string {
         reviewRenderedKey: "",
         liveRenderedCount: -1,
         liveRenderedConnected: null,
+        themePreference: "system",
+        themeResolved: "light",
         renderedViews: {},
       };
+      const rootEl = document.documentElement;
       const contentEl = document.getElementById("content");
       const pollStatusEl = document.getElementById("poll-status");
       const feedbackEl = document.getElementById("feedback");
       const navButtons = Array.from(document.querySelectorAll("nav button"));
+      const themeButtons = Array.from(document.querySelectorAll("[data-theme-option]"));
 
       function fmtNumber(value) {
         const n = Number(value || 0);
@@ -527,7 +745,7 @@ export function buildWebUiHtml(): string {
         const gridFractions = [0.25, 0.5, 0.75];
         const gridLines = gridFractions.map((fraction) => {
           const y = (height - padY - usableHeight * fraction).toFixed(2);
-          return '<line x1="' + padX + '" y1="' + y + '" x2="' + (width - padX) + '" y2="' + y + '" stroke="#e6eef2" stroke-width="1" />';
+          return '<line x1="' + padX + '" y1="' + y + '" x2="' + (width - padX) + '" y2="' + y + '" stroke="var(--border)" stroke-width="1" />';
         }).join("");
 
         const formatValue = typeof args.formatValue === "function" ? args.formatValue : (x) => String(x);
@@ -541,7 +759,7 @@ export function buildWebUiHtml(): string {
           '<div class="toolbar" style="margin-bottom:8px;"><div><strong>' + escapeHtml(title) + '</strong><div class="muted">' + escapeHtml(firstDate) + " to " + escapeHtml(lastDate) + '</div></div><div class="muted">Peak: ' + escapeHtml(peakLabel) + "</div></div>",
           '<svg class="chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="' + escapeHtml(title) + '">',
           gridLines,
-          '<line x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padX) + '" y2="' + (height - padY) + '" stroke="#d5e4ea" stroke-width="1" />',
+          '<line x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padX) + '" y2="' + (height - padY) + '" stroke="var(--border)" stroke-width="1" />',
           '<polygon points="' + areaPoints + '" fill="' + escapeHtml(args.fill || "rgba(13,143,102,0.16)") + '" />',
           '<polyline points="' + polylinePoints + '" fill="none" stroke="' + escapeHtml(args.color || "#0f8f66") + '" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />',
           markers,
@@ -559,6 +777,61 @@ export function buildWebUiHtml(): string {
         if (!feedbackEl) return;
         feedbackEl.textContent = message || "";
         feedbackEl.classList.toggle("error", tone === "error");
+      }
+
+      function loadThemePreference() {
+        try {
+          const stored = localStorage.getItem("synx-theme-preference");
+          if (stored === "light" || stored === "dark" || stored === "system") return stored;
+        } catch {
+          // ignore localStorage failures in restricted browsers
+        }
+        return "system";
+      }
+
+      function resolveThemeFromPreference(preference) {
+        if (preference === "light" || preference === "dark") return preference;
+        try {
+          return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        } catch {
+          return "light";
+        }
+      }
+
+      function applyThemePreference(preference, persist) {
+        const normalized = preference === "light" || preference === "dark" ? preference : "system";
+        const resolved = resolveThemeFromPreference(normalized);
+        state.themePreference = normalized;
+        state.themeResolved = resolved;
+        rootEl.setAttribute("data-theme", resolved);
+        for (const button of themeButtons) {
+          if (!(button instanceof HTMLElement)) continue;
+          const isActive = button.dataset.themeOption === normalized;
+          button.classList.toggle("active", isActive);
+          button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        }
+        if (persist !== false) {
+          try {
+            localStorage.setItem("synx-theme-preference", normalized);
+          } catch {
+            // ignore localStorage failures in restricted browsers
+          }
+        }
+      }
+
+      function bindSystemThemeSync() {
+        let media = null;
+        try {
+          media = window.matchMedia("(prefers-color-scheme: dark)");
+        } catch {
+          media = null;
+        }
+        if (!media) return;
+        const sync = () => {
+          if (state.themePreference === "system") applyThemePreference("system", false);
+        };
+        if (typeof media.addEventListener === "function") media.addEventListener("change", sync);
+        else if (typeof media.addListener === "function") media.addListener(sync);
       }
 
       function showLoading(message) {
@@ -818,9 +1091,9 @@ export function buildWebUiHtml(): string {
           '<div id="review-root">',
           '<div class="review-toolbar">',
           '<div class="muted" style="margin-bottom:8px;">Review controls apply to reprove actions in this queue. Approve can run directly.</div>',
-          '<textarea id="review-reason" rows="2" style="width:100%; border:1px solid var(--border); border-radius:8px; padding:8px; font:inherit;" placeholder="Reason for reprove (required to reprove)">' + reasonValue + "</textarea>",
+          '<textarea id="review-reason" class="field-input" rows="2" placeholder="Reason for reprove (required to reprove)">' + reasonValue + "</textarea>",
           '<div class="actions" style="margin-top:8px;">',
-          '<select id="review-rollback" style="border:1px solid var(--border); border-radius:8px; padding:8px;">',
+          '<select id="review-rollback" class="field-select">',
           '<option value="none"' + (rollbackValue === "none" ? " selected" : "") + '>Rollback: none</option>',
           '<option value="task"' + (rollbackValue === "task" ? " selected" : "") + '>Rollback: task-scoped</option>',
           "</select>",
@@ -858,23 +1131,23 @@ export function buildWebUiHtml(): string {
         const canCancel = ["new", "in_progress", "waiting_agent"].includes(detail.status);
         const actionPanel = (canReview || canCancel)
           ? [
-            '<h3 style="margin: 18px 0 8px;">Human Actions</h3>',
-            '<div style="border: 1px solid var(--border); border-radius: 12px; padding: 12px;">',
-            '<textarea id="action-reason" rows="3" style="width: 100%; border:1px solid var(--border); border-radius:8px; padding: 8px; font: inherit;" placeholder="Reason (required for reprove, optional for cancel)"></textarea>',
-            '<div style="display:flex; gap:8px; margin-top: 8px; flex-wrap:wrap;">',
-            '<select id="action-rollback" style="border:1px solid var(--border); border-radius:8px; padding:8px;">',
+            '<h3 class="section-title">Human Actions</h3>',
+            '<div class="panel-block">',
+            '<textarea id="action-reason" class="field-input" rows="3" placeholder="Reason (required for reprove, optional for cancel)"></textarea>',
+            '<div class="actions" style="margin-top: 8px;">',
+            '<select id="action-rollback" class="field-select">',
             '<option value="none">Rollback: none</option>',
             '<option value="task">Rollback: task-scoped</option>',
             '</select>',
-            canReview ? '<button data-task-action="approve" style="padding:8px 12px; border-radius:8px; border:1px solid #138a67; background:#e0f5ec; color:#095f45; font-weight:700; cursor:pointer;">Approve</button>' : "",
-            canReview ? '<button data-task-action="reprove" style="padding:8px 12px; border-radius:8px; border:1px solid #c98a09; background:#fff3d7; color:#734f03; font-weight:700; cursor:pointer;">Reprove</button>' : "",
-            canCancel ? '<button data-task-action="cancel" style="padding:8px 12px; border-radius:8px; border:1px solid #c33b46; background:#fde8ea; color:#7f1e28; font-weight:700; cursor:pointer;">Cancel Task</button>' : "",
+            canReview ? '<button type="button" class="btn approve" data-task-action="approve">Approve</button>' : "",
+            canReview ? '<button type="button" class="btn reprove" data-task-action="reprove">Reprove</button>' : "",
+            canCancel ? '<button type="button" class="btn cancel" data-task-action="cancel">Cancel Task</button>' : "",
             "</div>",
             "</div>",
           ].join("")
-          : '<h3 style="margin: 18px 0 8px;">Human Actions</h3><div class="empty">No manual action available for this task status.</div>';
+          : '<h3 class="section-title">Human Actions</h3><div class="empty">No manual action available for this task status.</div>';
         const reviewSignal = state.reviewAlertAt
-          ? '<p style="margin-top:8px; color:#7f1e28; font-weight:700;">Attention: new task entered waiting_human at ' + escapeHtml(state.reviewAlertAt) + "</p>"
+          ? '<p class="review-alert">Attention: new task entered waiting_human at ' + escapeHtml(state.reviewAlertAt) + "</p>"
           : "";
         contentEl.innerHTML = [
           '<div class="toolbar"><div><strong>' + escapeHtml(detail.title) + '</strong><div class="muted">' + escapeHtml(detail.taskId) + '</div></div></div>',
@@ -884,11 +1157,11 @@ export function buildWebUiHtml(): string {
           '<div class="metric"><div class="muted">Current Agent</div><strong>' + escapeHtml(detail.currentAgent || "[none]") + "</strong></div>",
           '<div class="metric"><div class="muted">Estimated Cost</div><strong>' + fmtCost(detail.consumption && detail.consumption.estimatedCostUsd) + "</strong></div>",
           "</div>",
-          '<h3 style="margin: 18px 0 8px;">Recent Events</h3>',
+          '<h3 class="section-title">Recent Events</h3>',
           eventLines.length ? "<pre>" + escapeHtml(eventLines.join("\\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
           reviewSignal,
           actionPanel,
-          '<h3 style="margin: 18px 0 8px;">Artifacts</h3>',
+          '<h3 class="section-title">Artifacts</h3>',
           '<p class="muted">Views: ' + escapeHtml((detail.views || []).join(", ") || "[none]") + '</p>',
           '<p class="muted">Done: ' + escapeHtml((detail.doneArtifacts || []).join(", ") || "[none]") + '</p>',
           '<p class="muted">Human: ' + escapeHtml((detail.humanArtifacts || []).join(", ") || "[none]") + '</p>',
@@ -925,7 +1198,7 @@ export function buildWebUiHtml(): string {
           contentEl.setAttribute("aria-busy", "false");
           contentEl.innerHTML = [
             '<div class="error" role="alert">Failed to load view: ' + escapeHtml(message) + "</div>",
-            '<div style="margin-top:10px;"><button type="button" data-retry-render style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; color:var(--fg); font-weight:600; cursor:pointer;">Retry</button></div>',
+            '<div style="margin-top:10px;"><button type="button" data-retry-render style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--fg); font-weight:600; cursor:pointer;">Retry</button></div>',
           ].join("");
           setFeedback("View loading failed. Use Retry or change section.", "error");
         }
@@ -1073,6 +1346,14 @@ export function buildWebUiHtml(): string {
       document.addEventListener("click", (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
+
+        const themeTarget = target.closest("[data-theme-option]");
+        const themeOption = themeTarget instanceof HTMLElement ? themeTarget.dataset.themeOption : "";
+        if (themeOption === "light" || themeOption === "dark" || themeOption === "system") {
+          applyThemePreference(themeOption, true);
+          setFeedback("Theme switched to " + themeOption + " mode.", "info");
+          return;
+        }
 
         const navTarget = target.closest("[data-view]");
         const navView = navTarget instanceof HTMLElement ? navTarget.dataset.view : "";
@@ -1233,6 +1514,8 @@ export function buildWebUiHtml(): string {
         }
       }
 
+      applyThemePreference(loadThemePreference(), false);
+      bindSystemThemeSync();
       setInterval(render, state.pollMs);
       connectRealtime();
       render();

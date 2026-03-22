@@ -53,5 +53,15 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('target.closest("[data-runtime-action]")');
     expect(html).toContain("Task moved to waiting_human and needs your decision (");
     expect(html).toContain("Task state changed (");
+    expect(html).toContain('data-theme-option="light"');
+    expect(html).toContain('data-theme-option="system"');
+    expect(html).toContain('data-theme-option="dark"');
+    expect(html).toContain("applyThemePreference(");
+    expect(html).toContain("loadThemePreference(");
+    expect(html).toContain("bindSystemThemeSync(");
+    expect(html).toContain('class="logo-ascii"');
+    expect(html).toContain("SYNX Mission Control");
+    expect(html).toContain("--synx-cyan");
+    expect(html).toContain('html[data-theme="dark"]');
   });
 });
