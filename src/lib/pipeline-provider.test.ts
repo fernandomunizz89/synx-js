@@ -111,6 +111,7 @@ describe("pipeline-provider", () => {
         name: "Custom Agent",
         prompt: "prompts/custom.md",
         provider: { type: "openai-compatible", model: "gpt-4-turbo" },
+        outputSchema: "generic",
       });
 
       const step: PipelineStep = {

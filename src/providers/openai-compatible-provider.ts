@@ -90,7 +90,7 @@ function normalizeEnvToken(value: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
-function normalizeAgentEnvToken(agent: AgentName): string {
+function normalizeAgentEnvToken(agent: AgentName | string): string {
   return normalizeEnvToken(agent);
 }
 
@@ -146,8 +146,8 @@ function resolveTemperature(request: ProviderRequest): number {
     if (value !== null) return value;
   }
 
-  if (typeof AGENT_DEFAULT_TEMPERATURES[request.agent] === "number") {
-    return AGENT_DEFAULT_TEMPERATURES[request.agent];
+  if (typeof AGENT_DEFAULT_TEMPERATURES[request.agent as AgentName] === "number") {
+    return AGENT_DEFAULT_TEMPERATURES[request.agent as AgentName];
   }
 
   if (taskType && typeof TASK_TYPE_DEFAULT_TEMPERATURES[taskType] === "number") {

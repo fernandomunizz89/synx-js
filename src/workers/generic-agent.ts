@@ -46,7 +46,7 @@ export class GenericAgent extends WorkerBase {
     if (this.definition.outputSchema === "builder") {
       const parsed = builderOutputSchema.parse(result.parsed);
       const workspaceRoot = process.cwd();
-      await applyWorkspaceEdits(parsed.edits, workspaceRoot);
+      await applyWorkspaceEdits({ edits: parsed.edits, workspaceRoot });
 
       const nextAgent = parsed.nextAgent ?? this.definition.defaultNextAgent ?? "Human Review";
 

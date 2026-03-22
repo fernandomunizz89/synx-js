@@ -52,7 +52,7 @@ export interface QueueLatencyLogEntry {
   at?: string;
   taskId: string;
   stage: string;
-  agent: AgentName;
+  agent: AgentName | string;
   requestCreatedAt: string;
   startedAt: string;
   queueLatencyMs: number;
@@ -73,7 +73,7 @@ export async function logQueueLatency(entry: QueueLatencyLogEntry): Promise<void
 
 export interface ProviderThrottleLogEntry {
   at?: string;
-  agent: AgentName;
+  agent: AgentName | string;
   taskId?: string;
   stage?: string;
   provider: string;
@@ -120,7 +120,7 @@ export async function logProviderThrottle(entry: ProviderThrottleLogEntry): Prom
 
 export interface ProviderParseRetryLogEntry {
   at?: string;
-  agent: AgentName;
+  agent: AgentName | string;
   taskId?: string;
   stage?: string;
   provider: string;
@@ -157,7 +157,7 @@ export async function logProviderParseRetry(entry: ProviderParseRetryLogEntry): 
 
 export interface ProviderModelResolutionLogEntry {
   at?: string;
-  agent: AgentName;
+  agent: AgentName | string;
   taskId?: string;
   stage?: string;
   provider: string;

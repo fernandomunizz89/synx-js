@@ -17,7 +17,7 @@ interface ResolvedModelSelection {
 }
 
 function normalizeTaskAgent(request: ProviderRequest): AgentName {
-  return request.agent;
+  return request.agent as AgentName;
 }
 
 export class LmStudioProvider implements LlmProvider {

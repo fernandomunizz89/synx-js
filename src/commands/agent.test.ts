@@ -55,8 +55,8 @@ function makeAgentDef(overrides = {}) {
     id: "my-analyst",
     name: "My Analyst",
     prompt: ".ai-agents/prompts/my-analyst.md",
-    provider: { type: "anthropic", model: "claude-sonnet-4-6", apiKeyEnv: "AI_AGENTS_ANTHROPIC_API_KEY" },
-    outputSchema: "generic",
+    provider: { type: "anthropic" as const, model: "claude-sonnet-4-6", apiKeyEnv: "AI_AGENTS_ANTHROPIC_API_KEY" },
+    outputSchema: "generic" as const,
     defaultNextAgent: "Synx Back Expert",
     ...overrides,
   };
