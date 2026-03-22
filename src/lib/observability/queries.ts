@@ -6,7 +6,9 @@ import { processIsRunning } from "../runtime/locks.js";
 import { loadPipelineState } from "../pipeline-state.js";
 import { loadTaskCancelRequest } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
+import { buildCollaborationMetricsReport } from "../collaboration-metrics.js";
 import type { TaskMeta } from "../types.js";
+import type { CollaborationMetricsReport } from "../metrics-helpers.js";
 import type {
   OverviewDto,
   ReviewQueueItemDto,
@@ -192,4 +194,11 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
     pipelineState,
     cancelRequest,
   };
+}
+
+export async function getMetricsOverview(hours = 24): Promise<CollaborationMetricsReport> {
+  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : 24;
+  const untilMs = Date.now();
+  const sinceMs = untilMs - Math.round(safeHours * 60 * 60 * 1000);
+  return buildCollaborationMetricsReport({ sinceMs, untilMs });
 }
