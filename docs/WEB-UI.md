@@ -35,6 +35,59 @@ synx ui --read-only
 - **Live Stream:** runtime/task/metrics events over SSE
 - **Analytics:** rankings for tasks/agents/projects plus timeline, QA-loop indicators, and 30-day cost/token/duration curves
 
+## Frontend architecture (incremental React)
+
+The current UI follows an incremental migration path that keeps the existing local API/SSE contract stable.
+
+- Server renders the shell and legacy fallback containers.
+- Browser loads `dist/ui-assets/task-assistant.react.js` via `GET /ui-assets/task-assistant.react.js`.
+- React islands mount progressively inside the shell.
+- Legacy fallback remains active only if the React bundle fails to load or mount.
+
+Current React islands:
+- Task Assistant (simple form + advanced panel behind "Advanced").
+- Header global search.
+- Task Board (Kanban and Agent Lanes).
+
+Fallback containers currently used by the shell:
+- `#simple-action-fallback`
+- `#header-search-fallback`
+- `#board-fallback`
+
+## Build and validation
+
+Run from project root:
+
+```bash
+npm run build
+```
+
+Build breakdown:
+- `npm run build:ts` compiles TypeScript.
+- `npm run build:ui` bundles React islands into `dist/ui-assets/task-assistant.react.js`.
+
+Recommended UI verification:
+
+```bash
+npm run test -- src/lib/ui/web-app.test.ts src/lib/ui/layout.test.ts src/lib/ui/server.test.ts src/lib/ui/server-contract.test.ts src/lib/ui/server-actions.test.ts
+npm run check
+```
+
+## Incremental rollout and legacy removal
+
+Migration is done module by module to avoid downtime or UX breakage.
+
+1. Migrate one module to React while preserving existing API payloads and routes.
+2. Keep fallback in place while tests and manual flows stabilize.
+3. Remove fallback markup and legacy handlers for the stabilized module.
+4. Repeat for the next module until legacy rendering is fully retired.
+
+Suggested next modules:
+- Header and Omnisearch hardening (keyboard navigation and result grouping).
+- Task Board interactions expansion (drag/drop and detail drawer transitions).
+- Live Stream and Review Panel migration using the same island pattern.
+- Analytics migration with chart wrappers and export controls.
+
 ## API and SSE endpoints
 
 - `GET /api/health`

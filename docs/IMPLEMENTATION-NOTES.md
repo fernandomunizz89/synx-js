@@ -1,5 +1,39 @@
 # SYNX – Implementation Notes
 
+## Web UI Incremental React Migration (2026-03-22)
+
+### Decision
+
+Adopted a progressive React-island migration instead of a full frontend rewrite. This keeps the Web UI online while preserving the same API and SSE contracts already used in production-like local flows.
+
+### Why this path
+
+- Avoids breaking already working operations during migration.
+- Maintains compatibility with current backend routes and payloads.
+- Allows per-module rollback through legacy fallback containers.
+- Enables focused testing per migrated surface.
+
+### Delivered in current wave
+
+- React island for Task Assistant (simple-first UX with Advanced option).
+- React island for Header Global Search.
+- React island for Task Board (Kanban and Agent Lanes).
+- Bundle pipeline for UI islands via `scripts/build-ui-react.mjs`.
+
+### Stabilization and removal plan
+
+1. Keep module fallback enabled during stabilization.
+2. Validate with UI tests, TypeScript check, and manual interaction sweep.
+3. Remove fallback markup and legacy handlers only for the stabilized module.
+4. Repeat for the next module until legacy renderers are retired.
+
+### Remaining migration targets
+
+- Review Inbox and Decision Station.
+- Live Stream timeline and filter bar.
+- Analytics module charts and period comparators.
+- Global drill-down behavior hardening across all views.
+
 ## Dream Stack 2026 – Strategic Pivot (2026-03-16)
 
 ### Decision

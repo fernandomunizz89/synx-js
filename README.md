@@ -202,6 +202,27 @@ npm run check         # TypeScript type check
 
 ---
 
+## 🧩 Web UI Frontend (Incremental React Migration)
+
+The Web UI is being migrated incrementally to React islands while preserving the existing local API and SSE endpoints.
+
+- Current React islands: Task Assistant, Header Global Search, Task Board.
+- Server-rendered shell remains the integration backbone.
+- Legacy fallback markup remains as a safety net and is hidden when React mount succeeds.
+- Bundle output: `dist/ui-assets/task-assistant.react.js`.
+
+Useful commands:
+
+```bash
+npm run build
+npm run test -- src/lib/ui/web-app.test.ts src/lib/ui/layout.test.ts src/lib/ui/server.test.ts src/lib/ui/server-contract.test.ts src/lib/ui/server-actions.test.ts
+npm run check
+```
+
+See [docs/WEB-UI.md](docs/WEB-UI.md) for the rollout model and fallback removal path.
+
+---
+
 ## 📚 Documentation
 
 | File | Purpose |
