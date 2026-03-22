@@ -1,92 +1,72 @@
+import { buildSynxThemeCssVariables } from "./theme.js";
+import { buildThemeBootstrapScript, SYNX_THEME_STORAGE_KEY } from "./theme-provider.js";
+import { buildHeader, buildMainLayout, buildSidebar } from "./layout.js";
+
 export function buildWebUiHtml(): string {
+  const themeCssVariables = buildSynxThemeCssVariables();
+  const themeBootstrapScript = buildThemeBootstrapScript(SYNX_THEME_STORAGE_KEY);
+  const appShellMarkup = buildMainLayout({
+    sidebar: buildSidebar(),
+    header: buildHeader(),
+    content: `
+        <section class="card">
+          <div class="snapshot-grid">
+            <div class="snapshot-item"><div class="muted text-label">Engine</div><strong id="snapshot-engine" class="text-value">-</strong></div>
+            <div class="snapshot-item"><div class="muted text-label">Active Tasks</div><strong id="snapshot-active" class="text-value">0</strong></div>
+            <div class="snapshot-item"><div class="muted text-label">Waiting Human</div><strong id="snapshot-waiting" class="text-value">0</strong></div>
+            <div class="snapshot-item"><div class="muted text-label">Estimated Cost</div><strong id="snapshot-cost" class="text-value">0</strong></div>
+            <div class="snapshot-item"><div class="muted text-label">Updated</div><strong id="snapshot-updated" class="text-value">-</strong></div>
+          </div>
+        </section>
+
+        <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        <section class="card command-console">
+          <div class="command-head">
+            <div><strong>Command Console</strong><div class="muted">CLI-style input with fast templates and command reference.</div></div>
+            <button type="button" class="btn" data-toggle-command-ref>Commands</button>
+          </div>
+          <div class="command-shell">
+            <form id="web-command-form" class="command-form">
+              <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='status --all | new "Fix bug" --type Bug | approve --task-id task-123' />
+              <select id="web-command-mode" class="field-select">
+                <option value="command">Command mode</option>
+                <option value="human">Human input mode</option>
+              </select>
+              <button type="submit" class="btn approve">Run</button>
+            </form>
+            <div class="command-quick">
+              <button type="button" class="btn" data-web-command="help">help</button>
+              <button type="button" class="btn" data-web-command="status">status</button>
+              <button type="button" class="btn" data-web-command="status --all">status --all</button>
+              <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new</button>
+              <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove</button>
+              <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve</button>
+              <button type="button" class="btn" data-runtime-action="pause">pause</button>
+              <button type="button" class="btn approve" data-runtime-action="resume">resume</button>
+              <button type="button" class="btn cancel" data-runtime-action="stop">stop</button>
+            </div>
+            <section id="command-reference" class="command-ref" hidden>
+              <input id="command-ref-filter" class="field-input" placeholder="Filter command by name or usage..." />
+              <div id="command-ref-list" class="command-ref-list"></div>
+            </section>
+            <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
+        </section>`,
+  });
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SYNX.js - Mission Control</title>
+    <script>${themeBootstrapScript}</script>
     <style>
-      :root {
-        color-scheme: light;
-        --synx-cyan: #00ffff;
-        --synx-magenta: #ff00ff;
-        --synx-purple-soft: #c89bff;
-        --bg: #f4f7fb;
-        --bg-elev: #edf2f8;
-        --bg-glow-left: rgba(79, 139, 255, 0.15);
-        --bg-glow-right: rgba(255, 79, 216, 0.12);
-        --fg: #0f2230;
-        --accent: #0d8f66;
-        --accent-soft: #d7f4e9;
-        --card: #ffffff;
-        --surface: #ffffff;
-        --surface-soft: #f8fbfa;
-        --surface-strong: #ffffff;
-        --muted: #4e6278;
-        --danger: #b2272d;
-        --border: #d7e3ea;
-        --focus: #0f5fcc;
-        --shadow: 0 12px 30px rgba(15, 34, 48, 0.12);
-        --title-gradient: linear-gradient(90deg, var(--synx-cyan) 0%, var(--synx-magenta) 100%);
-        --status-neutral-bg: #ecf1f5;
-        --status-neutral-fg: #20445e;
-        --status-waiting-bg: #fff4dc;
-        --status-waiting-fg: #7b5600;
-        --status-failed-bg: #ffe5e7;
-        --status-failed-fg: #7f1e28;
-        --status-done-bg: #ddf5eb;
-        --status-done-fg: #145f43;
-        --status-progress-bg: #e8f0ff;
-        --status-progress-fg: #184c96;
-        --pill-runtime-bg: #e8f0ff;
-        --pill-runtime-fg: #184c96;
-        --pill-task-bg: #e0f5ec;
-        --pill-task-fg: #095f45;
-        --pill-review-bg: #fff3d7;
-        --pill-review-fg: #734f03;
-        --pill-metrics-bg: #ecf1f5;
-        --pill-metrics-fg: #20445e;
-      }
-      html[data-theme="dark"] {
-        color-scheme: dark;
-        --bg: #0a1119;
-        --bg-elev: #131f2d;
-        --bg-glow-left: rgba(0, 255, 255, 0.12);
-        --bg-glow-right: rgba(255, 0, 255, 0.1);
-        --fg: #e4edf8;
-        --accent: #1fe3a4;
-        --accent-soft: rgba(31, 227, 164, 0.14);
-        --card: #101925;
-        --surface: #121e2d;
-        --surface-soft: #172433;
-        --surface-strong: #1a2a3b;
-        --muted: #9db0c8;
-        --danger: #ff6c7d;
-        --border: #2d3f54;
-        --focus: #5ca8ff;
-        --shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
-        --status-neutral-bg: #1a2a3e;
-        --status-neutral-fg: #bdd1e8;
-        --status-waiting-bg: #3a2b12;
-        --status-waiting-fg: #ffd081;
-        --status-failed-bg: #47212b;
-        --status-failed-fg: #ff95a3;
-        --status-done-bg: #123a30;
-        --status-done-fg: #8ff5cf;
-        --status-progress-bg: #1a3253;
-        --status-progress-fg: #9ec9ff;
-        --pill-runtime-bg: #1a3253;
-        --pill-runtime-fg: #9ec9ff;
-        --pill-task-bg: #123a30;
-        --pill-task-fg: #8ff5cf;
-        --pill-review-bg: #3a2b12;
-        --pill-review-fg: #ffd081;
-        --pill-metrics-bg: #1a2a3e;
-        --pill-metrics-fg: #bdd1e8;
-      }
-      html[data-theme="light"] {
-        color-scheme: light;
-      }
+      ${themeCssVariables}
       * {
         box-sizing: border-box;
       }
@@ -96,119 +76,416 @@ export function buildWebUiHtml(): string {
       }
       body {
         margin: 0;
-        font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+        font-family: var(--font-sans);
+        font-size: var(--type-body-size);
+        font-weight: var(--type-body-weight);
         background:
           radial-gradient(circle at 14% 10%, var(--bg-glow-left) 0%, transparent 32%),
           radial-gradient(circle at 85% 15%, var(--bg-glow-right) 0%, transparent 34%),
           linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
         background-repeat: no-repeat;
         min-height: 100vh;
+        height: 100vh;
+        overflow: hidden;
         color: var(--fg);
-        line-height: 1.45;
+        line-height: var(--type-body-line);
       }
       .skip-link {
         position: absolute;
         top: -40px;
-        left: 12px;
+        left: var(--space-3);
         background: var(--surface-strong);
         border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 8px 10px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-3);
         color: var(--fg);
         text-decoration: none;
         font-weight: 700;
       }
       .skip-link:focus {
-        top: 12px;
+        top: var(--space-3);
         z-index: 20;
       }
       main {
-        width: calc(100vw - 12px);
-        max-width: none;
-        margin: 6px auto;
-        padding: 0;
+        width: 100%;
+        height: 100vh;
+        margin: 0;
+        padding: var(--space-2);
       }
       .app-shell {
+        height: calc(100vh - var(--space-4));
         display: grid;
-        grid-template-columns: minmax(268px, 316px) minmax(0, 1fr);
-        gap: 14px;
-        align-items: start;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: var(--space-3);
+        align-items: stretch;
+        position: relative;
+      }
+      .sidebar-backdrop {
+        display: none;
+      }
+      .workspace {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .workspace-scroll {
+        min-height: 0;
+        overflow: auto;
+        padding: var(--space-6);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: color-mix(in srgb, var(--color-bg-base) 58%, transparent);
       }
       .side-rail {
+        width: 100%;
+        min-width: 240px;
+        max-width: 280px;
+        min-height: 0;
+        overflow: auto;
         border: 1px solid var(--border);
-        border-radius: 18px;
-        background: color-mix(in srgb, var(--surface) 92%, transparent);
-        box-shadow: var(--shadow);
-        padding: 14px;
-        position: sticky;
-        top: 12px;
+        border-radius: var(--radius-md);
+        background: var(--panel);
+        box-shadow: var(--shadow-soft, var(--shadow));
+        padding: var(--space-3);
+        display: flex;
+        flex-direction: column;
+      }
+      .rail-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
+      }
+      .brand-block {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+      .brand-mark {
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--synx-cyan) 34%, var(--surface-soft)) 0%, color-mix(in srgb, var(--synx-magenta) 20%, var(--surface-soft)) 100%);
+        color: #040a14;
+      }
+      .brand-copy {
+        min-width: 0;
+        display: grid;
+      }
+      .brand-copy strong {
+        font-size: 0.88rem;
+        letter-spacing: 0.03em;
+      }
+      .build-version {
+        color: var(--muted);
+        font-size: 0.73rem;
+      }
+      .sidebar-bottom {
+        margin-top: auto;
+        display: grid;
+        gap: var(--space-1);
+        padding-top: var(--space-3);
+      }
+      .utility-link {
+        text-decoration: none;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--muted);
+        font-weight: 600;
+        padding: var(--space-2) var(--space-3);
+      }
+      .utility-link:hover {
+        border-color: var(--border);
+        background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+        color: var(--fg);
+      }
+      .utility-icon {
+        width: 17px;
+        height: 17px;
+        display: inline-flex;
+      }
+      .utility-icon svg {
+        width: 100%;
+        height: 100%;
       }
       .rail-panel {
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: var(--radius-sm);
         background: var(--surface-soft);
-        padding: 12px;
-        margin-top: 10px;
+        padding: var(--space-3);
+        margin-top: var(--space-2);
         display: grid;
-        gap: 10px;
+        gap: var(--space-2);
       }
       .rail-panel > * {
         margin: 0;
       }
       .rail-headline {
-        margin: 8px 0 2px;
-        font-weight: 700;
-        letter-spacing: 0.01em;
+        margin: var(--space-2) 0 2px;
+        font-size: var(--type-label-size);
+        line-height: var(--type-label-line);
+        font-weight: var(--type-label-weight);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
       .rail-subline {
         margin: 0;
         color: var(--muted);
-        font-size: 0.9rem;
+        font-size: var(--type-body-size);
       }
       .review-hotspot[hidden] {
         display: none;
       }
       .review-hotspot .actions {
-        margin-top: 8px;
+        margin-top: var(--space-2);
       }
       .view-nav {
         display: grid;
         grid-template-columns: repeat(1, minmax(0, 1fr));
-        gap: 8px;
-        margin-top: 12px;
+        gap: var(--space-2);
+        margin-top: var(--space-3);
         margin-bottom: 0;
       }
-      .view-nav button {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px 12px;
-        background: var(--surface-strong);
+      .nav-divider {
+        border-top: 1px solid var(--border);
+        margin: var(--space-2) 0;
+      }
+      .view-nav .nav-link {
+        position: relative;
+        border: 1px solid transparent;
+        border-left: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-3) var(--space-2) 14px;
+        background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
         color: var(--fg);
         font-weight: 700;
         cursor: pointer;
         min-height: 44px;
         text-align: left;
+        display: grid;
+        grid-template-columns: 16px minmax(0, 1fr);
+        align-items: center;
+        gap: var(--space-2);
       }
-      .view-nav button .sub {
+      .view-nav .nav-link::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 8px;
+        bottom: 8px;
+        width: 2px;
+        background: transparent;
+        border-radius: 99px;
+      }
+      .view-nav .nav-link:hover {
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
+      }
+      .view-nav .nav-link .nav-icon {
+        width: 16px;
+        height: 16px;
+        display: inline-flex;
+        color: var(--muted);
+      }
+      .view-nav .nav-link .nav-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+      .view-nav .nav-link .nav-copy {
+        min-width: 0;
+      }
+      .view-nav .nav-link .nav-label {
         display: block;
-        font-size: 0.8rem;
+        font-size: 0.83rem;
+        letter-spacing: 0.02em;
+      }
+      .view-nav .nav-link .nav-sub {
+        display: block;
+        font-size: 0.74rem;
         color: var(--muted);
         font-weight: 500;
+        margin-top: 2px;
       }
-      .view-nav button.active {
-        border-color: color-mix(in srgb, var(--synx-cyan) 42%, var(--border));
-        background: linear-gradient(90deg, color-mix(in srgb, var(--synx-cyan) 19%, var(--surface)) 0%, color-mix(in srgb, var(--synx-magenta) 14%, var(--surface)) 100%);
+      .view-nav .nav-link.active {
+        border-color: color-mix(in srgb, var(--synx-cyan) 24%, var(--border));
+        background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
       }
-      .workspace {
-        min-width: 0;
+      .view-nav .nav-link.active::before {
+        background: var(--color-accent-working);
+      }
+      .view-nav .nav-link.active .nav-icon,
+      .view-nav .nav-link.active .nav-label {
+        color: var(--fg);
       }
       .workspace-header {
         border: 1px solid var(--border);
-        border-radius: 16px;
-        background: color-mix(in srgb, var(--surface) 90%, transparent);
-        box-shadow: var(--shadow);
-        padding: 14px 16px;
-        margin-bottom: 12px;
+        border-radius: var(--radius-md);
+        background: var(--panel);
+        box-shadow: var(--shadow-soft, var(--shadow));
+        padding: var(--space-3);
+        margin-bottom: var(--space-3);
+        min-height: 64px;
+      }
+      .app-header {
+        display: grid;
+        grid-template-columns: minmax(0, 260px) minmax(260px, 1fr) auto;
+        align-items: center;
+        gap: var(--space-3);
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+      .header-title {
+        min-width: 0;
+      }
+      .header-breadcrumb {
+        color: var(--muted);
+        font-size: var(--type-label-size);
+        line-height: var(--type-label-line);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .header-title h1 {
+        margin: 2px 0 0;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+      .global-search {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        padding: 0 var(--space-2);
+        min-height: 42px;
+      }
+      .global-search .field-input {
+        border: 0;
+        background: transparent;
+        padding: 0;
+      }
+      .global-search .field-input:focus-visible {
+        outline: none;
+      }
+      .search-icon {
+        width: 16px;
+        height: 16px;
+        color: var(--muted);
+        display: inline-flex;
+      }
+      .search-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .connectivity-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 0 var(--space-2);
+        min-height: 34px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--border);
+        background: var(--surface-soft);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
+      }
+      .connectivity-chip .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+      }
+      .connectivity-chip.is-online {
+        color: var(--color-accent-online);
+      }
+      .connectivity-chip.is-online .dot {
+        background: var(--color-accent-online);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-online) 54%, transparent);
+        animation: pulse-dot 1.7s infinite;
+      }
+      .connectivity-chip.is-offline {
+        color: var(--color-accent-error);
+      }
+      .connectivity-chip.is-offline .dot {
+        background: var(--color-accent-error);
+      }
+      @keyframes pulse-dot {
+        0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-online) 50%, transparent); }
+        70% { box-shadow: 0 0 0 7px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; }
+      }
+      .runtime-chip {
+        min-height: 34px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-pill);
+        background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+        display: inline-flex;
+        align-items: center;
+        padding: 0 var(--space-2);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
+        color: var(--muted);
+      }
+      .icon-btn {
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+        color: var(--fg);
+        border-radius: var(--radius-sm);
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+      }
+      .icon-btn svg {
+        width: 16px;
+        height: 16px;
+      }
+      .notif-btn {
+        width: 40px;
+        height: 34px;
+      }
+      .notif-count {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: var(--color-accent-error);
+        color: #120609;
+        font-size: 0.64rem;
+        font-weight: 800;
+      }
+      .sidebar-toggle,
+      .sidebar-close {
+        display: none;
       }
       .title-wrap p {
         margin: 0;
@@ -216,35 +493,37 @@ export function buildWebUiHtml(): string {
       .snapshot-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
-        gap: 10px;
+        gap: var(--space-2);
       }
       .snapshot-item {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 10px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-3);
         background: var(--surface);
       }
       .snapshot-item strong {
         display: block;
         margin-top: 3px;
-        font-size: 1.12rem;
+        font-size: var(--type-value-size);
+        line-height: var(--type-value-line);
+        font-weight: var(--type-value-weight);
       }
       .topbar {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 16px;
+        gap: var(--space-4);
+        margin-bottom: var(--space-4);
       }
       .brand-panel {
         display: flex;
-        gap: 14px;
+        gap: var(--space-3);
         align-items: flex-start;
       }
       .synx-logo {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
         background: var(--surface-soft);
         width: 100%;
         min-width: 0;
@@ -256,7 +535,7 @@ export function buildWebUiHtml(): string {
       }
       .logo-ascii {
         margin: 0 auto;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-family: var(--font-mono);
         font-size: 11px;
         line-height: 1;
         white-space: pre;
@@ -274,8 +553,10 @@ export function buildWebUiHtml(): string {
         color: transparent;
       }
       .logo-tag {
-        margin-top: 8px;
-        font-size: 0.76rem;
+        margin-top: var(--space-2);
+        font-size: var(--type-label-size);
+        line-height: var(--type-label-line);
+        font-weight: var(--type-label-weight);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--synx-purple-soft);
@@ -283,14 +564,14 @@ export function buildWebUiHtml(): string {
       }
       .topbar-controls {
         display: grid;
-        gap: 8px;
+        gap: var(--space-2);
         min-width: 250px;
         justify-items: end;
       }
       .theme-switch {
         display: inline-flex;
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: var(--radius-sm);
         overflow: hidden;
         background: var(--surface-soft);
       }
@@ -298,9 +579,9 @@ export function buildWebUiHtml(): string {
         border: 0;
         background: transparent;
         color: var(--muted);
-        padding: 7px 12px;
-        font-size: 0.84rem;
-        font-weight: 700;
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
         cursor: pointer;
       }
       .theme-btn.active {
@@ -321,41 +602,42 @@ export function buildWebUiHtml(): string {
         margin: 0;
       }
       .badge {
-        padding: 8px 12px;
-        border-radius: 999px;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-pill);
         background: var(--accent-soft);
         color: var(--fg);
-        font-size: 0.9rem;
-        font-weight: 700;
+        font-size: var(--type-body-size);
+        font-weight: var(--type-label-weight);
         border: 1px solid var(--border);
       }
-      nav {
+      .legacy-nav {
         display: grid;
         grid-template-columns: repeat(7, minmax(0, 1fr));
-        gap: 8px;
-        margin-bottom: 16px;
+        gap: var(--space-2);
+        margin-bottom: var(--space-4);
       }
-      nav button {
+      .legacy-nav button {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        padding: var(--space-2) var(--space-3);
         background: var(--surface-strong);
         color: var(--fg);
         font-weight: 600;
+        font-size: var(--type-body-size);
         cursor: pointer;
         min-height: 44px;
       }
-      nav button.active {
+      .legacy-nav button.active {
         border-color: color-mix(in srgb, var(--synx-cyan) 38%, var(--border));
         background: linear-gradient(90deg, color-mix(in srgb, var(--synx-cyan) 18%, var(--surface)) 0%, color-mix(in srgb, var(--synx-magenta) 16%, var(--surface)) 100%);
         color: var(--fg);
       }
       .card {
         background: var(--card);
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: var(--shadow);
-        margin-bottom: 16px;
+        border-radius: var(--radius-md);
+        padding: var(--space-4);
+        box-shadow: var(--shadow-soft, var(--shadow));
+        margin-bottom: var(--space-4);
         border: 1px solid var(--border);
       }
       .grid {
@@ -363,37 +645,79 @@ export function buildWebUiHtml(): string {
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 10px;
       }
+      .ops-grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: var(--space-3);
+      }
+      .ops-span-3 {
+        grid-column: span 3;
+      }
+      .ops-span-4 {
+        grid-column: span 4;
+      }
+      .ops-span-6 {
+        grid-column: span 6;
+      }
+      .ops-span-8 {
+        grid-column: span 8;
+      }
+      .ops-span-12 {
+        grid-column: span 12;
+      }
       .metric {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-3);
         background: var(--surface);
       }
       .metric strong {
         display: block;
-        font-size: 1.25rem;
+        font-size: var(--type-value-size);
+        line-height: var(--type-value-line);
+        font-weight: var(--type-value-weight);
         margin-top: 2px;
       }
       .muted {
         color: var(--muted);
-        font-size: 0.92rem;
+        font-size: var(--type-body-size);
+        line-height: var(--type-body-line);
       }
       p {
         margin: 0;
         color: var(--muted);
+        font-size: var(--type-body-size);
+        line-height: var(--type-body-line);
+      }
+      .text-label {
+        font-size: var(--type-label-size);
+        line-height: var(--type-label-line);
+        font-weight: var(--type-label-weight);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .text-value {
+        font-size: var(--type-value-size);
+        line-height: var(--type-value-line);
+        font-weight: var(--type-value-weight);
+      }
+      .text-body {
+        font-size: var(--type-body-size);
+        line-height: var(--type-body-line);
+        font-weight: var(--type-body-weight);
       }
       .toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 12px;
+        gap: var(--space-2);
+        margin-bottom: var(--space-3);
       }
       .toolbar input {
         width: min(380px, 100%);
         border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-3);
         font: inherit;
         background: var(--surface);
         color: var(--fg);
@@ -405,26 +729,26 @@ export function buildWebUiHtml(): string {
       .field-input {
         width: 100%;
         border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 8px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
         font: inherit;
       }
       .field-select {
         border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 8px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2);
         background: var(--surface);
         color: var(--fg);
         font: inherit;
       }
       .panel-block {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
         background: var(--surface-soft);
       }
       .section-title {
-        margin: 18px 0 8px;
+        margin: var(--space-5) 0 var(--space-2);
       }
       .review-alert {
         margin-top: 8px;
@@ -432,44 +756,44 @@ export function buildWebUiHtml(): string {
         font-weight: 700;
       }
       .command-console {
-        margin-bottom: 14px;
+        margin-bottom: var(--space-3);
       }
       .command-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--space-2);
       }
       .command-shell {
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: var(--radius-md);
         background: var(--surface-soft);
-        padding: 10px;
+        padding: var(--space-3);
       }
       .command-form {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto auto;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .command-input {
         width: 100%;
       }
       .command-quick {
         display: flex;
-        gap: 8px;
+        gap: var(--space-2);
         flex-wrap: wrap;
-        margin-top: 8px;
+        margin-top: var(--space-2);
       }
       .command-log {
-        margin-top: 10px;
+        margin-top: var(--space-2);
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: var(--radius-sm);
         background: var(--surface);
-        padding: 8px;
+        padding: var(--space-2);
         min-height: 72px;
         max-height: 180px;
         overflow: auto;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-family: var(--font-mono);
         font-size: 0.82rem;
       }
       .command-log .line {
@@ -492,42 +816,42 @@ export function buildWebUiHtml(): string {
         color: var(--muted);
       }
       .command-ref {
-        margin-top: 10px;
+        margin-top: var(--space-2);
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: var(--radius-sm);
         background: var(--surface);
-        padding: 10px;
+        padding: var(--space-3);
       }
       .command-ref[hidden] {
         display: none;
       }
       .command-ref-list {
-        margin-top: 8px;
+        margin-top: var(--space-2);
         display: grid;
-        gap: 8px;
+        gap: var(--space-2);
         max-height: 320px;
         overflow: auto;
       }
       .command-ref-item {
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: var(--radius-sm);
         background: var(--surface-soft);
-        padding: 8px 9px;
+        padding: var(--space-2) var(--space-3);
       }
       .command-ref-top {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .command-ref-code {
         margin-top: 6px;
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-family: var(--font-mono);
         font-size: 0.8rem;
         color: var(--fg);
         background: var(--surface);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: var(--radius-sm);
         padding: 5px 7px;
       }
       .command-ref-item .muted {
@@ -561,10 +885,10 @@ export function buildWebUiHtml(): string {
       }
       .status {
         display: inline-flex;
-        border-radius: 999px;
-        padding: 4px 8px;
-        font-size: 0.78rem;
-        font-weight: 700;
+        border-radius: var(--radius-pill);
+        padding: var(--space-1) var(--space-2);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
         background: var(--status-neutral-bg);
         color: var(--status-neutral-fg);
       }
@@ -578,23 +902,23 @@ export function buildWebUiHtml(): string {
       }
       .feedback {
         min-height: 20px;
-        margin-bottom: 10px;
+        margin-bottom: var(--space-2);
         color: var(--fg);
-        font-size: 0.92rem;
+        font-size: var(--type-body-size);
       }
       .feedback.error {
         color: var(--danger);
       }
       .empty {
         border: 1px dashed var(--border);
-        border-radius: 12px;
-        padding: 20px;
+        border-radius: var(--radius-md);
+        padding: var(--space-5);
         color: var(--muted);
       }
       .loading {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--space-3);
         color: var(--muted);
       }
       .loading::before {
@@ -615,12 +939,12 @@ export function buildWebUiHtml(): string {
       .chart-grid {
         display: grid;
         grid-template-columns: repeat(1, minmax(0, 1fr));
-        gap: 12px;
+        gap: var(--space-3);
         margin: 6px 0 2px;
       }
       .chart-card {
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: var(--radius-md);
         padding: 10px 10px 8px;
         background: var(--surface);
       }
@@ -641,38 +965,39 @@ export function buildWebUiHtml(): string {
       }
       .actions {
         display: flex;
-        gap: 8px;
+        gap: var(--space-2);
         flex-wrap: wrap;
       }
       .btn {
         border: 1px solid var(--border);
-        border-radius: 10px;
-        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        padding: var(--space-2) var(--space-3);
         background: var(--surface-strong);
         color: var(--fg);
-        font-weight: 700;
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
         cursor: pointer;
       }
       .btn.approve {
-        border-color: #138a67;
-        background: #e0f5ec;
-        color: #095f45;
+        border-color: color-mix(in srgb, var(--color-accent-online) 62%, var(--border));
+        background: color-mix(in srgb, var(--color-accent-online) 18%, var(--surface));
+        color: color-mix(in srgb, var(--color-accent-online) 80%, #06140f);
       }
       .btn.reprove {
-        border-color: #c98a09;
-        background: #fff3d7;
-        color: #734f03;
+        border-color: color-mix(in srgb, var(--color-accent-review) 58%, var(--border));
+        background: color-mix(in srgb, var(--color-accent-review) 16%, var(--surface));
+        color: color-mix(in srgb, var(--color-accent-review) 84%, #11061c);
       }
       .btn.cancel {
-        border-color: #c33b46;
-        background: #fde8ea;
-        color: #7f1e28;
+        border-color: color-mix(in srgb, var(--color-accent-error) 60%, var(--border));
+        background: color-mix(in srgb, var(--color-accent-error) 16%, var(--surface));
+        color: color-mix(in srgb, var(--color-accent-error) 82%, #17060a);
       }
       .review-card {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
-        margin-bottom: 10px;
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        margin-bottom: var(--space-2);
         background: var(--surface);
       }
       .review-card:last-child {
@@ -682,46 +1007,46 @@ export function buildWebUiHtml(): string {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--space-2);
         margin-bottom: 6px;
       }
       .review-card-meta {
         display: flex;
-        gap: 12px;
+        gap: var(--space-3);
         flex-wrap: wrap;
         color: var(--muted);
-        font-size: 0.9rem;
-        margin-bottom: 10px;
+        font-size: var(--type-body-size);
+        margin-bottom: var(--space-2);
       }
       .review-toolbar {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
-        margin-bottom: 12px;
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        margin-bottom: var(--space-3);
         background: var(--surface-soft);
       }
       .event-feed {
         display: grid;
-        gap: 10px;
+        gap: var(--space-2);
       }
       .board-columns {
         display: flex;
-        gap: 12px;
+        gap: var(--space-3);
         overflow-x: auto;
         padding-bottom: 6px;
       }
       .board-mode {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .board-column {
         min-width: 270px;
         max-width: 320px;
         border: 1px solid var(--border);
-        border-radius: 12px;
+        border-radius: var(--radius-md);
         background: var(--surface-soft);
-        padding: 10px;
+        padding: var(--space-3);
       }
       .board-column h3 {
         margin: 0 0 6px;
@@ -732,16 +1057,16 @@ export function buildWebUiHtml(): string {
       }
       .board-stack {
         display: grid;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .board-card {
         border: 1px solid var(--border);
-        border-radius: 10px;
+        border-radius: var(--radius-sm);
         background: var(--surface);
-        padding: 10px;
+        padding: var(--space-3);
         transition: transform 0.16s ease, border-color 0.16s ease;
         display: grid;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .board-card:hover {
         transform: translateY(-1px);
@@ -750,7 +1075,7 @@ export function buildWebUiHtml(): string {
       .board-card .head {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
+        gap: var(--space-2);
         align-items: center;
       }
       .board-card .id {
@@ -777,10 +1102,10 @@ export function buildWebUiHtml(): string {
         display: inline-flex;
         align-items: center;
         border: 1px solid var(--border);
-        border-radius: 999px;
+        border-radius: var(--radius-pill);
         padding: 2px 7px;
         font-size: 0.72rem;
-        font-weight: 700;
+        font-weight: var(--type-label-weight);
         color: var(--muted);
         background: var(--surface-soft);
       }
@@ -791,7 +1116,7 @@ export function buildWebUiHtml(): string {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .board-card .owner {
         font-size: 0.8rem;
@@ -833,15 +1158,15 @@ export function buildWebUiHtml(): string {
       }
       .event-card {
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
         background: var(--surface);
       }
       .event-card .head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--space-2);
         margin-bottom: 6px;
       }
       .event-card .title {
@@ -864,9 +1189,9 @@ export function buildWebUiHtml(): string {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 700;
+        border-radius: var(--radius-pill);
+        font-size: var(--type-label-size);
+        font-weight: var(--type-label-weight);
         padding: 3px 8px;
       }
       .pill.runtime { background: var(--pill-runtime-bg); color: var(--pill-runtime-fg); }
@@ -886,44 +1211,84 @@ export function buildWebUiHtml(): string {
       pre {
         white-space: pre-wrap;
         background: var(--surface-soft);
-        border-radius: 12px;
-        padding: 12px;
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
       }
       code {
         background: var(--surface-soft);
         padding: 2px 6px;
-        border-radius: 6px;
+        border-radius: var(--radius-sm);
       }
-      @media (max-width: 940px) {
+      @media (max-width: 1120px) {
+        main {
+          padding: var(--space-2);
+        }
         .app-shell {
           grid-template-columns: 1fr;
+          gap: var(--space-2);
         }
         .side-rail {
-          position: static;
+          position: fixed;
+          left: var(--space-2);
+          top: var(--space-2);
+          bottom: var(--space-2);
+          width: min(82vw, 280px);
+          max-width: 280px;
+          transform: translateX(calc(-100% - var(--space-3)));
+          transition: transform 0.2s ease;
+          z-index: 30;
+        }
+        .app-shell.menu-open .side-rail {
+          transform: translateX(0);
+        }
+        .sidebar-backdrop {
+          display: block;
+          position: fixed;
+          inset: 0;
+          border: 0;
+          padding: 0;
+          margin: 0;
+          background: rgba(5, 10, 18, 0.62);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 0.2s ease;
+          z-index: 20;
+        }
+        .app-shell.menu-open .sidebar-backdrop {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .sidebar-toggle,
+        .sidebar-close {
+          display: inline-flex;
+        }
+        .workspace-scroll {
+          padding: var(--space-5);
+        }
+      }
+      @media (max-width: 940px) {
+        .app-header {
+          grid-template-columns: 1fr;
+          gap: var(--space-2);
+        }
+        .header-right {
+          justify-content: flex-start;
+          flex-wrap: wrap;
+        }
+        .global-search {
+          width: 100%;
         }
         .snapshot-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
-        .topbar {
-          flex-direction: column;
+        .ops-grid {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
         }
-        .brand-panel {
-          width: 100%;
-          flex-direction: column;
-        }
-        .synx-logo {
-          width: 100%;
-          min-width: 0;
-        }
-        .topbar-controls {
-          width: 100%;
-          justify-items: start;
-        }
-        .view-nav {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-        nav {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+        .ops-span-8,
+        .ops-span-6,
+        .ops-span-4,
+        .ops-span-3 {
+          grid-column: span 6;
         }
         .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -952,23 +1317,23 @@ export function buildWebUiHtml(): string {
         }
       }
       @media (max-width: 640px) {
-        main {
-          width: calc(100vw - 14px);
-          margin: 8px auto;
-        }
-        .side-rail {
-          padding: 10px;
+        .workspace-scroll {
+          padding: var(--space-4);
         }
         .workspace-header {
-          padding: 12px;
+          padding: var(--space-3);
         }
-        .grid {
+        .ops-grid {
           grid-template-columns: repeat(1, minmax(0, 1fr));
         }
-        nav {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
+        .ops-span-12,
+        .ops-span-8,
+        .ops-span-6,
+        .ops-span-4,
+        .ops-span-3 {
+          grid-column: span 1;
         }
-        .view-nav {
+        .grid {
           grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         .theme-switch {
@@ -976,9 +1341,6 @@ export function buildWebUiHtml(): string {
         }
         .theme-btn {
           flex: 1;
-        }
-        .logo-ascii {
-          font-size: 9px;
         }
         .command-quick {
           grid-template-columns: 1fr;
@@ -991,104 +1353,16 @@ export function buildWebUiHtml(): string {
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <main id="main-content" class="app-shell">
-      <aside class="side-rail">
-        <div class="synx-logo" aria-hidden="true">
-          <pre class="logo-ascii">███████╗██╗   ██╗███╗   ██╗██╗  ██╗
-██╔════╝╚██╗ ██╔╝████╗  ██║╚██╗██╔╝
-███████╗ ╚████╔╝ ██╔██╗ ██║ ╚███╔╝
-╚════██║  ╚██╔╝  ██║╚██╗██║ ██╔██╗
-███████║   ██║   ██║ ╚████║██╔╝ ██╗
-╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝</pre>
-          <div class="logo-tag">[ AI Agent Orchestrator ]</div>
-        </div>
-        <p class="rail-headline">Operator Console</p>
-        <p class="rail-subline">Dispatcher, planner, expert flow and human gate in one place.</p>
-        <section class="rail-panel">
-          <div class="theme-switch" role="group" aria-label="Theme mode">
-            <button type="button" class="theme-btn" data-theme-option="light">Light</button>
-            <button type="button" class="theme-btn active" data-theme-option="system" aria-pressed="true">System</button>
-            <button type="button" class="theme-btn" data-theme-option="dark">Dark</button>
-          </div>
-          <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Realtime connecting...</div>
-        </section>
-        <section id="review-hotspot" class="rail-panel review-hotspot" hidden>
-          <strong>Human Review Pending</strong>
-          <div id="review-hotspot-meta" class="muted">No tasks waiting right now.</div>
-          <div class="actions">
-            <button type="button" class="btn approve" data-open-review>Open review queue</button>
-          </div>
-        </section>
-        <nav class="view-nav" aria-label="SYNX Web UI sections">
-          <button type="button" data-view="overview" class="active" aria-current="page">Overview<span class="sub">System health and runtime pulse</span></button>
-          <button type="button" data-view="tasks">Tasks<span class="sub">Search, inspect and open task detail</span></button>
-          <button type="button" data-view="board">Agent Board<span class="sub">Jira-like flow across agent lanes</span></button>
-          <button type="button" data-view="review">Review Queue<span class="sub">Approve, reprove and rollback control</span></button>
-          <button type="button" data-view="detail">Task Detail<span class="sub">Human actions and artifacts by task</span></button>
-          <button type="button" data-view="live">Live Stream<span class="sub">Realtime timeline in human language</span></button>
-          <button type="button" data-view="analytics">Analytics<span class="sub">Cost, tokens and bottleneck curves</span></button>
-        </nav>
-      </aside>
-
-      <section class="workspace">
-        <header class="workspace-header">
-          <div class="title-wrap">
-            <h1>SYNX.js - Mission Control</h1>
-            <p>Mission control web observability with human review, command input and agent-board flow.</p>
-          </div>
-        </header>
-
-        <section class="card">
-          <div class="snapshot-grid">
-            <div class="snapshot-item"><div class="muted">Engine</div><strong id="snapshot-engine">-</strong></div>
-            <div class="snapshot-item"><div class="muted">Active Tasks</div><strong id="snapshot-active">0</strong></div>
-            <div class="snapshot-item"><div class="muted">Waiting Human</div><strong id="snapshot-waiting">0</strong></div>
-            <div class="snapshot-item"><div class="muted">Estimated Cost</div><strong id="snapshot-cost">0</strong></div>
-            <div class="snapshot-item"><div class="muted">Updated</div><strong id="snapshot-updated">-</strong></div>
-          </div>
-        </section>
-
-        <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
-
-        <section class="card command-console">
-          <div class="command-head">
-            <div><strong>Command Console</strong><div class="muted">CLI-style input with fast templates and command reference.</div></div>
-            <button type="button" class="btn" data-toggle-command-ref>Commands</button>
-          </div>
-          <div class="command-shell">
-            <form id="web-command-form" class="command-form">
-              <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='status --all | new "Fix bug" --type Bug | approve --task-id task-123' />
-              <select id="web-command-mode" class="field-select">
-                <option value="command">Command mode</option>
-                <option value="human">Human input mode</option>
-              </select>
-              <button type="submit" class="btn approve">Run</button>
-            </form>
-            <div class="command-quick">
-              <button type="button" class="btn" data-web-command="help">help</button>
-              <button type="button" class="btn" data-web-command="status">status</button>
-              <button type="button" class="btn" data-web-command="status --all">status --all</button>
-              <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new</button>
-              <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove</button>
-              <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve</button>
-              <button type="button" class="btn" data-runtime-action="pause">pause</button>
-              <button type="button" class="btn approve" data-runtime-action="resume">resume</button>
-              <button type="button" class="btn cancel" data-runtime-action="stop">stop</button>
-            </div>
-            <section id="command-reference" class="command-ref" hidden>
-              <input id="command-ref-filter" class="field-input" placeholder="Filter command by name or usage..." />
-              <div id="command-ref-list" class="command-ref-list"></div>
-            </section>
-            <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
-          </div>
-        </section>
-
-        <section class="card">
-          <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
-        </section>
-      </section>
-    </main>
+    ${appShellMarkup}
     <script>
+      const THEME_STORAGE_KEY = ${JSON.stringify(SYNX_THEME_STORAGE_KEY)};
+      const rootEl = document.documentElement;
+      const initialThemePreference = (() => {
+        const attributeValue = rootEl.getAttribute("data-theme-preference");
+        if (attributeValue === "light" || attributeValue === "dark" || attributeValue === "system") return attributeValue;
+        return "system";
+      })();
+      const initialThemeResolved = rootEl.getAttribute("data-theme") === "dark" ? "dark" : "light";
       const state = {
         view: "overview",
         selectedTaskId: "",
@@ -1111,11 +1385,10 @@ export function buildWebUiHtml(): string {
         commandRefOpen: false,
         commandRefQuery: "",
         boardMode: "kanban",
-        themePreference: "system",
-        themeResolved: "light",
+        themePreference: initialThemePreference,
+        themeResolved: initialThemeResolved,
         renderedViews: {},
       };
-      const rootEl = document.documentElement;
       const contentEl = document.getElementById("content");
       const pollStatusEl = document.getElementById("poll-status");
       const feedbackEl = document.getElementById("feedback");
@@ -1130,6 +1403,14 @@ export function buildWebUiHtml(): string {
       const commandRefListEl = document.getElementById("command-ref-list");
       const reviewHotspotEl = document.getElementById("review-hotspot");
       const reviewHotspotMetaEl = document.getElementById("review-hotspot-meta");
+      const appShellEl = document.querySelector("[data-app-shell]");
+      const headerViewKeyEl = document.getElementById("header-view-key");
+      const headerScreenTitleEl = document.getElementById("header-screen-title");
+      const connectivityIndicatorEl = document.getElementById("connectivity-indicator");
+      const connectivityLabelEl = document.getElementById("connectivity-label");
+      const headerNotifCountEl = document.getElementById("header-notif-count");
+      const runtimeStatusPillEl = document.getElementById("runtime-status-pill");
+      const globalSearchInputEl = document.getElementById("global-search-input");
       const locale = (() => {
         try {
           return Intl.DateTimeFormat().resolvedOptions().locale || (navigator && navigator.language) || undefined;
@@ -1137,6 +1418,15 @@ export function buildWebUiHtml(): string {
           return undefined;
         }
       })();
+      const viewMeta = {
+        overview: { breadcrumb: "Dashboard", title: "Mission Dashboard" },
+        tasks: { breadcrumb: "Team / Agents", title: "Agent Team Board" },
+        board: { breadcrumb: "Task Board", title: "Task Flow Board" },
+        review: { breadcrumb: "Review Queue", title: "Human Review Queue" },
+        detail: { breadcrumb: "Task Detail", title: "Task Drilldown" },
+        live: { breadcrumb: "Live Stream", title: "Realtime Event Stream" },
+        analytics: { breadcrumb: "Analytics", title: "Runtime Analytics" },
+      };
 
       function localeRegion(loc) {
         const raw = String(loc || "");
@@ -1385,6 +1675,36 @@ export function buildWebUiHtml(): string {
         if (pollStatusEl) pollStatusEl.textContent = message;
       }
 
+      function setConnectivityIndicator(isOnline, label) {
+        if (!(connectivityIndicatorEl instanceof HTMLElement) || !(connectivityLabelEl instanceof HTMLElement)) return;
+        connectivityIndicatorEl.classList.toggle("is-online", Boolean(isOnline));
+        connectivityIndicatorEl.classList.toggle("is-offline", !isOnline);
+        connectivityLabelEl.textContent = label || (isOnline ? "Online" : "Offline");
+      }
+
+      function setHeaderNotificationCount(value) {
+        if (!(headerNotifCountEl instanceof HTMLElement)) return;
+        const count = Math.max(0, Number(value || 0));
+        headerNotifCountEl.textContent = String(count);
+      }
+
+      function setRuntimeStatusPill(runtime) {
+        if (!(runtimeStatusPillEl instanceof HTMLElement)) return;
+        const active = Boolean(runtime && runtime.isAlive);
+        const provider = runtime && runtime.provider ? String(runtime.provider) : "Local LLM";
+        runtimeStatusPillEl.textContent = provider + ": " + (active ? "Active" : "Idle");
+      }
+
+      function closeSidebarOverlay() {
+        if (!(appShellEl instanceof HTMLElement)) return;
+        appShellEl.classList.remove("menu-open");
+      }
+
+      function openSidebarOverlay() {
+        if (!(appShellEl instanceof HTMLElement)) return;
+        appShellEl.classList.add("menu-open");
+      }
+
       function setFeedback(message, tone) {
         if (!feedbackEl) return;
         feedbackEl.textContent = message || "";
@@ -1476,8 +1796,10 @@ export function buildWebUiHtml(): string {
       }
 
       function loadThemePreference() {
+        const attributeValue = rootEl.getAttribute("data-theme-preference");
+        if (attributeValue === "light" || attributeValue === "dark" || attributeValue === "system") return attributeValue;
         try {
-          const stored = localStorage.getItem("synx-theme-preference");
+          const stored = localStorage.getItem(THEME_STORAGE_KEY);
           if (stored === "light" || stored === "dark" || stored === "system") return stored;
         } catch {
           // ignore localStorage failures in restricted browsers
@@ -1499,7 +1821,9 @@ export function buildWebUiHtml(): string {
         const resolved = resolveThemeFromPreference(normalized);
         state.themePreference = normalized;
         state.themeResolved = resolved;
+        rootEl.setAttribute("data-theme-preference", normalized);
         rootEl.setAttribute("data-theme", resolved);
+        rootEl.style.colorScheme = resolved;
         for (const button of themeButtons) {
           if (!(button instanceof HTMLElement)) continue;
           const isActive = button.dataset.themeOption === normalized;
@@ -1508,7 +1832,7 @@ export function buildWebUiHtml(): string {
         }
         if (persist !== false) {
           try {
-            localStorage.setItem("synx-theme-preference", normalized);
+            localStorage.setItem(THEME_STORAGE_KEY, normalized);
           } catch {
             // ignore localStorage failures in restricted browsers
           }
@@ -1566,6 +1890,8 @@ export function buildWebUiHtml(): string {
         setTextIfChanged("snapshot-waiting", fmtNumber(counts.waitingHuman));
         setTextIfChanged("snapshot-cost", fmtCost(consumption.estimatedCostUsd));
         setTextIfChanged("snapshot-updated", fmtTimeNow());
+        setHeaderNotificationCount(counts.waitingHuman);
+        setRuntimeStatusPill(runtime);
         updateReviewHotspot(counts.waitingHuman);
       }
 
@@ -1697,6 +2023,10 @@ export function buildWebUiHtml(): string {
           if (isActive) button.setAttribute("aria-current", "page");
           else button.removeAttribute("aria-current");
         });
+        const meta = viewMeta[view] || viewMeta.overview;
+        if (headerViewKeyEl) headerViewKeyEl.textContent = meta.breadcrumb;
+        if (headerScreenTitleEl) headerScreenTitleEl.textContent = meta.title;
+        closeSidebarOverlay();
         requestRender("user");
       }
 
@@ -2294,6 +2624,18 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
 
+        const openSidebarTarget = target.closest("[data-sidebar-toggle]");
+        if (openSidebarTarget instanceof HTMLElement && openSidebarTarget.dataset.sidebarToggle !== undefined) {
+          openSidebarOverlay();
+          return;
+        }
+
+        const closeSidebarTarget = target.closest("[data-sidebar-close]");
+        if (closeSidebarTarget instanceof HTMLElement && closeSidebarTarget.dataset.sidebarClose !== undefined) {
+          closeSidebarOverlay();
+          return;
+        }
+
         const toggleCommandsTarget = target.closest("[data-toggle-command-ref]");
         if (toggleCommandsTarget instanceof HTMLElement && toggleCommandsTarget.dataset.toggleCommandRef !== undefined) {
           state.commandRefOpen = !state.commandRefOpen;
@@ -2441,9 +2783,27 @@ export function buildWebUiHtml(): string {
           state.commandRefQuery = target.value || "";
           renderCommandReference();
         }
+        if (target instanceof HTMLInputElement && target.id === "global-search-input") {
+          state.search = target.value || "";
+        }
         if (target instanceof HTMLTextAreaElement && target.id === "review-reason") {
           state.reviewDraftReason = target.value;
         }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeSidebarOverlay();
+          return;
+        }
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (target.id !== "global-search-input" || event.key !== "Enter") return;
+        event.preventDefault();
+        state.search = target.value.trim();
+        if (state.view !== "tasks") setView("tasks");
+        else requestRender("user");
+        setFeedback(state.search ? 'Search applied: "' + state.search + '"' : "Search cleared.", "info");
       });
 
       document.addEventListener("submit", (event) => {
@@ -2483,10 +2843,12 @@ export function buildWebUiHtml(): string {
           source.addEventListener("open", () => {
             state.realtimeConnected = true;
             setPollStatus("Realtime connected");
+            setConnectivityIndicator(true, "Online");
           });
           source.addEventListener("error", () => {
             state.realtimeConnected = false;
             setPollStatus("Realtime reconnecting...");
+            setConnectivityIndicator(false, "Offline");
           });
 
           const types = ["runtime.updated", "task.updated", "task.review_required", "task.decision_recorded", "metrics.updated"];
@@ -2499,6 +2861,7 @@ export function buildWebUiHtml(): string {
                 if (type === "task.review_required") {
                   state.reviewAlertAt = fmtTimeNow();
                   setPollStatus("Review required now");
+                  setHeaderNotificationCount(1);
                   setFeedback("New task entered waiting_human queue.", "info");
                 }
                 if (
@@ -2535,6 +2898,7 @@ export function buildWebUiHtml(): string {
           }
         } catch {
           setPollStatus("Realtime unavailable");
+          setConnectivityIndicator(false, "Offline");
         }
       }
 
@@ -2544,6 +2908,15 @@ export function buildWebUiHtml(): string {
       if (commandRefFilterEl instanceof HTMLInputElement) {
         commandRefFilterEl.value = state.commandRefQuery;
       }
+      if (globalSearchInputEl instanceof HTMLInputElement) {
+        globalSearchInputEl.value = state.search;
+      }
+      const initialMeta = viewMeta[state.view] || viewMeta.overview;
+      if (headerViewKeyEl) headerViewKeyEl.textContent = initialMeta.breadcrumb;
+      if (headerScreenTitleEl) headerScreenTitleEl.textContent = initialMeta.title;
+      setHeaderNotificationCount(0);
+      setRuntimeStatusPill({ isAlive: true, provider: "Local LLM" });
+      setConnectivityIndicator(false, "Connecting");
       pushCommandLog("Web command console ready. Try: status --all", "system");
       pushCommandLog("Human mode accepts: yes / no + reason", "system");
       renderCommandReference();

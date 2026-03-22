@@ -18,6 +18,14 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('id="web-command-log"');
     expect(html).toContain('id="command-reference"');
     expect(html).toContain('data-toggle-command-ref');
+    expect(html).toContain('id="app-sidebar"');
+    expect(html).toContain('id="header-screen-title"');
+    expect(html).toContain('id="header-view-key"');
+    expect(html).toContain('id="global-search-input"');
+    expect(html).toContain('id="connectivity-indicator"');
+    expect(html).toContain('id="runtime-status-pill"');
+    expect(html).toContain('data-sidebar-toggle');
+    expect(html).toContain('data-sidebar-close');
     expect(html).toContain("/api/command");
     expect(html).toContain("/api/overview");
     expect(html).toContain("/api/metrics/advanced");
@@ -49,6 +57,7 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('caption class="sr-only"');
     expect(html).toContain('class="chart-grid"');
     expect(html).toContain("renderCurveChart(");
+    expect(html).toContain("@media (max-width: 1120px)");
     expect(html).toContain("@media (max-width: 940px)");
     expect(html).toContain("@media (max-width: 640px)");
     expect(html).toContain("reviewRenderedKey");
@@ -73,6 +82,11 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('data-theme-option="light"');
     expect(html).toContain('data-theme-option="system"');
     expect(html).toContain('data-theme-option="dark"');
+    expect(html).toContain("setConnectivityIndicator(");
+    expect(html).toContain("setRuntimeStatusPill(");
+    expect(html).toContain("setHeaderNotificationCount(");
+    expect(html).toContain("openSidebarOverlay(");
+    expect(html).toContain("closeSidebarOverlay(");
     expect(html).toContain("applyThemePreference(");
     expect(html).toContain("loadThemePreference(");
     expect(html).toContain("bindSystemThemeSync(");
@@ -84,7 +98,6 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("currencyFormatter");
     expect(html).toContain("fmtDateTime(");
     expect(html).not.toContain("UI build:");
-    expect(html).toContain('class="logo-ascii"');
     expect(html).toContain("SYNX.js - Mission Control");
     expect(html).toContain("--synx-cyan");
     expect(html).toContain('html[data-theme="dark"]');
