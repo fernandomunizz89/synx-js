@@ -8,6 +8,7 @@ import { DONE_FILE_NAMES } from "../constants.js";
 import type { NewTaskInput } from "../types.js";
 import { startUiServer } from "./server.js";
 import { loadTaskCancelRequest } from "../task-cancel.js";
+import { consumeRuntimeControl } from "../runtime.js";
 
 const originalCwd = process.cwd();
 
@@ -125,6 +126,16 @@ describe.sequential("lib/ui/server actions", () => {
         method: "POST",
       });
       expect(invalidCancelResponse.status).toBe(400);
+
+      const pauseResponse = await fetch(`${server.baseUrl}/api/runtime/pause`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "operator pause" }),
+      });
+      expect(pauseResponse.status).toBe(200);
+      const control = await consumeRuntimeControl();
+      expect(control?.command).toBe("pause");
+      expect(control?.reason).toBe("operator pause");
     } finally {
       await server.close();
     }

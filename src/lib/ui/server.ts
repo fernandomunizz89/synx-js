@@ -4,6 +4,8 @@ import { approveTaskService, cancelTaskService, reproveTaskService } from "../se
 import { getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
 import { applyTaskRollback } from "../services/task-rollback.js";
 import { loadTaskMeta } from "../task.js";
+import { createUiRealtime, type UiStreamEvent } from "./realtime.js";
+import { writeRuntimeControl } from "../runtime.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -41,6 +43,11 @@ function sendHtml(res: http.ServerResponse, statusCode: number, html: string): v
   res.end(html);
 }
 
+function sendSseEvent(res: http.ServerResponse, event: UiStreamEvent): void {
+  const body = `id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+  res.write(body);
+}
+
 function notFound(res: http.ServerResponse): void {
   sendJson(res, 404, { ok: false, error: "Not found" });
 }
@@ -65,6 +72,7 @@ function normalizeString(value: unknown): string {
 export function createUiRequestHandler(options: {
   html: string;
   enableMutations: boolean;
+  realtime: ReturnType<typeof createUiRealtime>;
 }): http.RequestListener {
   return async (req, res) => {
     try {
@@ -80,6 +88,38 @@ export function createUiRequestHandler(options: {
       if (method === "GET" && pathname === "/api/health") {
         const overview = await getOverview();
         sendJson(res, 200, { ok: true, data: { runtime: overview.runtime, updatedAt: overview.updatedAt } });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/stream") {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/event-stream; charset=utf-8");
+        res.setHeader("cache-control", "no-cache, no-transform");
+        res.setHeader("connection", "keep-alive");
+        res.write("retry: 2000\n\n");
+
+        sendSseEvent(res, {
+          id: 0,
+          at: new Date().toISOString(),
+          type: "runtime.updated",
+          payload: {
+            source: "sse",
+            message: "connected",
+          },
+        });
+
+        const unsubscribe = options.realtime.subscribe((event) => {
+          sendSseEvent(res, event);
+        });
+        const heartbeat = setInterval(() => {
+          res.write(`: heartbeat ${Date.now()}\n\n`);
+        }, 15_000);
+        heartbeat.unref();
+
+        req.on("close", () => {
+          clearInterval(heartbeat);
+          unsubscribe();
+        });
         return;
       }
 
@@ -133,8 +173,11 @@ export function createUiRequestHandler(options: {
       const approveMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/approve$/);
       const reproveMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/reprove$/);
       const cancelMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/cancel$/);
+      const runtimePauseMatch = pathname === "/api/runtime/pause";
+      const runtimeResumeMatch = pathname === "/api/runtime/resume";
+      const runtimeStopMatch = pathname === "/api/runtime/stop";
 
-      if (method === "POST" && (approveMatch || reproveMatch || cancelMatch)) {
+      if (method === "POST" && (approveMatch || reproveMatch || cancelMatch || runtimePauseMatch || runtimeResumeMatch || runtimeStopMatch)) {
         if (!options.enableMutations) {
           sendJson(res, 405, { ok: false, error: "Mutating actions are disabled in read-only mode." });
           return;
@@ -175,6 +218,19 @@ export function createUiRequestHandler(options: {
         return;
       }
 
+      if (method === "POST" && (runtimePauseMatch || runtimeResumeMatch || runtimeStopMatch)) {
+        const body = await parseJsonBody(req);
+        const reason = normalizeString(body.reason);
+        const command = runtimePauseMatch ? "pause" : runtimeResumeMatch ? "resume" : "stop";
+        const request = await writeRuntimeControl({
+          command,
+          requestedBy: "web-ui",
+          reason,
+        });
+        sendJson(res, 200, { ok: true, data: request });
+        return;
+      }
+
       if (method === "GET" && pathname.startsWith("/app")) {
         sendHtml(res, 200, options.html);
         return;
@@ -193,10 +249,12 @@ export async function startUiServer(options: UiServerOptions): Promise<StartedUi
   const port = options.port ?? 4317;
   const html = options.html || "<!doctype html><html><body><h1>SYNX Web UI</h1></body></html>";
   const enableMutations = Boolean(options.enableMutations);
+  const realtime = createUiRealtime();
 
   const server = http.createServer(createUiRequestHandler({
     html,
     enableMutations,
+    realtime,
   }));
 
   await new Promise<void>((resolve, reject) => {
@@ -212,6 +270,7 @@ export async function startUiServer(options: UiServerOptions): Promise<StartedUi
     port: resolvedPort,
     baseUrl: `http://${host}:${resolvedPort}`,
     close: async () => {
+      realtime.close();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) reject(error);

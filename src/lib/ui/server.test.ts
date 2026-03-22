@@ -86,6 +86,18 @@ describe.sequential("lib/ui/server", () => {
       expect(taskDetail.ok).toBe(true);
       expect(taskDetail.data.taskId).toBe(created.taskId);
 
+      const streamController = new AbortController();
+      const streamResponse = await fetch(`${server.baseUrl}/api/stream`, {
+        signal: streamController.signal,
+      });
+      expect(streamResponse.status).toBe(200);
+      expect(streamResponse.headers.get("content-type")).toContain("text/event-stream");
+      const reader = streamResponse.body?.getReader();
+      const firstChunk = reader ? await reader.read() : { value: undefined };
+      const decoded = firstChunk.value ? new TextDecoder().decode(firstChunk.value) : "";
+      expect(decoded).toContain("event: runtime.updated");
+      streamController.abort();
+
       const approveResponse = await fetch(`${server.baseUrl}/api/tasks/${encodeURIComponent(created.taskId)}/approve`, {
         method: "POST",
         headers: { "content-type": "application/json" },

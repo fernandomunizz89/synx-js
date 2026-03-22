@@ -1,7 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { exists, moveFile, readJsonValidated, writeJson, writeText } from "../lib/fs.js";
-import { logAgentAudit, logDaemon, logQueueLatency, logTaskEvent, logTiming } from "../lib/logging.js";
+import { logAgentAudit, logDaemon, logQueueLatency, logRuntimeEvent, logTaskEvent, logTiming } from "../lib/logging.js";
 import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
 import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
@@ -66,6 +66,18 @@ export abstract class WorkerBase {
       meta.currentAgent = this.agent;
       meta.currentStage = request.stage;
       await saveTaskMeta(taskId, meta);
+      await logRuntimeEvent({
+        event: "task.updated",
+        source: "worker-base",
+        taskId,
+        stage: request.stage,
+        agent: String(this.agent),
+        payload: {
+          status: meta.status,
+          currentStage: meta.currentStage,
+          currentAgent: String(meta.currentAgent || ""),
+        },
+      });
 
       await logDaemon(`${this.agent} started ${request.stage} for ${taskId}`);
       await logTaskEvent(
@@ -150,6 +162,19 @@ export abstract class WorkerBase {
       const humanMessage = cancellationRequested
         ? `Task cancelled by user${cancelRequest?.reason ? `: ${cancelRequest.reason}` : "."}`
         : providerErrorToHuman(error instanceof Error ? error.message : String(error));
+      await logRuntimeEvent({
+        event: cancellationRequested ? "task.cancelled" : "task.updated",
+        source: "worker-base",
+        taskId,
+        stage: String(meta.currentStage || ""),
+        agent: String(this.agent),
+        payload: {
+          status: meta.status,
+          currentStage: meta.currentStage,
+          currentAgent: String(meta.currentAgent || ""),
+          reason: humanMessage,
+        },
+      });
       if (parseRetries > 0) {
         await logTaskEvent(
           taskPath,
@@ -264,6 +289,19 @@ export abstract class WorkerBase {
     meta.humanApprovalRequired = args.humanApprovalRequired ?? false;
     meta.status = args.humanApprovalRequired ? "waiting_human" : args.nextAgent ? "waiting_agent" : "in_progress";
     await saveTaskMeta(args.taskId, meta);
+    await logRuntimeEvent({
+      event: meta.status === "waiting_human" ? "task.review_required" : "task.updated",
+      source: "worker-base",
+      taskId: args.taskId,
+      stage: args.stage,
+      agent: String(this.agent),
+      payload: {
+        status: meta.status,
+        currentStage: meta.currentStage,
+        currentAgent: String(meta.currentAgent || ""),
+        nextAgent: String(meta.nextAgent || ""),
+      },
+    });
 
     await logTiming(taskPath, {
       taskId: args.taskId,
