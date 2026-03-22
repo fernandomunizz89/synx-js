@@ -65,6 +65,11 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("loadThemePreference(");
     expect(html).toContain("bindSystemThemeSync(");
     expect(html).toContain("requestRender(");
+    expect(html).toContain("Intl.NumberFormat");
+    expect(html).toContain("Intl.DateTimeFormat");
+    expect(html).toContain("currencyFormatter");
+    expect(html).toContain("fmtDateTime(");
+    expect(html).toContain('id="ui-build"');
     expect(html).toContain('class="logo-ascii"');
     expect(html).toContain("SYNX.js - Mission Control");
     expect(html).toContain("--synx-cyan");

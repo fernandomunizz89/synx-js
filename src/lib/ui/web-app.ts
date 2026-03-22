@@ -683,6 +683,7 @@ export function buildWebUiHtml(): string {
             <button type="button" class="theme-btn" data-theme-option="dark">Dark</button>
           </div>
           <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Polling 3s</div>
+          <div class="muted" id="ui-build">UI build: Mission Control v2</div>
         </div>
       </div>
       <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -727,15 +728,123 @@ export function buildWebUiHtml(): string {
       const feedbackEl = document.getElementById("feedback");
       const navButtons = Array.from(document.querySelectorAll("nav button"));
       const themeButtons = Array.from(document.querySelectorAll("[data-theme-option]"));
+      const locale = (() => {
+        try {
+          return Intl.DateTimeFormat().resolvedOptions().locale || (navigator && navigator.language) || undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+
+      function localeRegion(loc) {
+        const raw = String(loc || "");
+        if (!raw) return "";
+        const localeClass = Intl && Intl.Locale;
+        if (typeof localeClass === "function") {
+          try {
+            const max = new localeClass(raw).maximize();
+            return String(max.region || "").toUpperCase();
+          } catch {
+            // ignore locale parsing failures
+          }
+        }
+        const parts = raw.replace("_", "-").split("-");
+        for (const part of parts) {
+          if (/^[a-z]{2}$/i.test(part)) continue;
+          if (/^[a-z]{4}$/i.test(part)) continue;
+          if (/^[a-z]{2}$|^[0-9]{3}$/i.test(part)) return part.toUpperCase();
+        }
+        return "";
+      }
+
+      function inferCurrencyCode(loc) {
+        const region = localeRegion(loc);
+        const byRegion = {
+          US: "USD",
+          PT: "EUR",
+          ES: "EUR",
+          FR: "EUR",
+          DE: "EUR",
+          IT: "EUR",
+          NL: "EUR",
+          IE: "EUR",
+          BE: "EUR",
+          AT: "EUR",
+          FI: "EUR",
+          GR: "EUR",
+          BR: "BRL",
+          GB: "GBP",
+          CH: "CHF",
+          CA: "CAD",
+          AU: "AUD",
+          NZ: "NZD",
+          JP: "JPY",
+          KR: "KRW",
+          IN: "INR",
+          MX: "MXN",
+          CL: "CLP",
+          AR: "ARS",
+          CO: "COP",
+          NO: "NOK",
+          SE: "SEK",
+          DK: "DKK",
+          PL: "PLN",
+          CZ: "CZK",
+          HU: "HUF",
+          RO: "RON",
+          TR: "TRY",
+          ZA: "ZAR",
+          SG: "SGD",
+          HK: "HKD",
+          AE: "AED",
+          IL: "ILS",
+        };
+        return byRegion[region] || "USD";
+      }
+
+      const currencyCode = inferCurrencyCode(locale);
+      const numberFormatter = new Intl.NumberFormat(locale || undefined, { maximumFractionDigits: 0 });
+      const dateFormatter = new Intl.DateTimeFormat(locale || undefined, { dateStyle: "medium" });
+      const dateTimeFormatter = new Intl.DateTimeFormat(locale || undefined, { dateStyle: "medium", timeStyle: "medium" });
+      const timeFormatter = new Intl.DateTimeFormat(locale || undefined, { timeStyle: "medium" });
+      const currencyFormatter = new Intl.NumberFormat(locale || undefined, {
+        style: "currency",
+        currency: currencyCode,
+        currencyDisplay: "narrowSymbol",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4,
+      });
 
       function fmtNumber(value) {
         const n = Number(value || 0);
-        return Number.isFinite(n) ? n.toLocaleString() : "0";
+        return Number.isFinite(n) ? numberFormatter.format(n) : "0";
       }
 
       function fmtCost(value) {
         const n = Number(value || 0);
-        return "$" + n.toFixed(4);
+        return Number.isFinite(n) ? currencyFormatter.format(n) : currencyFormatter.format(0);
+      }
+
+      function fmtTimeNow() {
+        return timeFormatter.format(new Date());
+      }
+
+      function fmtDate(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "N/A";
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+          ? new Date(raw + "T00:00:00")
+          : new Date(raw);
+        if (!Number.isFinite(date.getTime())) return raw;
+        return dateFormatter.format(date);
+      }
+
+      function fmtDateTime(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "N/A";
+        const date = new Date(raw);
+        if (!Number.isFinite(date.getTime())) return raw;
+        return dateTimeFormatter.format(date);
       }
 
       function escapeHtml(value) {
@@ -816,8 +925,8 @@ export function buildWebUiHtml(): string {
         }).join("");
 
         const formatValue = typeof args.formatValue === "function" ? args.formatValue : (x) => String(x);
-        const firstDate = String(rows[0] && rows[0].date ? rows[0].date : "n/a");
-        const lastDate = String(rows[rows.length - 1] && rows[rows.length - 1].date ? rows[rows.length - 1].date : "n/a");
+        const firstDate = fmtDate(rows[0] && rows[0].date ? rows[0].date : "n/a");
+        const lastDate = fmtDate(rows[rows.length - 1] && rows[rows.length - 1].date ? rows[rows.length - 1].date : "n/a");
         const peakLabel = formatValue(maxValue);
         const latestLabel = formatValue(values[values.length - 1]);
 
@@ -1096,7 +1205,7 @@ export function buildWebUiHtml(): string {
         setTextIfChanged("overview-tokens", fmtNumber(overview.consumption.estimatedTotalTokens));
         setTextIfChanged("overview-cost", fmtCost(overview.consumption.estimatedCostUsd));
         setTextIfChanged("overview-review-queue", fmtNumber(overview.reviewQueueCount));
-        setTextIfChanged("overview-heartbeat", runtime.lastHeartbeatAt || "N/A");
+        setTextIfChanged("overview-heartbeat", fmtDateTime(runtime.lastHeartbeatAt || ""));
         setTextIfChanged("overview-slow-stage", topSlowStage ? topSlowStage.stage : "N/A");
       }
 
@@ -1231,6 +1340,7 @@ export function buildWebUiHtml(): string {
                   '<div class="head"><div><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + '</button><div class="id">' + escapeHtml(task.taskId) + '</div></div>' + taskStatusBadge(task.status) + "</div>",
                   '<div class="summary">Current: ' + escapeHtml(currentAgent) + " | Next: " + escapeHtml(nextAgent) + "</div>",
                   '<div class="summary">Stage: ' + escapeHtml(stage) + " | Tokens: " + fmtNumber(task.consumption && task.consumption.estimatedTotalTokens) + "</div>",
+                  '<div class="summary">Updated: ' + escapeHtml(fmtDateTime(task.updatedAt)) + "</div>",
                   "</article>",
                 ].join("");
               }).join("")
@@ -1285,7 +1395,7 @@ export function buildWebUiHtml(): string {
             '<div><button class="link" data-open-task="' + escapeHtml(task.taskId) + '">' + escapeHtml(task.title) + "</button><br/><small>" + escapeHtml(task.taskId) + "</small></div>",
             taskStatusBadge(task.status),
             "</div>",
-            '<div class="review-card-meta"><span>Type: ' + escapeHtml(task.type) + "</span><span>Updated: " + escapeHtml(task.updatedAt) + "</span></div>",
+            '<div class="review-card-meta"><span>Type: ' + escapeHtml(task.type) + "</span><span>Updated: " + escapeHtml(fmtDateTime(task.updatedAt)) + "</span></div>",
             '<div class="actions">',
             '<button type="button" class="btn approve" data-task-action="approve" data-task-id="' + escapeHtml(task.taskId) + '">Approve</button>',
             '<button type="button" class="btn reprove" data-task-action="reprove" data-task-id="' + escapeHtml(task.taskId) + '">Reprove</button>',
@@ -1468,7 +1578,7 @@ export function buildWebUiHtml(): string {
               '<article class="event-card">',
               '<div class="head">',
               '<div class="title"><span class="pill ' + tone + '">' + escapeHtml(event.type) + "</span> " + escapeHtml(title) + "</div>",
-              '<div class="time">' + escapeHtml(event.at || "") + "</div>",
+              '<div class="time">' + escapeHtml(fmtDateTime(event.at || "")) + "</div>",
               "</div>",
               '<div class="summary">' + escapeHtml(summary) + "</div>",
               '<div class="details">' + escapeHtml(taskLine + (sourceLine ? " | " + sourceLine : "") + (rawLine ? " | " + rawLine : "")) + "</div>",
@@ -1524,7 +1634,7 @@ export function buildWebUiHtml(): string {
         }).join("");
         const timelineRows = timeline.slice(-8).map((row) => {
           return "<tr>"
-            + "<td>" + escapeHtml(row.date || "") + "</td>"
+            + "<td>" + escapeHtml(fmtDate(row.date || "")) + "</td>"
             + "<td>" + fmtNumber(row.taskCount) + "</td>"
             + "<td>" + fmtNumber(row.estimatedTotalTokens) + "</td>"
             + "<td>" + fmtCost(row.estimatedCostUsd) + "</td>"
@@ -1656,7 +1766,7 @@ export function buildWebUiHtml(): string {
                 setFeedback("Cancellation requested for task " + taskIdToUse + ".", "info");
               }
 
-              setPollStatus("Last action at " + new Date().toLocaleTimeString());
+              setPollStatus("Last action at " + fmtTimeNow());
               if (taskAction === "reprove") state.reviewDraftReason = "";
               requestRender("user");
             } catch (error) {
@@ -1721,7 +1831,7 @@ export function buildWebUiHtml(): string {
                 state.liveEvents.push(parsed);
                 if (state.liveEvents.length > 160) state.liveEvents = state.liveEvents.slice(-160);
                 if (type === "task.review_required") {
-                  state.reviewAlertAt = new Date().toLocaleTimeString();
+                  state.reviewAlertAt = fmtTimeNow();
                   setPollStatus("Review required now");
                   setFeedback("New task entered waiting_human queue.", "info");
                 }
