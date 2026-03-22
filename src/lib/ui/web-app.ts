@@ -3001,7 +3001,7 @@ export function buildWebUiHtml(): string {
           const before = escapeHtml(source.slice(0, directIndex));
           const match = escapeHtml(source.slice(directIndex, directIndex + q.length));
           const after = escapeHtml(source.slice(directIndex + q.length));
-          return before + "<mark class=\"hl\">" + match + "</mark>" + after;
+          return before + '<mark class="hl">' + match + "</mark>" + after;
         }
         const marks = new Set();
         let ti = 0;
@@ -3021,7 +3021,7 @@ export function buildWebUiHtml(): string {
         let out = "";
         for (let index = 0; index < source.length; index += 1) {
           const ch = escapeHtml(source[index]);
-          if (marks.has(index)) out += "<mark class=\"hl\">" + ch + "</mark>";
+          if (marks.has(index)) out += '<mark class="hl">' + ch + "</mark>";
           else out += ch;
         }
         return out;
@@ -4458,7 +4458,7 @@ export function buildWebUiHtml(): string {
           '<div class="actions"><button type="button" class="btn approve" data-open-task="' + escapeHtml(String(detail.taskId || state.drawerTaskId)) + '">Open Full Detail</button>',
           '<button type="button" class="btn" data-open-review>Open Review Queue</button></div>',
           events.length
-            ? '<pre class="event-raw">' + escapeHtml(events.join("\n")) + "</pre>"
+            ? '<pre class="event-raw">' + escapeHtml(events.join("\\n")) + "</pre>"
             : '<div class="empty">No logs available for this task.</div>',
           "</div>",
         ].join("");
@@ -4691,7 +4691,7 @@ export function buildWebUiHtml(): string {
         const language = detectArtifactLanguage(name, content);
         return [
           '<article class="artifact-pane">',
-          '<div class="artifact-head"><strong>' + escapeHtml(title) + "</strong><span class=\"artifact-lang\">" + escapeHtml(language) + "</span></div>",
+          '<div class="artifact-head"><strong>' + escapeHtml(title) + '</strong><span class="artifact-lang">' + escapeHtml(language) + "</span></div>",
           '<pre class="artifact-code"><code>' + highlightArtifactContent(content, language) + "</code></pre>",
           "</article>",
         ].join("");
@@ -4740,7 +4740,7 @@ export function buildWebUiHtml(): string {
           },
           output: outputArtifact || {
             name: outputCandidate ? outputCandidate.name : "output.txt",
-            content: (detail.recentEvents || []).slice(-8).join("\n"),
+            content: (detail.recentEvents || []).slice(-8).join("\\n"),
           },
         };
       }
@@ -5409,7 +5409,7 @@ export function buildWebUiHtml(): string {
           renderArtifactPane("Output da IA", artifacts.output),
           "</div>",
           '<h4>Recent Events</h4>',
-          eventLines.length ? "<pre>" + escapeHtml(eventLines.slice(-20).join("\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
+          eventLines.length ? "<pre>" + escapeHtml(eventLines.slice(-20).join("\\n")) + "</pre>" : '<div class="empty">No events logged yet.</div>',
           "</section>",
           '<aside class="decision-pane">',
           actionPanel,
@@ -5546,7 +5546,7 @@ export function buildWebUiHtml(): string {
           return [
             '<article class="' + escapeHtml(classes.join(" ")) + '"' + (item.taskId ? ' data-open-task-drawer="' + escapeHtml(item.taskId) + '" data-drawer-context="Agent Logs"' : "") + (item.taskId ? ' role="button" tabindex="0"' : "") + '>',
             '<div class="head">',
-            '<div class="title-wrap"><span class="event-icon" aria-hidden="true">' + renderEventIcon(item.iconKey) + "</span><div><div class=\"title\">" + escapeHtml(item.title) + "</div><span class=\"pill " + escapeHtml(tone === "alert" ? "alert" : tone) + "\">" + escapeHtml(item.group) + "</span></div></div>",
+            '<div class="title-wrap"><span class="event-icon" aria-hidden="true">' + renderEventIcon(item.iconKey) + '</span><div><div class="title">' + escapeHtml(item.title) + '</div><span class="pill ' + escapeHtml(tone === "alert" ? "alert" : tone) + '">' + escapeHtml(item.group) + "</span></div></div>",
             '<div class="time">' + escapeHtml(fmtRelativeTime(item.at)) + "</div>",
             "</div>",
             '<div class="summary">' + escapeHtml(item.summary) + "</div>",
@@ -5687,7 +5687,7 @@ export function buildWebUiHtml(): string {
         const areaPoints = padX + "," + (height - padY) + " " + tokenPolyline + " " + lastTokenPoint.x.toFixed(2) + "," + (height - padY);
         return [
           '<div class="chart-card">',
-          '<div class="toolbar" style="margin-bottom:8px;"><div><strong>Token vs Cost Trend</strong><div class="muted">' + escapeHtml(rangeLabel) + "</div></div><div class=\"muted\">Dual axis trend</div></div>",
+          '<div class="toolbar" style="margin-bottom:8px;"><div><strong>Token vs Cost Trend</strong><div class="muted">' + escapeHtml(rangeLabel) + '</div></div><div class="muted">Dual axis trend</div></div>',
           '<svg class="chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Token and cost trend">',
           '<line x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padX) + '" y2="' + (height - padY) + '" stroke="var(--border)" stroke-width="1" />',
           '<polygon points="' + areaPoints + '" fill="rgba(84, 124, 255, 0.16)" />',
@@ -5707,7 +5707,7 @@ export function buildWebUiHtml(): string {
           const widthPct = Math.max(4, Math.round((Number(row.estimatedCostUsd || 0) / maxCost) * 100));
           return [
             '<div style="display:grid; gap:4px; margin-bottom:10px;">',
-            '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + escapeHtml(String(row.agent || "Unknown")) + "</strong><span class=\"muted\">" + escapeHtml(fmtCost(row.estimatedCostUsd)) + " • " + escapeHtml(fmtNumber(row.estimatedTotalTokens)) + " tokens</span></div>",
+            '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + escapeHtml(String(row.agent || "Unknown")) + '</strong><span class="muted">' + escapeHtml(fmtCost(row.estimatedCostUsd)) + " • " + escapeHtml(fmtNumber(row.estimatedTotalTokens)) + " tokens</span></div>",
             '<div style="height:8px; border-radius:999px; background:color-mix(in srgb, var(--surface-soft) 90%, transparent); overflow:hidden;"><span style="display:block; height:100%; width:' + String(widthPct) + '%; border-radius:inherit; background:linear-gradient(90deg, #5078f2 0%, #8f7ef0 100%);"></span></div>',
             "</div>",
           ].join("");
@@ -5751,7 +5751,7 @@ export function buildWebUiHtml(): string {
               String(row.estimatedCostUsd || 0),
             ].join(","));
           }
-          content = lines.join("\n");
+          content = lines.join("\\n");
           mimeType = "text/csv;charset=utf-8;";
         }
         try {
@@ -5911,7 +5911,7 @@ export function buildWebUiHtml(): string {
           '<div class="metric"><div class="muted">Cycle Time Avg</div><strong>' + fmtDurationMs(flow.cycleTimeAvgMs) + '</strong><div>' + cycleDelta + "</div></div>",
           '<div class="metric"><div class="muted">Human-to-AI Ratio</div><strong>' + (Number(flow.humanInterventionRate || 0) * 100).toFixed(1) + '% / ' + (Number(flow.autonomousRate || 0) * 100).toFixed(1) + '%</strong><div>' + humanDelta + "</div></div>",
           '<div class="metric"><div class="muted">Review SLA Avg</div><strong>' + fmtDurationMs(reliability.reviewSlaAvgMs) + '</strong><div>' + reviewDelta + "</div></div>",
-          '<div class="metric"><div class="muted">Tasks with QA</div><strong>' + fmtNumber(qaLoops.tasksWithQa) + "</strong><div class=\"muted\">Total loops " + fmtNumber(qaLoops.totalQaLoops) + "</div></div>",
+          '<div class="metric"><div class="muted">Tasks with QA</div><strong>' + fmtNumber(qaLoops.tasksWithQa) + '</strong><div class="muted">Total loops ' + fmtNumber(qaLoops.totalQaLoops) + "</div></div>",
           "</div>",
           '<h3 style="margin:18px 0 8px;">Token & Cost Analytics</h3>',
           '<div class="chart-grid">' + tokenCostChart + "</div>",

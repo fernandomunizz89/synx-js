@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { buildWebUiHtml } from "./web-app.js";
 
 describe("lib/ui/web-app", () => {
+  it("emits syntactically valid inline scripts", () => {
+    const html = buildWebUiHtml();
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const source of scripts) {
+      expect(() => new Function(source)).not.toThrow();
+    }
+  });
+
   it("renders core dashboard sections and actions", () => {
     const html = buildWebUiHtml();
     expect(html).toContain("SYNX.js - Mission Control");
