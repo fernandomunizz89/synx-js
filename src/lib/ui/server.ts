@@ -11,6 +11,7 @@ import {
   getAdvancedAnalyticsReport,
   getAgentConsumptionRanking,
   getMetricsTimeline,
+  getOperationalAnalyticsReport,
   getProjectConsumptionRanking,
   getTaskConsumptionRanking,
 } from "../observability/analytics.js";
@@ -238,6 +239,25 @@ export function createUiRequestHandler(options: {
         const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 25;
         const days = Number.isFinite(daysRaw) && daysRaw > 0 ? daysRaw : 30;
         sendJson(res, 200, { ok: true, data: await getAdvancedAnalyticsReport({ limit, days }) });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/metrics/operational") {
+        const limitRaw = Number(incomingUrl.searchParams.get("limit") || "12");
+        const daysRaw = Number(incomingUrl.searchParams.get("days") || "30");
+        const fromRaw = normalizeString(incomingUrl.searchParams.get("from"));
+        const toRaw = normalizeString(incomingUrl.searchParams.get("to"));
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 12;
+        const days = Number.isFinite(daysRaw) && daysRaw > 0 ? daysRaw : 30;
+        const parseTs = (value: string): number | undefined => {
+          if (!value) return undefined;
+          const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value;
+          const ms = Date.parse(normalized);
+          return Number.isFinite(ms) ? ms : undefined;
+        };
+        const fromMs = parseTs(fromRaw);
+        const toMs = parseTs(toRaw);
+        sendJson(res, 200, { ok: true, data: await getOperationalAnalyticsReport({ limit, days, fromMs, toMs }) });
         return;
       }
 

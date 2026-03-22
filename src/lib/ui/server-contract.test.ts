@@ -84,6 +84,7 @@ describe.sequential("lib/ui/server contract", () => {
         "/api/metrics/projects",
         "/api/metrics/timeline",
         "/api/metrics/advanced",
+        "/api/metrics/operational",
       ]) {
         await expectSuccessEnvelope(await fetch(`${server.baseUrl}${route}`));
       }

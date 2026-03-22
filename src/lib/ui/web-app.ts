@@ -2605,6 +2605,10 @@ export function buildWebUiHtml(): string {
         boardRenderedKey: "",
         detailRenderedKey: "",
         analyticsRenderedKey: "",
+        analyticsPreset: "30d",
+        analyticsCustomFrom: "",
+        analyticsCustomTo: "",
+        analyticsOperationalReport: null,
         liveRenderedCount: -1,
         liveRenderedConnected: null,
         liveRenderedKey: "",
@@ -4226,6 +4230,9 @@ export function buildWebUiHtml(): string {
           boardFilter: state.boardFilter,
           liveFilter: state.liveFilter,
           commandMode: state.commandMode,
+          analyticsPreset: state.analyticsPreset,
+          analyticsCustomFrom: state.analyticsCustomFrom,
+          analyticsCustomTo: state.analyticsCustomTo,
         }));
       }
 
@@ -4238,12 +4245,20 @@ export function buildWebUiHtml(): string {
           const boardFilter = String(parsed && parsed.boardFilter || "");
           const liveFilter = String(parsed && parsed.liveFilter || "");
           const commandMode = String(parsed && parsed.commandMode || "");
+          const analyticsPreset = String(parsed && parsed.analyticsPreset || "");
+          const analyticsCustomFrom = String(parsed && parsed.analyticsCustomFrom || "");
+          const analyticsCustomTo = String(parsed && parsed.analyticsCustomTo || "");
           if (isKnownView(lastView)) state.view = lastView;
           if (boardFilter) state.boardFilter = boardFilter;
           if (liveFilter === "all" || liveFilter === "tasks" || liveFilter === "runtime" || liveFilter === "human" || liveFilter === "alerts") {
             state.liveFilter = liveFilter;
           }
           if (commandMode === "human" || commandMode === "command") state.commandMode = commandMode;
+          if (analyticsPreset === "24h" || analyticsPreset === "7d" || analyticsPreset === "30d" || analyticsPreset === "custom") {
+            state.analyticsPreset = analyticsPreset;
+          }
+          if (analyticsCustomFrom) state.analyticsCustomFrom = analyticsCustomFrom;
+          if (analyticsCustomTo) state.analyticsCustomTo = analyticsCustomTo;
         } catch {
           // ignore invalid persisted payload
         }
@@ -4265,6 +4280,22 @@ export function buildWebUiHtml(): string {
         else params.delete("status");
         if (state.liveFilter && state.liveFilter !== "all") params.set("live", state.liveFilter);
         else params.delete("live");
+        if (state.view === "analytics") {
+          params.set("range", state.analyticsPreset);
+          if (state.analyticsPreset === "custom") {
+            if (state.analyticsCustomFrom) params.set("from", state.analyticsCustomFrom);
+            else params.delete("from");
+            if (state.analyticsCustomTo) params.set("to", state.analyticsCustomTo);
+            else params.delete("to");
+          } else {
+            params.delete("from");
+            params.delete("to");
+          }
+        } else {
+          params.delete("range");
+          params.delete("from");
+          params.delete("to");
+        }
         if (state.view === "detail" && state.selectedTaskId) params.set("task", state.selectedTaskId);
         else params.delete("task");
         if (state.drawerOpen && state.drawerTaskId) {
@@ -4294,6 +4325,9 @@ export function buildWebUiHtml(): string {
         const board = String(url.searchParams.get("board") || "");
         const status = String(url.searchParams.get("status") || "");
         const live = String(url.searchParams.get("live") || "");
+        const range = String(url.searchParams.get("range") || "");
+        const from = String(url.searchParams.get("from") || "");
+        const to = String(url.searchParams.get("to") || "");
         const task = String(url.searchParams.get("task") || "");
         const drawerTask = String(url.searchParams.get("drawerTask") || "");
         const drawerCtx = String(url.searchParams.get("drawerCtx") || "");
@@ -4303,6 +4337,11 @@ export function buildWebUiHtml(): string {
         if (live === "all" || live === "tasks" || live === "runtime" || live === "human" || live === "alerts") {
           state.liveFilter = live;
         }
+        if (range === "24h" || range === "7d" || range === "30d" || range === "custom") {
+          state.analyticsPreset = range;
+        }
+        if (from) state.analyticsCustomFrom = from;
+        if (to) state.analyticsCustomTo = to;
         if (task) state.selectedTaskId = task;
         if (drawerTask) {
           state.drawerOpen = true;
@@ -5566,21 +5605,200 @@ export function buildWebUiHtml(): string {
         state.liveRenderedKey = liveKey;
       }
 
+      function resolveAnalyticsWindow() {
+        const preset = state.analyticsPreset === "24h" || state.analyticsPreset === "7d" || state.analyticsPreset === "30d" || state.analyticsPreset === "custom"
+          ? state.analyticsPreset
+          : "30d";
+        if (preset === "24h") {
+          return {
+            preset,
+            days: 1,
+            label: "Last 24h",
+            query: "days=1",
+          };
+        }
+        if (preset === "7d") {
+          return {
+            preset,
+            days: 7,
+            label: "Last 7 days",
+            query: "days=7",
+          };
+        }
+        if (preset === "custom" && state.analyticsCustomFrom && state.analyticsCustomTo) {
+          const fromIso = state.analyticsCustomFrom + "T00:00:00.000Z";
+          const toIso = state.analyticsCustomTo + "T23:59:59.999Z";
+          const fromMs = Date.parse(fromIso);
+          const toMs = Date.parse(toIso);
+          if (Number.isFinite(fromMs) && Number.isFinite(toMs) && toMs >= fromMs) {
+            const days = Math.max(1, Math.round((toMs - fromMs) / (24 * 60 * 60 * 1000)) + 1);
+            return {
+              preset,
+              days,
+              label: state.analyticsCustomFrom + " to " + state.analyticsCustomTo,
+              query: "from=" + encodeURIComponent(fromIso) + "&to=" + encodeURIComponent(toIso),
+            };
+          }
+        }
+        return {
+          preset: "30d",
+          days: 30,
+          label: "Last 30 days",
+          query: "days=30",
+        };
+      }
+
+      function renderDeltaText(deltaPct, inverse) {
+        if (deltaPct == null || !Number.isFinite(deltaPct)) return '<span class="muted">n/a vs previous period</span>';
+        const delta = Number(deltaPct);
+        const sign = delta > 0 ? "+" : "";
+        const positiveIsGood = inverse ? delta < 0 : delta > 0;
+        const tone = positiveIsGood ? "online" : (delta === 0 ? "working" : "error");
+        return '<span class="stat-value ' + tone + '" style="font-size:0.8rem;">' + sign + delta.toFixed(1) + '%</span><span class="muted"> vs previous period</span>';
+      }
+
+      function renderTokenCostChartWrapper(points, rangeLabel) {
+        const rows = Array.isArray(points) ? points : [];
+        if (!rows.length) return '<div class="empty">No trend points for selected range.</div>';
+        const width = 760;
+        const height = 240;
+        const padX = 36;
+        const padY = 26;
+        const usableWidth = width - padX * 2;
+        const usableHeight = height - padY * 2;
+        const stepX = rows.length > 1 ? usableWidth / (rows.length - 1) : 0;
+        const tokenValues = rows.map((row) => Number(row.estimatedTotalTokens || 0));
+        const costValues = rows.map((row) => Number(row.estimatedCostUsd || 0));
+        const maxTokens = Math.max(...tokenValues, 1);
+        const maxCost = Math.max(...costValues, 1);
+        const tokenPoints = rows.map((row, index) => {
+          const x = padX + stepX * index;
+          const y = height - padY - ((Number(row.estimatedTotalTokens || 0) / maxTokens) * usableHeight);
+          return { x, y };
+        });
+        const costPoints = rows.map((row, index) => {
+          const x = padX + stepX * index;
+          const y = height - padY - ((Number(row.estimatedCostUsd || 0) / maxCost) * usableHeight);
+          return { x, y };
+        });
+        const tokenPolyline = tokenPoints.map((point) => point.x.toFixed(2) + "," + point.y.toFixed(2)).join(" ");
+        const costPolyline = costPoints.map((point) => point.x.toFixed(2) + "," + point.y.toFixed(2)).join(" ");
+        const lastTokenPoint = tokenPoints[tokenPoints.length - 1];
+        const areaPoints = padX + "," + (height - padY) + " " + tokenPolyline + " " + lastTokenPoint.x.toFixed(2) + "," + (height - padY);
+        return [
+          '<div class="chart-card">',
+          '<div class="toolbar" style="margin-bottom:8px;"><div><strong>Token vs Cost Trend</strong><div class="muted">' + escapeHtml(rangeLabel) + "</div></div><div class=\"muted\">Dual axis trend</div></div>",
+          '<svg class="chart" viewBox="0 0 ' + width + " " + height + '" role="img" aria-label="Token and cost trend">',
+          '<line x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padX) + '" y2="' + (height - padY) + '" stroke="var(--border)" stroke-width="1" />',
+          '<polygon points="' + areaPoints + '" fill="rgba(84, 124, 255, 0.16)" />',
+          '<polyline points="' + tokenPolyline + '" fill="none" stroke="#5f8dff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" />',
+          '<polyline points="' + costPolyline + '" fill="none" stroke="#8f7ef0" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" />',
+          "</svg>",
+          '<div class="chart-legend"><span>Tokens (blue area/line)</span><span>Cost (purple line)</span></div>',
+          "</div>",
+        ].join("");
+      }
+
+      function renderAgentBreakdownChart(rows) {
+        const data = Array.isArray(rows) ? rows.slice(0, 8) : [];
+        if (!data.length) return '<div class="empty">No agent cost data in selected range.</div>';
+        const maxCost = Math.max(...data.map((row) => Number(row.estimatedCostUsd || 0)), 1);
+        return '<div class="panel-block">' + data.map((row) => {
+          const widthPct = Math.max(4, Math.round((Number(row.estimatedCostUsd || 0) / maxCost) * 100));
+          return [
+            '<div style="display:grid; gap:4px; margin-bottom:10px;">',
+            '<div style="display:flex; justify-content:space-between; gap:8px;"><strong>' + escapeHtml(String(row.agent || "Unknown")) + "</strong><span class=\"muted\">" + escapeHtml(fmtCost(row.estimatedCostUsd)) + " • " + escapeHtml(fmtNumber(row.estimatedTotalTokens)) + " tokens</span></div>",
+            '<div style="height:8px; border-radius:999px; background:color-mix(in srgb, var(--surface-soft) 90%, transparent); overflow:hidden;"><span style="display:block; height:100%; width:' + String(widthPct) + '%; border-radius:inherit; background:linear-gradient(90deg, #5078f2 0%, #8f7ef0 100%);"></span></div>',
+            "</div>",
+          ].join("");
+        }).join("") + "</div>";
+      }
+
+      function buildAnalyticsExportPayload() {
+        const payload = state.analyticsOperationalReport;
+        if (!payload) return null;
+        return {
+          exportedAt: new Date().toISOString(),
+          range: payload.window,
+          operational: payload.operational,
+          advanced: payload.advanced,
+        };
+      }
+
+      function exportAnalyticsData(format) {
+        const payload = buildAnalyticsExportPayload();
+        if (!payload) {
+          setFeedback("No analytics payload available to export yet.", "error");
+          return;
+        }
+        const normalized = format === "csv" ? "csv" : "json";
+        let content = "";
+        let fileName = "synx-analytics-" + Date.now() + "." + normalized;
+        let mimeType = "application/json";
+        if (normalized === "json") {
+          content = JSON.stringify(payload, null, 2);
+          mimeType = "application/json";
+        } else {
+          const rows = Array.isArray(payload.operational && payload.operational.trend) ? payload.operational.trend : [];
+          const header = ["bucketStart", "label", "taskCount", "estimatedTotalTokens", "estimatedCostUsd"];
+          const lines = [header.join(",")];
+          for (const row of rows) {
+            lines.push([
+              '"' + String(row.bucketStart || "").replace(/"/g, '""') + '"',
+              '"' + String(row.label || "").replace(/"/g, '""') + '"',
+              String(row.taskCount || 0),
+              String(row.estimatedTotalTokens || 0),
+              String(row.estimatedCostUsd || 0),
+            ].join(","));
+          }
+          content = lines.join("\n");
+          mimeType = "text/csv;charset=utf-8;";
+        }
+        try {
+          const blob = new Blob([content], { type: mimeType });
+          const href = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = href;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(href);
+          setFeedback("Analytics export generated: " + fileName, "info");
+        } catch {
+          setFeedback("Failed to export analytics payload.", "error");
+        }
+      }
+
       async function renderAnalytics() {
-        const report = await api("/api/metrics/advanced?limit=12&days=30");
+        const windowConfig = resolveAnalyticsWindow();
+        const [report, operational] = await Promise.all([
+          api("/api/metrics/advanced?limit=12&days=30"),
+          api("/api/metrics/operational?limit=12&" + windowConfig.query),
+        ]);
         const timeline = Array.isArray(report.timeline)
           ? report.timeline.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
           : [];
+        const opTrend = Array.isArray(operational.trend) ? operational.trend : [];
         const analyticsKey = [
-          timeline.length,
-          timeline.length ? String(timeline[timeline.length - 1].date || "") : "",
-          ((report.tasks || []).slice(0, 3).map((row) => [row.taskId, row.estimatedTotalTokens, row.estimatedCostUsd].join(":")).join(",")),
-          ((report.agents || []).slice(0, 3).map((row) => [row.agent, row.stageCount, row.estimatedTotalTokens, row.estimatedCostUsd].join(":")).join(",")),
-          ((report.projects || []).slice(0, 3).map((row) => [row.project, row.taskCount, row.estimatedTotalTokens, row.estimatedCostUsd].join(":")).join(",")),
-          Number(report.qaLoops && report.qaLoops.totalQaLoops || 0),
-          String((report.bottlenecks || [])[0] && (report.bottlenecks || [])[0].stage || ""),
+          windowConfig.preset,
+          windowConfig.query,
+          opTrend.length,
+          opTrend.length ? String(opTrend[opTrend.length - 1].bucketStart || "") : "",
+          Number(operational && operational.totals && operational.totals.estimatedTotalTokens || 0),
+          Number(operational && operational.totals && operational.totals.estimatedCostUsd || 0),
+          Number(operational && operational.flowMetrics && operational.flowMetrics.cycleTimeAvgMs || 0),
+          Number(operational && operational.reliability && operational.reliability.reviewSlaAvgMs || 0),
+          Number(operational && operational.alerts && operational.alerts.deltaPct || 0),
+          ((report.tasks || []).slice(0, 2).map((row) => [row.taskId, row.estimatedCostUsd].join(":")).join(",")),
         ].join("|");
         if (state.analyticsRenderedKey === analyticsKey && document.getElementById("analytics-root")) return;
+        state.analyticsOperationalReport = {
+          window: windowConfig,
+          advanced: report,
+          operational,
+        };
+
         const topTaskRows = (report.tasks || []).slice(0, 6).map((row) => {
           return "<tr>"
             + "<td>" + escapeHtml(row.title || row.taskId || "") + "</td>"
@@ -5638,17 +5856,72 @@ export function buildWebUiHtml(): string {
           fill: "rgba(166, 92, 0, 0.14)",
           formatValue: (value) => fmtDurationMs(value),
         });
-        const bottleneck = (report.bottlenecks || [])[0] || null;
         const qaLoops = report.qaLoops || { tasksWithQa: 0, totalQaLoops: 0, avgQaLoopsPerTask: 0 };
+        const flow = operational.flowMetrics || {};
+        const reliability = operational.reliability || {};
+        const comparison = operational.comparison || {};
+        const spikeAlert = operational.alerts && operational.alerts.costSpike
+          ? '<div class="review-alert">Cost spike detected: latest bucket ' + escapeHtml(fmtCost(operational.alerts.latestCostUsd)) + " > moving avg " + escapeHtml(fmtCost(operational.alerts.movingAverageCostUsd)) + " by " + escapeHtml(String(operational.alerts.deltaPct || 0)) + "%.</div>"
+          : "";
+        const bottleneckRows = (flow.bottlenecks || []).slice(0, 6).map((row) => {
+          return "<tr>"
+            + "<td>" + escapeHtml(row.label || (String(row.stage || "") + " • " + String(row.agent || ""))) + "</td>"
+            + "<td>" + fmtDurationMs(row.avgDurationMs) + "</td>"
+            + "<td>" + fmtNumber(row.count) + "</td>"
+            + "</tr>";
+        }).join("");
+        const rejectionRows = (reliability.rejectionByAgent || []).slice(0, 6).map((row) => {
+          return "<tr>"
+            + "<td>" + escapeHtml(row.agent || "Unknown") + "</td>"
+            + "<td>" + fmtNumber(row.totalReviews) + "</td>"
+            + "<td>" + fmtNumber(row.reproved) + "</td>"
+            + "<td>" + (Number(row.rejectionRate || 0) * 100).toFixed(1) + "%</td>"
+            + "</tr>";
+        }).join("");
+        const tokenCostChart = renderTokenCostChartWrapper(opTrend, windowConfig.label);
+        const agentBreakdown = renderAgentBreakdownChart(operational.agentBreakdown || []);
+        const cycleDelta = renderDeltaText(comparison.cycleTimeAvgMs && comparison.cycleTimeAvgMs.deltaPct, true);
+        const humanDelta = renderDeltaText(comparison.humanInterventionRate && comparison.humanInterventionRate.deltaPct, true);
+        const reviewDelta = renderDeltaText(comparison.reviewSlaAvgMs && comparison.reviewSlaAvgMs.deltaPct, true);
+        const costDelta = renderDeltaText(comparison.estimatedCostUsd && comparison.estimatedCostUsd.deltaPct, false);
+        const tokenDelta = renderDeltaText(comparison.estimatedTotalTokens && comparison.estimatedTotalTokens.deltaPct, false);
+
         contentEl.innerHTML = [
           '<div id="analytics-root">',
-          '<div class="grid">',
-          '<div class="metric"><div class="muted">Tasks with QA</div><strong>' + fmtNumber(qaLoops.tasksWithQa) + "</strong></div>",
-          '<div class="metric"><div class="muted">Total QA Loops</div><strong>' + fmtNumber(qaLoops.totalQaLoops) + "</strong></div>",
-          '<div class="metric"><div class="muted">Avg QA Loops/Task</div><strong>' + Number(qaLoops.avgQaLoopsPerTask || 0).toFixed(2) + "</strong></div>",
-          '<div class="metric"><div class="muted">Top Bottleneck</div><strong>' + escapeHtml(bottleneck ? bottleneck.stage : "N/A") + "</strong></div>",
+          '<div class="toolbar">',
+          '<div><strong>Operational Analytics</strong><div class="muted">Data-heavy efficiency tracking for runtime, agents and review quality.</div></div>',
+          '<div class="actions">',
+          '<select id="analytics-range-preset" class="field-select">',
+          '<option value="24h"' + (state.analyticsPreset === "24h" ? " selected" : "") + '>24h</option>',
+          '<option value="7d"' + (state.analyticsPreset === "7d" ? " selected" : "") + '>7 days</option>',
+          '<option value="30d"' + (state.analyticsPreset === "30d" ? " selected" : "") + '>30 days</option>',
+          '<option value="custom"' + (state.analyticsPreset === "custom" ? " selected" : "") + '>Custom</option>',
+          "</select>",
+          '<input id="analytics-from" type="date" class="field-input" value="' + escapeHtml(state.analyticsCustomFrom || "") + '"' + (state.analyticsPreset === "custom" ? "" : ' disabled') + ' />',
+          '<input id="analytics-to" type="date" class="field-input" value="' + escapeHtml(state.analyticsCustomTo || "") + '"' + (state.analyticsPreset === "custom" ? "" : ' disabled') + ' />',
+          '<button type="button" class="btn" data-analytics-apply>Apply</button>',
+          '<button type="button" class="btn" data-analytics-export="csv">Export CSV</button>',
+          '<button type="button" class="btn" data-analytics-export="json">Export JSON</button>',
           "</div>",
-          '<h3 style="margin:18px 0 8px;">Consumption Curves</h3>',
+          "</div>",
+          spikeAlert,
+          '<div class="grid">',
+          '<div class="metric"><div class="muted">Tokens (' + escapeHtml(windowConfig.label) + ')</div><strong>' + fmtNumber(operational.totals && operational.totals.estimatedTotalTokens) + '</strong><div>' + tokenDelta + "</div></div>",
+          '<div class="metric"><div class="muted">Cost (' + escapeHtml(windowConfig.label) + ')</div><strong>' + fmtCost(operational.totals && operational.totals.estimatedCostUsd) + '</strong><div>' + costDelta + "</div></div>",
+          '<div class="metric"><div class="muted">Cycle Time Avg</div><strong>' + fmtDurationMs(flow.cycleTimeAvgMs) + '</strong><div>' + cycleDelta + "</div></div>",
+          '<div class="metric"><div class="muted">Human-to-AI Ratio</div><strong>' + (Number(flow.humanInterventionRate || 0) * 100).toFixed(1) + '% / ' + (Number(flow.autonomousRate || 0) * 100).toFixed(1) + '%</strong><div>' + humanDelta + "</div></div>",
+          '<div class="metric"><div class="muted">Review SLA Avg</div><strong>' + fmtDurationMs(reliability.reviewSlaAvgMs) + '</strong><div>' + reviewDelta + "</div></div>",
+          '<div class="metric"><div class="muted">Tasks with QA</div><strong>' + fmtNumber(qaLoops.tasksWithQa) + "</strong><div class=\"muted\">Total loops " + fmtNumber(qaLoops.totalQaLoops) + "</div></div>",
+          "</div>",
+          '<h3 style="margin:18px 0 8px;">Token & Cost Analytics</h3>',
+          '<div class="chart-grid">' + tokenCostChart + "</div>",
+          '<h3 style="margin:18px 0 8px;">Breakdown by Agent</h3>',
+          agentBreakdown,
+          '<h3 style="margin:18px 0 8px;">Bottleneck Discovery</h3>',
+          bottleneckRows ? '<div class="table-wrap"><table><caption class="sr-only">Bottleneck ranking</caption><thead><tr><th>Stage/Agent</th><th>Avg Stop Time</th><th>Occurrences</th></tr></thead><tbody>' + bottleneckRows + "</tbody></table></div>" : '<div class="empty">No bottleneck rows in selected range.</div>',
+          '<h3 style="margin:18px 0 8px;">Reliability Index (Rework)</h3>',
+          rejectionRows ? '<div class="table-wrap"><table><caption class="sr-only">Rejection rate by agent</caption><thead><tr><th>Agent</th><th>Reviews</th><th>Reproved</th><th>Rate</th></tr></thead><tbody>' + rejectionRows + "</tbody></table></div>" : '<div class="empty">No rejection events in selected range.</div>',
+          '<h3 style="margin:18px 0 8px;">Legacy Consumption Curves</h3>',
           '<div class="chart-grid">' + costCurve + tokenCurve + durationCurve + "</div>",
           '<h3 style="margin:18px 0 8px;">Top Tasks by Consumption</h3>',
           topTaskRows ? '<div class="table-wrap"><table><caption class="sr-only">Top tasks by consumption</caption><thead><tr><th>Task</th><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>' + topTaskRows + "</tbody></table></div>" : '<div class="empty">No task analytics yet.</div>',
@@ -5856,6 +6129,26 @@ export function buildWebUiHtml(): string {
           return;
         }
 
+        const analyticsApplyTarget = target.closest("[data-analytics-apply]");
+        if (analyticsApplyTarget instanceof HTMLElement && analyticsApplyTarget.dataset.analyticsApply !== undefined) {
+          if (state.analyticsPreset === "custom" && (!state.analyticsCustomFrom || !state.analyticsCustomTo)) {
+            setFeedback("Select both start and end dates for custom analytics range.", "error");
+            return;
+          }
+          state.analyticsRenderedKey = "";
+          syncUrlState();
+          persistUiPrefs();
+          requestRender("user");
+          return;
+        }
+
+        const analyticsExportTarget = target.closest("[data-analytics-export]");
+        const analyticsExport = analyticsExportTarget instanceof HTMLElement ? String(analyticsExportTarget.dataset.analyticsExport || "") : "";
+        if (analyticsExport === "csv" || analyticsExport === "json") {
+          exportAnalyticsData(analyticsExport);
+          return;
+        }
+
         const openReviewTarget = target.closest("[data-open-review]");
         if (openReviewTarget instanceof HTMLElement && openReviewTarget.dataset.openReview !== undefined) {
           setView("review");
@@ -5982,6 +6275,16 @@ export function buildWebUiHtml(): string {
         }
         if (target instanceof HTMLInputElement && target.id === "global-search-input") {
           state.search = target.value || "";
+        }
+        if (target instanceof HTMLInputElement && target.id === "analytics-from") {
+          state.analyticsCustomFrom = target.value || "";
+          syncUrlState();
+          persistUiPrefs();
+        }
+        if (target instanceof HTMLInputElement && target.id === "analytics-to") {
+          state.analyticsCustomTo = target.value || "";
+          syncUrlState();
+          persistUiPrefs();
         }
         if (target instanceof HTMLTextAreaElement && target.id === "review-reason") {
           state.reviewDraftReason = target.value;
@@ -6164,6 +6467,16 @@ export function buildWebUiHtml(): string {
           state.commandMode = target.value === "human" ? "human" : "command";
           persistUiPrefs();
           pushCommandLog("Switched command mode to " + state.commandMode + ".", "system");
+        }
+        if (target instanceof HTMLSelectElement && target.id === "analytics-range-preset") {
+          const value = String(target.value || "");
+          if (value === "24h" || value === "7d" || value === "30d" || value === "custom") {
+            state.analyticsPreset = value;
+            state.analyticsRenderedKey = "";
+            syncUrlState();
+            persistUiPrefs();
+            requestRender("user");
+          }
         }
       });
 

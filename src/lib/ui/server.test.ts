@@ -127,6 +127,23 @@ describe.sequential("lib/ui/server", () => {
       expect(Array.isArray(advancedMetrics.data.agents)).toBe(true);
       expect(Array.isArray(advancedMetrics.data.projects)).toBe(true);
 
+      const operationalMetricsResponse = await fetch(`${server.baseUrl}/api/metrics/operational?days=7`);
+      expect(operationalMetricsResponse.status).toBe(200);
+      const operationalMetrics = await operationalMetricsResponse.json() as {
+        ok: boolean;
+        data: {
+          trend?: unknown[];
+          agentBreakdown?: unknown[];
+          flowMetrics?: { cycleTimeAvgMs?: number };
+          reliability?: { reviewSlaAvgMs?: number };
+        };
+      };
+      expect(operationalMetrics.ok).toBe(true);
+      expect(Array.isArray(operationalMetrics.data.trend)).toBe(true);
+      expect(Array.isArray(operationalMetrics.data.agentBreakdown)).toBe(true);
+      expect(typeof operationalMetrics.data.flowMetrics?.cycleTimeAvgMs).toBe("number");
+      expect(typeof operationalMetrics.data.reliability?.reviewSlaAvgMs).toBe("number");
+
       const streamController = new AbortController();
       const streamResponse = await fetch(`${server.baseUrl}/api/stream`, {
         signal: streamController.signal,
