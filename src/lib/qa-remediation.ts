@@ -40,7 +40,7 @@ function findingBlob(finding: QaFindingLike): string {
     finding.expectedResult,
     finding.receivedResult,
     finding.recommendedAction,
-    ...finding.evidence,
+    ...(finding.evidence || []),
   ].join("\n");
 }
 

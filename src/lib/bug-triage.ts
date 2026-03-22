@@ -53,7 +53,7 @@ export function extractDiagnostics(stdout: string, stderr: string): string[] {
   for (const rawLine of combined.split(/\r?\n/)) {
     const line = rawLine.replace(/\s+/g, " ").trim();
     if (!line) continue;
-    if (!/\b(error|failed|cannot|syntax|typeerror|referenceerror|ts\d{4}|exception)\b/i.test(line)) continue;
+    if (!/\b(error|failed|cannot|syntax|typeerror|referenceerror|ts\d{4}|exception|fatal)\b/i.test(line)) continue;
     out.push(line.length > 220 ? `${line.slice(0, 219)}…` : line);
     if (out.length >= 8) break;
   }

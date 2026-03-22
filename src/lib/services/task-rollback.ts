@@ -66,7 +66,7 @@ async function collectTaskChangedFiles(taskId: string): Promise<string[]> {
     }
   }
 
-  return unique(files.filter(isSafeWorkspacePath));
+  return unique(files); // Don't filter here, let the main function handle it with warnings
 }
 
 async function isTrackedFile(workspaceRoot: string, relativePath: string): Promise<boolean> {
@@ -95,34 +95,27 @@ export async function applyTaskRollback(taskId: string): Promise<RollbackSummary
     };
   }
 
-  if (!(await isGitRepository(workspaceRoot))) {
-    return {
-      requested: changedFiles.length,
-      trackedRestored: [],
-      untrackedRemoved: [],
-      skipped: [...changedFiles],
-      warnings: ["Rollback requested, but current workspace is not a git repository."],
-    };
+  const isGit = await isGitRepository(workspaceRoot);
+  if (!isGit) {
+    warnings.push("Current workspace is not a git repository. Tracked file restoration skipped.");
   }
 
   const tracked: string[] = [];
   const untracked: string[] = [];
-
-  for (const file of changedFiles) {
-    const absolutePath = path.resolve(workspaceRoot, file);
-    const safePrefix = `${workspaceRoot}${path.sep}`;
-    if (!(absolutePath === workspaceRoot || absolutePath.startsWith(safePrefix))) {
-      warnings.push(`Skipped unsafe rollback path: ${file}`);
-      continue;
-    }
-
-    if (await isTrackedFile(workspaceRoot, file)) tracked.push(file);
-    else untracked.push(file);
-  }
-
   const trackedRestored: string[] = [];
   const untrackedRemoved: string[] = [];
   const skipped: string[] = [];
+
+  for (const file of changedFiles) {
+    if (!isSafeWorkspacePath(file)) {
+      warnings.push(`Skipped unsafe rollback path: ${file}`);
+      skipped.push(file);
+      continue;
+    }
+
+    if (isGit && (await isTrackedFile(workspaceRoot, file))) tracked.push(file);
+    else untracked.push(file);
+  }
 
   if (tracked.length) {
     const restore = await runCommand({
