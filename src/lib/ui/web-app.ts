@@ -97,6 +97,11 @@ export function buildWebUiHtml(): string {
           radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--synx-cyan) 18%, transparent) 0%, transparent 32%),
           radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--synx-magenta) 16%, transparent) 0%, transparent 28%),
           linear-gradient(165deg, var(--bg-elev) 0%, var(--bg) 62%);
+        background-repeat: no-repeat, no-repeat, no-repeat;
+        background-size: 120vmax 120vmax, 120vmax 120vmax, 100% 100%;
+        background-position: left top, right top, center;
+        background-attachment: fixed, fixed, fixed;
+        min-height: 100vh;
         color: var(--fg);
         line-height: 1.45;
       }
