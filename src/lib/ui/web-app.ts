@@ -5938,7 +5938,8 @@ export function buildWebUiHtml(): string {
 
       document.addEventListener("click", (event) => {
         const target = event.target;
-        if (!(target instanceof HTMLElement)) return;
+        // Accept SVG/icon clicks inside buttons and links, not only HTMLElement targets.
+        if (!(target instanceof Element)) return;
 
         const openCommandPaletteTarget = target.closest("[data-open-command-palette]");
         if (openCommandPaletteTarget instanceof HTMLElement && openCommandPaletteTarget.dataset.openCommandPalette !== undefined) {
