@@ -125,7 +125,7 @@ export function buildWebUiHtml(): string {
       }
       .app-shell {
         display: grid;
-        grid-template-columns: 316px minmax(0, 1fr);
+        grid-template-columns: minmax(268px, 316px) minmax(0, 1fr);
         gap: 14px;
         align-items: start;
       }
@@ -142,8 +142,13 @@ export function buildWebUiHtml(): string {
         border: 1px solid var(--border);
         border-radius: 12px;
         background: var(--surface-soft);
-        padding: 10px;
+        padding: 12px;
         margin-top: 10px;
+        display: grid;
+        gap: 10px;
+      }
+      .rail-panel > * {
+        margin: 0;
       }
       .rail-headline {
         margin: 8px 0 2px;
@@ -205,7 +210,7 @@ export function buildWebUiHtml(): string {
       }
       .snapshot-grid {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
         gap: 10px;
       }
       .snapshot-item {
@@ -236,14 +241,21 @@ export function buildWebUiHtml(): string {
         border-radius: 12px;
         padding: 10px 12px;
         background: var(--surface-soft);
-        min-width: 260px;
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        display: grid;
+        justify-items: center;
+        text-align: center;
       }
       .logo-ascii {
-        margin: 0;
+        margin: 0 auto;
         font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-        font-size: 11px;
+        font-size: clamp(7.5px, 1.05vw, 11px);
         line-height: 1.05;
         white-space: pre;
+        max-width: 100%;
+        overflow-x: auto;
         letter-spacing: 0.01em;
         background: var(--title-gradient);
         -webkit-background-clip: text;
@@ -257,6 +269,7 @@ export function buildWebUiHtml(): string {
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--synx-purple-soft);
+        text-align: center;
       }
       .topbar-controls {
         display: grid;
@@ -267,7 +280,7 @@ export function buildWebUiHtml(): string {
       .theme-switch {
         display: inline-flex;
         border: 1px solid var(--border);
-        border-radius: 999px;
+        border-radius: 10px;
         overflow: hidden;
         background: var(--surface-soft);
       }
@@ -796,6 +809,13 @@ export function buildWebUiHtml(): string {
           flex-direction: column;
           align-items: stretch;
         }
+        .command-quick {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .command-quick .btn {
+          width: 100%;
+        }
         .command-form {
           grid-template-columns: 1fr;
         }
@@ -810,9 +830,6 @@ export function buildWebUiHtml(): string {
         }
         .workspace-header {
           padding: 12px;
-        }
-        .snapshot-grid {
-          grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         .grid {
           grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -829,6 +846,12 @@ export function buildWebUiHtml(): string {
         .theme-btn {
           flex: 1;
         }
+        .command-quick {
+          grid-template-columns: 1fr;
+        }
+        .command-log {
+          max-height: 240px;
+        }
       }
     </style>
   </head>
@@ -843,7 +866,7 @@ export function buildWebUiHtml(): string {
 ╚════██║  ╚██╔╝  ██║╚██╗██║ ██╔██╗
 ███████║   ██║   ██║ ╚████║██╔╝ ██╗
 ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝</pre>
-          <div class="logo-tag">[ Synthetic Agent Orchestrator v5.0 ]</div>
+          <div class="logo-tag">[ AI Agent Orchestrator ]</div>
         </div>
         <p class="rail-headline">Operator Console</p>
         <p class="rail-subline">Dispatcher, planner, expert flow and human gate in one place.</p>
@@ -854,7 +877,6 @@ export function buildWebUiHtml(): string {
             <button type="button" class="theme-btn" data-theme-option="dark">Dark</button>
           </div>
           <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Realtime connecting...</div>
-          <div class="muted" id="ui-build">UI build: Mission Control v3</div>
         </section>
         <section id="review-hotspot" class="rail-panel review-hotspot" hidden>
           <strong>Human Review Pending</strong>

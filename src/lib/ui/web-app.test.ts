@@ -78,7 +78,7 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("Intl.DateTimeFormat");
     expect(html).toContain("currencyFormatter");
     expect(html).toContain("fmtDateTime(");
-    expect(html).toContain('id="ui-build"');
+    expect(html).not.toContain("UI build:");
     expect(html).toContain('class="logo-ascii"');
     expect(html).toContain("SYNX.js - Mission Control");
     expect(html).toContain("--synx-cyan");
