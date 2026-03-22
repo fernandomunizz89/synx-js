@@ -19,7 +19,9 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("/api/command");
     expect(html).toContain("/api/overview");
     expect(html).toContain("/api/metrics/advanced");
-    expect(html).toContain('setInterval(() => requestRender("poll"), state.pollMs)');
+    expect(html).toContain('setInterval(() => {');
+    expect(html).toContain('requestRender("poll");');
+    expect(html).toContain("refreshGlobalSnapshot()");
     expect(html).toContain("/api/stream");
     expect(html).toContain("/approve");
     expect(html).toContain("/reprove");

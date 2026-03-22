@@ -94,13 +94,10 @@ export function buildWebUiHtml(): string {
         margin: 0;
         font-family: "IBM Plex Sans", "Space Grotesk", "Segoe UI", system-ui, sans-serif;
         background:
-          radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--synx-cyan) 18%, transparent) 0%, transparent 32%),
-          radial-gradient(circle at 88% 8%, color-mix(in srgb, var(--synx-magenta) 16%, transparent) 0%, transparent 28%),
-          linear-gradient(165deg, var(--bg-elev) 0%, var(--bg) 62%);
-        background-repeat: no-repeat, no-repeat, no-repeat;
-        background-size: 120vmax 120vmax, 120vmax 120vmax, 100% 100%;
-        background-position: left top, right top, center;
-        background-attachment: fixed, fixed, fixed;
+          radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--synx-cyan) 11%, transparent) 0%, transparent 32%),
+          radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--synx-magenta) 10%, transparent) 0%, transparent 34%),
+          linear-gradient(180deg, var(--bg-elev) 0%, var(--bg) 100%);
+        background-repeat: no-repeat;
         min-height: 100vh;
         color: var(--fg);
         line-height: 1.45;
@@ -122,9 +119,105 @@ export function buildWebUiHtml(): string {
         z-index: 20;
       }
       main {
-        max-width: 1160px;
-        margin: 0 auto;
-        padding: 32px 20px 48px;
+        width: min(1380px, calc(100vw - 28px));
+        margin: 14px auto;
+        padding: 0;
+      }
+      .app-shell {
+        display: grid;
+        grid-template-columns: 316px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+      }
+      .side-rail {
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        box-shadow: var(--shadow);
+        padding: 14px;
+        position: sticky;
+        top: 12px;
+      }
+      .rail-panel {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface-soft);
+        padding: 10px;
+        margin-top: 10px;
+      }
+      .rail-headline {
+        margin: 8px 0 2px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+      .rail-subline {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .review-hotspot[hidden] {
+        display: none;
+      }
+      .review-hotspot .actions {
+        margin-top: 8px;
+      }
+      .view-nav {
+        display: grid;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+        gap: 8px;
+        margin-top: 12px;
+        margin-bottom: 0;
+      }
+      .view-nav button {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: var(--surface-strong);
+        color: var(--fg);
+        font-weight: 700;
+        cursor: pointer;
+        min-height: 44px;
+        text-align: left;
+      }
+      .view-nav button .sub {
+        display: block;
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .view-nav button.active {
+        border-color: color-mix(in srgb, var(--synx-cyan) 42%, var(--border));
+        background: linear-gradient(90deg, color-mix(in srgb, var(--synx-cyan) 19%, var(--surface)) 0%, color-mix(in srgb, var(--synx-magenta) 14%, var(--surface)) 100%);
+      }
+      .workspace {
+        min-width: 0;
+      }
+      .workspace-header {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--surface) 90%, transparent);
+        box-shadow: var(--shadow);
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .title-wrap p {
+        margin: 0;
+      }
+      .snapshot-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .snapshot-item {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px;
+        background: var(--surface);
+      }
+      .snapshot-item strong {
+        display: block;
+        margin-top: 3px;
+        font-size: 1.12rem;
       }
       .topbar {
         display: flex;
@@ -132,11 +225,6 @@ export function buildWebUiHtml(): string {
         justify-content: space-between;
         gap: 16px;
         margin-bottom: 16px;
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        background: color-mix(in srgb, var(--surface) 86%, transparent);
-        box-shadow: var(--shadow);
-        padding: 14px;
       }
       .brand-panel {
         display: flex;
@@ -671,6 +759,15 @@ export function buildWebUiHtml(): string {
         border-radius: 6px;
       }
       @media (max-width: 940px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+        }
+        .side-rail {
+          position: static;
+        }
+        .snapshot-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .topbar {
           flex-direction: column;
         }
@@ -685,6 +782,9 @@ export function buildWebUiHtml(): string {
         .topbar-controls {
           width: 100%;
           justify-items: start;
+        }
+        .view-nav {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
         nav {
           grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -702,13 +802,26 @@ export function buildWebUiHtml(): string {
       }
       @media (max-width: 640px) {
         main {
-          padding: 20px 14px 36px;
+          width: calc(100vw - 14px);
+          margin: 8px auto;
+        }
+        .side-rail {
+          padding: 10px;
+        }
+        .workspace-header {
+          padding: 12px;
+        }
+        .snapshot-grid {
+          grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         .grid {
           grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         nav {
           grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .view-nav {
+          grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         .theme-switch {
           width: 100%;
@@ -721,72 +834,97 @@ export function buildWebUiHtml(): string {
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
-    <main id="main-content">
-      <div class="topbar">
-        <div class="brand-panel">
-          <div class="synx-logo" aria-hidden="true">
-            <pre class="logo-ascii">███████╗██╗   ██╗███╗   ██╗██╗  ██╗
+    <main id="main-content" class="app-shell">
+      <aside class="side-rail">
+        <div class="synx-logo" aria-hidden="true">
+          <pre class="logo-ascii">███████╗██╗   ██╗███╗   ██╗██╗  ██╗
 ██╔════╝╚██╗ ██╔╝████╗  ██║╚██╗██╔╝
 ███████╗ ╚████╔╝ ██╔██╗ ██║ ╚███╔╝
 ╚════██║  ╚██╔╝  ██║╚██╗██║ ██╔██╗
 ███████║   ██║   ██║ ╚████║██╔╝ ██╗
 ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝</pre>
-            <div class="logo-tag">[ Synthetic Agent Orchestrator v5.0 ]</div>
-          </div>
-          <div class="title-wrap">
-            <h1>SYNX.js - Mission Control</h1>
-            <p>SYNX Web Observability: runtime, human review e analytics em tempo real</p>
-          </div>
+          <div class="logo-tag">[ Synthetic Agent Orchestrator v5.0 ]</div>
         </div>
-        <div class="topbar-controls">
+        <p class="rail-headline">Operator Console</p>
+        <p class="rail-subline">Dispatcher, planner, expert flow and human gate in one place.</p>
+        <section class="rail-panel">
           <div class="theme-switch" role="group" aria-label="Theme mode">
             <button type="button" class="theme-btn" data-theme-option="light">Light</button>
             <button type="button" class="theme-btn active" data-theme-option="system" aria-pressed="true">System</button>
             <button type="button" class="theme-btn" data-theme-option="dark">Dark</button>
           </div>
-          <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Polling 3s</div>
-          <div class="muted" id="ui-build">UI build: Mission Control v2</div>
-        </div>
-      </div>
-      <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
-      <nav aria-label="SYNX Web UI sections">
-        <button type="button" data-view="overview" class="active" aria-current="page">Overview</button>
-        <button type="button" data-view="tasks">Tasks</button>
-        <button type="button" data-view="board">Agent Board</button>
-        <button type="button" data-view="review">Review Queue</button>
-        <button type="button" data-view="detail">Task Detail</button>
-        <button type="button" data-view="live">Live Stream</button>
-        <button type="button" data-view="analytics">Analytics</button>
-      </nav>
-      <section class="card command-console">
-        <div class="toolbar">
-          <div><strong>Web Command Console</strong><div class="muted">Execute the same command flow from TUI directly in browser.</div></div>
-        </div>
-        <div class="command-shell">
-          <form id="web-command-form" class="command-form">
-            <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='Examples: status --all | new "Fix timer bug" --type Bug | approve --task-id task-...' />
-            <select id="web-command-mode" class="field-select">
-              <option value="command">Command mode</option>
-              <option value="human">Human input mode</option>
-            </select>
-            <button type="submit" class="btn approve">Run</button>
-          </form>
-          <div class="command-quick">
-            <button type="button" class="btn" data-web-command="help">help</button>
-            <button type="button" class="btn" data-web-command="status">status</button>
-            <button type="button" class="btn" data-web-command="status --all">status --all</button>
-            <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new template</button>
-            <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove template</button>
-            <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve template</button>
-            <button type="button" class="btn" data-runtime-action="pause">pause runtime</button>
-            <button type="button" class="btn approve" data-runtime-action="resume">resume runtime</button>
-            <button type="button" class="btn cancel" data-runtime-action="stop">stop runtime</button>
+          <div class="badge" id="poll-status" role="status" aria-live="polite" aria-atomic="true">Realtime connecting...</div>
+          <div class="muted" id="ui-build">UI build: Mission Control v3</div>
+        </section>
+        <section id="review-hotspot" class="rail-panel review-hotspot" hidden>
+          <strong>Human Review Pending</strong>
+          <div id="review-hotspot-meta" class="muted">No tasks waiting right now.</div>
+          <div class="actions">
+            <button type="button" class="btn approve" data-open-review>Open review queue</button>
           </div>
-          <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
-        </div>
-      </section>
-      <section class="card">
-        <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
+        </section>
+        <nav class="view-nav" aria-label="SYNX Web UI sections">
+          <button type="button" data-view="overview" class="active" aria-current="page">Overview<span class="sub">System health and runtime pulse</span></button>
+          <button type="button" data-view="tasks">Tasks<span class="sub">Search, inspect and open task detail</span></button>
+          <button type="button" data-view="board">Agent Board<span class="sub">Jira-like flow across agent lanes</span></button>
+          <button type="button" data-view="review">Review Queue<span class="sub">Approve, reprove and rollback control</span></button>
+          <button type="button" data-view="detail">Task Detail<span class="sub">Human actions and artifacts by task</span></button>
+          <button type="button" data-view="live">Live Stream<span class="sub">Realtime timeline in human language</span></button>
+          <button type="button" data-view="analytics">Analytics<span class="sub">Cost, tokens and bottleneck curves</span></button>
+        </nav>
+      </aside>
+
+      <section class="workspace">
+        <header class="workspace-header">
+          <div class="title-wrap">
+            <h1>SYNX.js - Mission Control</h1>
+            <p>Mission control web observability with human review, command input and agent-board flow.</p>
+          </div>
+        </header>
+
+        <section class="card">
+          <div class="snapshot-grid">
+            <div class="snapshot-item"><div class="muted">Engine</div><strong id="snapshot-engine">-</strong></div>
+            <div class="snapshot-item"><div class="muted">Active Tasks</div><strong id="snapshot-active">0</strong></div>
+            <div class="snapshot-item"><div class="muted">Waiting Human</div><strong id="snapshot-waiting">0</strong></div>
+            <div class="snapshot-item"><div class="muted">Estimated Cost</div><strong id="snapshot-cost">0</strong></div>
+            <div class="snapshot-item"><div class="muted">Updated</div><strong id="snapshot-updated">-</strong></div>
+          </div>
+        </section>
+
+        <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
+
+        <section class="card command-console">
+          <div class="toolbar">
+            <div><strong>Web Command Console</strong><div class="muted">TUI parity in the browser: run commands and human inputs directly here.</div></div>
+          </div>
+          <div class="command-shell">
+            <form id="web-command-form" class="command-form">
+              <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='Examples: status --all | new "Fix timer bug" --type Bug | approve --task-id task-...' />
+              <select id="web-command-mode" class="field-select">
+                <option value="command">Command mode</option>
+                <option value="human">Human input mode</option>
+              </select>
+              <button type="submit" class="btn approve">Run</button>
+            </form>
+            <div class="command-quick">
+              <button type="button" class="btn" data-web-command="help">help</button>
+              <button type="button" class="btn" data-web-command="status">status</button>
+              <button type="button" class="btn" data-web-command="status --all">status --all</button>
+              <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new template</button>
+              <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove template</button>
+              <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve template</button>
+              <button type="button" class="btn" data-runtime-action="pause">pause runtime</button>
+              <button type="button" class="btn approve" data-runtime-action="resume">resume runtime</button>
+              <button type="button" class="btn cancel" data-runtime-action="stop">stop runtime</button>
+            </div>
+            <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
+        </section>
       </section>
     </main>
     <script>
@@ -817,12 +955,14 @@ export function buildWebUiHtml(): string {
       const contentEl = document.getElementById("content");
       const pollStatusEl = document.getElementById("poll-status");
       const feedbackEl = document.getElementById("feedback");
-      const navButtons = Array.from(document.querySelectorAll("nav button"));
+      const navButtons = Array.from(document.querySelectorAll(".view-nav button[data-view]"));
       const themeButtons = Array.from(document.querySelectorAll("[data-theme-option]"));
       const commandFormEl = document.getElementById("web-command-form");
       const commandInputEl = document.getElementById("web-command-input");
       const commandModeEl = document.getElementById("web-command-mode");
       const commandLogEl = document.getElementById("web-command-log");
+      const reviewHotspotEl = document.getElementById("review-hotspot");
+      const reviewHotspotMetaEl = document.getElementById("review-hotspot-meta");
       const locale = (() => {
         try {
           return Intl.DateTimeFormat().resolvedOptions().locale || (navigator && navigator.language) || undefined;
@@ -1172,6 +1312,46 @@ export function buildWebUiHtml(): string {
         if (el.textContent !== next) el.textContent = next;
       }
 
+      function updateReviewHotspot(waitingCount) {
+        const count = Math.max(0, Number(waitingCount || 0));
+        if (reviewHotspotMetaEl) {
+          reviewHotspotMetaEl.textContent = count > 0
+            ? fmtNumber(count) + " task(s) waiting for human decision."
+            : "No tasks waiting right now.";
+        }
+        if (reviewHotspotEl) {
+          if (count > 0) reviewHotspotEl.removeAttribute("hidden");
+          else reviewHotspotEl.setAttribute("hidden", "");
+        }
+      }
+
+      function applyOverviewSnapshot(overview) {
+        const safe = asObject(overview);
+        const runtime = asObject(safe.runtime);
+        const counts = asObject(safe.counts);
+        const consumption = asObject(safe.consumption);
+        setTextIfChanged("snapshot-engine", runtime.isAlive ? "Alive" : "Stopped");
+        setTextIfChanged("snapshot-active", fmtNumber(counts.active));
+        setTextIfChanged("snapshot-waiting", fmtNumber(counts.waitingHuman));
+        setTextIfChanged("snapshot-cost", fmtCost(consumption.estimatedCostUsd));
+        setTextIfChanged("snapshot-updated", fmtTimeNow());
+        updateReviewHotspot(counts.waitingHuman);
+      }
+
+      let snapshotInFlight = false;
+      async function refreshGlobalSnapshot() {
+        if (snapshotInFlight) return;
+        snapshotInFlight = true;
+        try {
+          const overview = await api("/api/overview");
+          applyOverviewSnapshot(overview);
+        } catch {
+          // ignore snapshot refresh failures; main view rendering keeps detailed errors
+        } finally {
+          snapshotInFlight = false;
+        }
+      }
+
       function asObject(value) {
         return value && typeof value === "object" ? value : {};
       }
@@ -1321,6 +1501,7 @@ export function buildWebUiHtml(): string {
           api("/api/overview"),
           api("/api/metrics/overview?hours=24"),
         ]);
+        applyOverviewSnapshot(overview);
 
         const topSlowStage = metrics.stageSummary && metrics.stageSummary[0] ? metrics.stageSummary[0] : null;
         const runtime = overview.runtime || {};
@@ -1872,6 +2053,12 @@ export function buildWebUiHtml(): string {
           return;
         }
 
+        const openReviewTarget = target.closest("[data-open-review]");
+        if (openReviewTarget instanceof HTMLElement && openReviewTarget.dataset.openReview !== undefined) {
+          setView("review");
+          return;
+        }
+
         const retryTarget = target.closest("[data-retry-render]");
         if (retryTarget instanceof HTMLElement && retryTarget.dataset.retryRender !== undefined) {
           setFeedback("Retrying current section...", "info");
@@ -2017,6 +2204,15 @@ export function buildWebUiHtml(): string {
                   setPollStatus("Review required now");
                   setFeedback("New task entered waiting_human queue.", "info");
                 }
+                if (
+                  type === "task.updated"
+                  || type === "task.review_required"
+                  || type === "task.decision_recorded"
+                  || type === "runtime.updated"
+                  || type === "metrics.updated"
+                ) {
+                  void refreshGlobalSnapshot();
+                }
                 if (parsed && parsed.taskId && state.selectedTaskId && parsed.taskId === state.selectedTaskId && (type === "task.updated" || type === "task.decision_recorded" || type === "task.review_required")) {
                   if (state.view === "detail") {
                     requestRender("poll");
@@ -2052,8 +2248,12 @@ export function buildWebUiHtml(): string {
       pushCommandLog("Human mode accepts: yes / no + reason", "system");
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
-      setInterval(() => requestRender("poll"), state.pollMs);
+      setInterval(() => {
+        requestRender("poll");
+        if (state.view !== "overview") void refreshGlobalSnapshot();
+      }, state.pollMs);
       connectRealtime();
+      void refreshGlobalSnapshot();
       requestRender("user");
     </script>
   </body>
