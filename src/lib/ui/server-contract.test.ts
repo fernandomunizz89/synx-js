@@ -101,6 +101,26 @@ describe.sequential("lib/ui/server contract", () => {
       const readOnlyPayload = await readOnlyApprove.json() as { ok?: boolean; error?: unknown };
       expect(readOnlyPayload.ok).toBe(false);
       expect(typeof readOnlyPayload.error).toBe("string");
+
+      const readOnlyStatusCommand = await fetch(`${server.baseUrl}/api/command`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "status", mode: "command" }),
+      });
+      expect(readOnlyStatusCommand.status).toBe(200);
+      const statusPayload = await readOnlyStatusCommand.json() as { ok?: boolean; data?: { parsedKind?: string } };
+      expect(statusPayload.ok).toBe(true);
+      expect(statusPayload.data?.parsedKind).toBe("status");
+
+      const readOnlyMutatingCommand = await fetch(`${server.baseUrl}/api/command`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "new \"Read-only mutation\" --type Feature", mode: "command" }),
+      });
+      expect(readOnlyMutatingCommand.status).toBe(405);
+      const mutatingPayload = await readOnlyMutatingCommand.json() as { ok?: boolean; error?: unknown };
+      expect(mutatingPayload.ok).toBe(false);
+      expect(typeof mutatingPayload.error).toBe("string");
     } finally {
       await server.close();
     }

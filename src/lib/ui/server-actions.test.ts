@@ -82,6 +82,12 @@ describe.sequential("lib/ui/server actions", () => {
     doneMeta.status = "done";
     await saveTaskMeta(doneTask.taskId, doneMeta);
 
+    const commandTask = await createTask(baseTaskInput("Command approve from web"));
+    const commandMeta = await loadTaskMeta(commandTask.taskId);
+    commandMeta.status = "waiting_human";
+    commandMeta.humanApprovalRequired = true;
+    await saveTaskMeta(commandTask.taskId, commandMeta);
+
     const server = await startUiServer({
       host: "127.0.0.1",
       port: 0,
@@ -136,6 +142,36 @@ describe.sequential("lib/ui/server actions", () => {
       const control = await consumeRuntimeControl();
       expect(control?.command).toBe("pause");
       expect(control?.reason).toBe("operator pause");
+
+      const commandStatusResponse = await fetch(`${server.baseUrl}/api/command`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "status --all", mode: "command" }),
+      });
+      expect(commandStatusResponse.status).toBe(200);
+      const commandStatusPayload = await commandStatusResponse.json() as {
+        ok?: boolean;
+        data?: { parsedKind?: string; lines?: Array<{ message?: string }> };
+      };
+      expect(commandStatusPayload.ok).toBe(true);
+      expect(commandStatusPayload.data?.parsedKind).toBe("status");
+      expect((commandStatusPayload.data?.lines || []).length).toBeGreaterThan(0);
+
+      const commandHumanResponse = await fetch(`${server.baseUrl}/api/command`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "yes", mode: "human" }),
+      });
+      expect(commandHumanResponse.status).toBe(200);
+      const commandHumanPayload = await commandHumanResponse.json() as {
+        ok?: boolean;
+        data?: { parsedKind?: string; preferredHumanTaskId?: string };
+      };
+      expect(commandHumanPayload.ok).toBe(true);
+      expect(commandHumanPayload.data?.parsedKind).toBe("approve");
+      expect(commandHumanPayload.data?.preferredHumanTaskId).toBe(commandTask.taskId);
+      const commandApprovedMeta = await loadTaskMeta(commandTask.taskId);
+      expect(commandApprovedMeta.status).toBe("done");
     } finally {
       await server.close();
     }

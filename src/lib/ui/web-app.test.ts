@@ -12,6 +12,11 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('data-view="detail"');
     expect(html).toContain('data-view="live"');
     expect(html).toContain('data-view="analytics"');
+    expect(html).toContain('id="web-command-form"');
+    expect(html).toContain('id="web-command-input"');
+    expect(html).toContain('id="web-command-mode"');
+    expect(html).toContain('id="web-command-log"');
+    expect(html).toContain("/api/command");
     expect(html).toContain("/api/overview");
     expect(html).toContain("/api/metrics/advanced");
     expect(html).toContain('setInterval(() => requestRender("poll"), state.pollMs)');
@@ -65,6 +70,8 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("loadThemePreference(");
     expect(html).toContain("bindSystemThemeSync(");
     expect(html).toContain("requestRender(");
+    expect(html).toContain("executeWebCommand(");
+    expect(html).toContain("pushCommandLog(");
     expect(html).toContain("Intl.NumberFormat");
     expect(html).toContain("Intl.DateTimeFormat");
     expect(html).toContain("currencyFormatter");

@@ -320,6 +320,60 @@ export function buildWebUiHtml(): string {
         color: var(--status-failed-fg);
         font-weight: 700;
       }
+      .command-console {
+        margin-bottom: 14px;
+      }
+      .command-shell {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface-soft);
+        padding: 10px;
+      }
+      .command-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 8px;
+      }
+      .command-input {
+        width: 100%;
+      }
+      .command-quick {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+      .command-log {
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 8px;
+        min-height: 72px;
+        max-height: 180px;
+        overflow: auto;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.82rem;
+      }
+      .command-log .line {
+        margin: 0 0 6px;
+        white-space: pre-wrap;
+      }
+      .command-log .line:last-child {
+        margin-bottom: 0;
+      }
+      .command-log .line.user {
+        color: var(--accent);
+      }
+      .command-log .line.critical {
+        color: var(--status-failed-fg);
+      }
+      .command-log .line.info {
+        color: var(--fg);
+      }
+      .command-log .line.system {
+        color: var(--muted);
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -642,6 +696,9 @@ export function buildWebUiHtml(): string {
           flex-direction: column;
           align-items: stretch;
         }
+        .command-form {
+          grid-template-columns: 1fr;
+        }
       }
       @media (max-width: 640px) {
         main {
@@ -701,6 +758,33 @@ export function buildWebUiHtml(): string {
         <button type="button" data-view="live">Live Stream</button>
         <button type="button" data-view="analytics">Analytics</button>
       </nav>
+      <section class="card command-console">
+        <div class="toolbar">
+          <div><strong>Web Command Console</strong><div class="muted">Execute the same command flow from TUI directly in browser.</div></div>
+        </div>
+        <div class="command-shell">
+          <form id="web-command-form" class="command-form">
+            <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='Examples: status --all | new "Fix timer bug" --type Bug | approve --task-id task-...' />
+            <select id="web-command-mode" class="field-select">
+              <option value="command">Command mode</option>
+              <option value="human">Human input mode</option>
+            </select>
+            <button type="submit" class="btn approve">Run</button>
+          </form>
+          <div class="command-quick">
+            <button type="button" class="btn" data-web-command="help">help</button>
+            <button type="button" class="btn" data-web-command="status">status</button>
+            <button type="button" class="btn" data-web-command="status --all">status --all</button>
+            <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new template</button>
+            <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove template</button>
+            <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve template</button>
+            <button type="button" class="btn" data-runtime-action="pause">pause runtime</button>
+            <button type="button" class="btn approve" data-runtime-action="resume">resume runtime</button>
+            <button type="button" class="btn cancel" data-runtime-action="stop">stop runtime</button>
+          </div>
+          <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
+        </div>
+      </section>
       <section class="card">
         <div id="content" role="region" aria-live="polite" aria-busy="false"></div>
       </section>
@@ -723,6 +807,8 @@ export function buildWebUiHtml(): string {
         analyticsRenderedKey: "",
         liveRenderedCount: -1,
         liveRenderedConnected: null,
+        commandMode: "command",
+        commandLog: [],
         themePreference: "system",
         themeResolved: "light",
         renderedViews: {},
@@ -733,6 +819,10 @@ export function buildWebUiHtml(): string {
       const feedbackEl = document.getElementById("feedback");
       const navButtons = Array.from(document.querySelectorAll("nav button"));
       const themeButtons = Array.from(document.querySelectorAll("[data-theme-option]"));
+      const commandFormEl = document.getElementById("web-command-form");
+      const commandInputEl = document.getElementById("web-command-input");
+      const commandModeEl = document.getElementById("web-command-mode");
+      const commandLogEl = document.getElementById("web-command-log");
       const locale = (() => {
         try {
           return Intl.DateTimeFormat().resolvedOptions().locale || (navigator && navigator.language) || undefined;
@@ -958,6 +1048,60 @@ export function buildWebUiHtml(): string {
         if (!feedbackEl) return;
         feedbackEl.textContent = message || "";
         feedbackEl.classList.toggle("error", tone === "error");
+      }
+
+      function renderCommandLog() {
+        if (!(commandLogEl instanceof HTMLElement)) return;
+        if (!state.commandLog.length) {
+          commandLogEl.innerHTML = '<p class="line system">Web command console ready.</p>';
+          return;
+        }
+        commandLogEl.innerHTML = state.commandLog.map((row) => {
+          const tone = String(row && row.tone || "info");
+          const message = String(row && row.message || "");
+          return '<p class="line ' + escapeHtml(tone) + '">' + escapeHtml(message) + "</p>";
+        }).join("");
+        commandLogEl.scrollTop = commandLogEl.scrollHeight;
+      }
+
+      function pushCommandLog(message, tone) {
+        state.commandLog.push({
+          message: String(message || ""),
+          tone: tone === "critical" || tone === "user" || tone === "system" ? tone : "info",
+        });
+        if (state.commandLog.length > 140) state.commandLog = state.commandLog.slice(-140);
+        renderCommandLog();
+      }
+
+      async function executeWebCommand(input, mode) {
+        const raw = String(input || "").trim();
+        if (!raw) return;
+        const selectedMode = mode === "human" ? "human" : "command";
+        pushCommandLog((selectedMode === "human" ? "[human] " : "[cmd] ") + "> " + raw, "user");
+        try {
+          const result = await postApi("/api/command", {
+            input: raw,
+            mode: selectedMode,
+          });
+          const lines = Array.isArray(result && result.lines) ? result.lines : [];
+          if (!lines.length) {
+            pushCommandLog("No output lines returned by command handler.", "system");
+          } else {
+            for (const line of lines) {
+              const text = String(line && line.message || "");
+              const tone = String(line && line.level || "info");
+              pushCommandLog(text || "[empty]", tone === "critical" ? "critical" : "info");
+            }
+          }
+          if (result && result.stopRequested) {
+            pushCommandLog("Runtime stop requested from command input.", "critical");
+          }
+          requestRender("user");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Command failed";
+          pushCommandLog(message, "critical");
+          setFeedback(message, "error");
+        }
       }
 
       function loadThemePreference() {
@@ -1698,6 +1842,20 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
 
+        const webCommandTarget = target.closest("[data-web-command]");
+        const webCommand = webCommandTarget instanceof HTMLElement ? String(webCommandTarget.dataset.webCommand || "").trim() : "";
+        if (webCommand) {
+          const shouldFill = webCommandTarget instanceof HTMLElement && webCommandTarget.dataset.webFill === "true";
+          if (shouldFill && commandInputEl instanceof HTMLInputElement) {
+            commandInputEl.value = webCommand;
+            commandInputEl.focus();
+          } else {
+            const mode = commandModeEl instanceof HTMLSelectElement ? commandModeEl.value : state.commandMode;
+            void executeWebCommand(webCommand, mode);
+          }
+          return;
+        }
+
         const themeTarget = target.closest("[data-theme-option]");
         const themeOption = themeTarget instanceof HTMLElement ? themeTarget.dataset.themeOption : "";
         if (themeOption === "light" || themeOption === "dark" || themeOption === "system") {
@@ -1809,10 +1967,29 @@ export function buildWebUiHtml(): string {
         }
       });
 
+      document.addEventListener("submit", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLFormElement)) return;
+        if (target.id !== "web-command-form") return;
+        event.preventDefault();
+        const input = commandInputEl instanceof HTMLInputElement ? commandInputEl.value.trim() : "";
+        const mode = commandModeEl instanceof HTMLSelectElement ? commandModeEl.value : state.commandMode;
+        if (!input) {
+          setFeedback("Type a command before running.", "error");
+          return;
+        }
+        void executeWebCommand(input, mode);
+        if (commandInputEl instanceof HTMLInputElement) commandInputEl.value = "";
+      });
+
       document.addEventListener("change", (event) => {
         const target = event.target;
         if (target instanceof HTMLSelectElement && target.id === "review-rollback") {
           state.reviewRollbackMode = target.value === "task" ? "task" : "none";
+        }
+        if (target instanceof HTMLSelectElement && target.id === "web-command-mode") {
+          state.commandMode = target.value === "human" ? "human" : "command";
+          pushCommandLog("Switched command mode to " + state.commandMode + ".", "system");
         }
       });
 
@@ -1868,6 +2045,11 @@ export function buildWebUiHtml(): string {
         }
       }
 
+      if (commandModeEl instanceof HTMLSelectElement) {
+        commandModeEl.value = state.commandMode;
+      }
+      pushCommandLog("Web command console ready. Try: status --all", "system");
+      pushCommandLog("Human mode accepts: yes / no + reason", "system");
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
       setInterval(() => requestRender("poll"), state.pollMs);

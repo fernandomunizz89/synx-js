@@ -13,6 +13,8 @@ import {
   getProjectConsumptionRanking,
   getTaskConsumptionRanking,
 } from "../observability/analytics.js";
+import { parseHumanInputCommand, parseInlineCommand, type InlineCommand } from "../start-inline-command.js";
+import { runInlineCommand } from "../start/command-handler.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -83,6 +85,13 @@ async function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, 
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isMutatingInlineCommand(command: InlineCommand): boolean {
+  return command.kind === "new"
+    || command.kind === "approve"
+    || command.kind === "reprove"
+    || command.kind === "stop";
 }
 
 function isNotFoundError(error: unknown): boolean {
@@ -247,6 +256,7 @@ export function createUiRequestHandler(options: {
       const runtimePauseMatch = pathname === "/api/runtime/pause";
       const runtimeResumeMatch = pathname === "/api/runtime/resume";
       const runtimeStopMatch = pathname === "/api/runtime/stop";
+      const commandInputRoute = pathname === "/api/command";
 
       if (method === "POST" && (approveMatch || reproveMatch || cancelMatch || runtimePauseMatch || runtimeResumeMatch || runtimeStopMatch)) {
         if (!options.enableMutations) {
@@ -308,6 +318,62 @@ export function createUiRequestHandler(options: {
           reason,
         });
         sendJson(res, 200, { ok: true, data: request });
+        return;
+      }
+
+      if (method === "POST" && commandInputRoute) {
+        const body = await parseJsonBody(req);
+        const input = normalizeString(body.input);
+        const mode = normalizeString(body.mode) === "human" ? "human" : "command";
+        if (!input) {
+          throw new UiHttpError(400, "Command input is required.");
+        }
+
+        const queue = await listReviewQueue();
+        const preferredHumanTaskId = normalizeString(body.preferredHumanTaskId) || (queue[0] ? queue[0].taskId : "");
+        const parsed = mode === "human"
+          ? parseHumanInputCommand(input, preferredHumanTaskId)
+          : parseInlineCommand(input, preferredHumanTaskId);
+
+        if (!options.enableMutations && isMutatingInlineCommand(parsed)) {
+          throw new UiHttpError(405, "Mutating commands are disabled in read-only mode.");
+        }
+
+        const lines: Array<{ level: "info" | "critical"; message: string }> = [];
+        let stopRequested = false;
+        try {
+          await runInlineCommand(parsed, {
+            pushEvent: (message, level = "info") => {
+              lines.push({ level, message: String(message || "") });
+            },
+            requestStop: (_signal: NodeJS.Signals) => {
+              stopRequested = true;
+            },
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Command execution failed.";
+          lines.push({ level: "critical", message });
+        }
+
+        if (stopRequested) {
+          await writeRuntimeControl({
+            command: "stop",
+            requestedBy: "web-ui-command",
+            reason: "stop requested from web command input",
+          });
+        }
+
+        sendJson(res, 200, {
+          ok: true,
+          data: {
+            input,
+            mode,
+            parsedKind: parsed.kind,
+            preferredHumanTaskId,
+            stopRequested,
+            lines,
+          },
+        });
         return;
       }
 
