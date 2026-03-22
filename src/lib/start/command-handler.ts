@@ -1,14 +1,8 @@
-import path from "node:path";
-import { allTaskIds, createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
-import { logTaskEvent } from "../logging.js";
-import { writeJson } from "../fs.js";
-import { nowIso } from "../utils.js";
-import { taskDir } from "../paths.js";
-import { DONE_FILE_NAMES } from "../constants.js";
+import { allTaskIds, loadTaskMeta } from "../task.js";
 import type { InlineCommand } from "../start-inline-command.js";
-import type { StageEnvelope } from "../types.js";
-import { remediationTarget, summarizeTaskCounts, pickFocusedTask, loadMetasSafe, byMostRecent } from "./task-management.js";
+import { summarizeTaskCounts, pickFocusedTask, loadMetasSafe, byMostRecent } from "./task-management.js";
 import { resolveTaskQaPreferences } from "../qa-preferences.js";
+import { approveTaskService, createTaskService, reproveTaskService } from "../services/task-services.js";
 
 export interface CommandHandlerContext {
   pushEvent: (message: string, level?: "info" | "critical") => void;
@@ -53,7 +47,7 @@ export async function runInlineCommand(command: InlineCommand, context: CommandH
       },
     };
     const resolvedPreferences = resolveTaskQaPreferences(draftTaskInput);
-    const { taskId } = await createTask({
+    const { taskId } = await createTaskService({
       ...draftTaskInput,
       extraContext: {
         ...draftTaskInput.extraContext,
@@ -96,13 +90,7 @@ export async function runInlineCommand(command: InlineCommand, context: CommandH
       return;
     }
 
-    meta.status = "done";
-    meta.currentStage = "approved";
-    meta.currentAgent = "Human Review";
-    meta.nextAgent = "";
-    meta.humanApprovalRequired = false;
-    await saveTaskMeta(command.taskId, meta);
-    await logTaskEvent(taskDir(command.taskId), "Human approval completed. Task marked as done.");
+    await approveTaskService(command.taskId);
     pushEvent(`Task approved: ${command.taskId}`);
     return;
   }
@@ -120,42 +108,11 @@ export async function runInlineCommand(command: InlineCommand, context: CommandH
       return;
     }
 
-    const target = remediationTarget(meta.type);
-    const now = nowIso();
-    const qaDoneRef = `done/${DONE_FILE_NAMES.synxQaEngineer}`;
-    const nextInputRef = qaDoneRef;
-
-    meta.status = "waiting_agent";
-    meta.currentStage = "reproved";
-    meta.currentAgent = "Human Review";
-    meta.nextAgent = target.agent;
-    meta.humanApprovalRequired = false;
-    await saveTaskMeta(command.taskId, meta);
-
-    const stageRequest: StageEnvelope = {
+    const outcome = await reproveTaskService({
       taskId: command.taskId,
-      stage: target.stage,
-      status: "request",
-      createdAt: now,
-      agent: target.agent,
-      inputRef: nextInputRef,
-    };
-
-    await writeJson(path.join(taskDir(command.taskId), "inbox", target.requestFileName), stageRequest);
-    await writeJson(path.join(taskDir(command.taskId), "human", "90-final-review.reproved.json"), {
-      taskId: command.taskId,
-      stage: "human-review",
-      status: "done",
-      createdAt: now,
-      agent: "Human Review",
-      output: {
-        decision: "reproved",
-        returnedTo: target.agent,
-        reason,
-        rollbackMode: "none",
-      },
+      reason,
+      rollbackMode: "none",
     });
-    await logTaskEvent(taskDir(command.taskId), `Human reprove completed. Task returned to ${target.agent}. Reason: ${reason}`);
-    pushEvent(`Task reproved: ${command.taskId} -> ${target.agent}`);
+    pushEvent(`Task reproved: ${command.taskId} -> ${outcome.targetAgent}`);
   }
 }

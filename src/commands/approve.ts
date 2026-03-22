@@ -1,13 +1,10 @@
 import { Command } from "commander";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
-import { allTaskIds, loadTaskMeta, saveTaskMeta } from "../lib/task.js";
-import { logTaskEvent } from "../lib/logging.js";
-import { taskDir } from "../lib/paths.js";
+import { allTaskIds, loadTaskMeta } from "../lib/task.js";
 import { confirmAction, selectOption } from "../lib/interactive.js";
 import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
-import { loadPipelineState } from "../lib/pipeline-state.js";
-import { recordPipelineApproval } from "../lib/learnings.js";
+import { approveTaskService } from "../lib/services/task-services.js";
 
 export const approveCommand = new Command("approve")
   .description("Approve the final human review and mark the task done")
@@ -71,20 +68,7 @@ export const approveCommand = new Command("approve")
       }
     }
 
-    meta.status = "done";
-    meta.currentStage = "approved";
-    meta.currentAgent = "Human Review";
-    meta.nextAgent = "";
-    meta.humanApprovalRequired = false;
-    await saveTaskMeta(taskId, meta);
-    await logTaskEvent(taskDir(taskId), "Human approval completed. Task marked as done.");
-
-    try {
-      const pipelineState = await loadPipelineState(taskId);
-      await recordPipelineApproval(taskId, pipelineState.pipelineId, pipelineState.completedSteps);
-    } catch {
-      // Not a pipeline task or state unavailable — skip learning record
-    }
+    await approveTaskService(taskId);
 
     console.log(`\nTask approved: ${taskId}`);
     console.log(`Next step: run \`${commandExample("status")}\` to check remaining work.`);

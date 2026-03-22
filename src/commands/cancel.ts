@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { allTaskIds, loadTaskMeta } from "../lib/task.js";
-import { requestTaskCancel } from "../lib/task-cancel.js";
 import { commandExample } from "../lib/cli-command.js";
+import { cancelTaskService } from "../lib/services/task-services.js";
 
 const CANCELLABLE_STATUSES = new Set(["new", "in_progress", "waiting_agent"]);
 
@@ -44,9 +44,8 @@ export const cancelCommand = new Command("cancel")
       );
     }
 
-    await requestTaskCancel({
+    await cancelTaskService({
       taskId: selectedTaskId,
-      requestedBy: "human",
       reason: options.reason,
     });
 

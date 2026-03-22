@@ -5,12 +5,10 @@ const mocks = vi.hoisted(() => ({
   ensureProjectInitialized: vi.fn<() => Promise<void>>(),
   allTaskIds: vi.fn<() => Promise<string[]>>(),
   loadTaskMeta: vi.fn<() => Promise<any>>(),
-  saveTaskMeta: vi.fn<(taskId: string, meta: unknown) => Promise<void>>(),
-  logTaskEvent: vi.fn<() => Promise<void>>(),
+  reproveTaskService: vi.fn<() => Promise<{ taskId: string; targetAgent: string; targetStage: string }>>(),
   collectReadinessReport: vi.fn<() => Promise<{ ok: boolean; issues: Array<{ severity: "error" | "warning"; message: string }> }>>(),
   printReadinessReport: vi.fn(),
   commandExample: vi.fn<(value: string) => string>(),
-  writeJson: vi.fn<(path: string, value: unknown) => Promise<void>>(),
   exists: vi.fn<(path: string) => Promise<boolean>>(),
   readJson: vi.fn<(path: string) => Promise<unknown>>(),
   confirmAction: vi.fn<() => Promise<boolean>>(),
@@ -29,11 +27,6 @@ vi.mock("../lib/bootstrap.js", () => ({
 vi.mock("../lib/task.js", () => ({
   allTaskIds: mocks.allTaskIds,
   loadTaskMeta: mocks.loadTaskMeta,
-  saveTaskMeta: mocks.saveTaskMeta,
-}));
-
-vi.mock("../lib/logging.js", () => ({
-  logTaskEvent: mocks.logTaskEvent,
 }));
 
 vi.mock("../lib/readiness.js", () => ({
@@ -46,7 +39,6 @@ vi.mock("../lib/cli-command.js", () => ({
 }));
 
 vi.mock("../lib/fs.js", () => ({
-  writeJson: mocks.writeJson,
   exists: mocks.exists,
   readJson: mocks.readJson,
 }));
@@ -64,6 +56,10 @@ vi.mock("../lib/command-runner.js", () => ({
 vi.mock("../lib/paths.js", () => ({
   taskDir: mocks.taskDir,
   repoRoot: mocks.repoRoot,
+}));
+
+vi.mock("../lib/services/task-services.js", () => ({
+  reproveTaskService: mocks.reproveTaskService,
 }));
 
 import { reproveCommand } from "./reprove.js";
@@ -88,12 +84,14 @@ describe.sequential("commands/reprove", () => {
       updatedAt: "2026-03-16T00:00:00.000Z",
       history: [],
     });
-    mocks.saveTaskMeta.mockReset().mockResolvedValue(undefined);
-    mocks.logTaskEvent.mockReset().mockResolvedValue(undefined);
+    mocks.reproveTaskService.mockReset().mockResolvedValue({
+      taskId: "task-1",
+      targetAgent: "Synx QA Engineer",
+      targetStage: "synx-qa-engineer",
+    });
     mocks.collectReadinessReport.mockReset().mockResolvedValue({ ok: true, issues: [] });
     mocks.printReadinessReport.mockReset();
     mocks.commandExample.mockReset().mockImplementation((value: string) => `synx ${value}`);
-    mocks.writeJson.mockReset().mockResolvedValue(undefined);
     mocks.exists.mockReset().mockResolvedValue(false);
     mocks.readJson.mockReset().mockResolvedValue({});
     mocks.confirmAction.mockReset().mockResolvedValue(true);
@@ -113,25 +111,16 @@ describe.sequential("commands/reprove", () => {
     await reproveCommand.parseAsync([
       "node",
       "synx",
+      "reprove",
       "--task-id",
       "task-1",
       "--yes",
     ]);
 
-    expect(mocks.saveTaskMeta).toHaveBeenCalledTimes(1);
-    const savedMeta = mocks.saveTaskMeta.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
-    expect(savedMeta).toMatchObject({
-      status: "waiting_agent",
-      currentStage: "reproved",
-      currentAgent: "Human Review",
-      nextAgent: "Synx QA Engineer",
-      humanApprovalRequired: false,
-    });
-
-    expect(mocks.writeJson).toHaveBeenCalled();
-    const requestCall = mocks.writeJson.mock.calls.find(([file]) => String(file).includes("synx-qa-engineer.request.json"));
-    expect(requestCall).toBeTruthy();
-
+    expect(mocks.reproveTaskService).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: "task-1",
+      rollbackMode: "none",
+    }));
     expect(mocks.runCommand).not.toHaveBeenCalled();
   });
 
@@ -153,19 +142,20 @@ describe.sequential("commands/reprove", () => {
     await reproveCommand.parseAsync([
       "node",
       "synx",
+      "reprove",
       "--task-id",
       "task-1",
       "--yes",
     ]);
 
-    expect(mocks.saveTaskMeta).not.toHaveBeenCalled();
-    expect(mocks.writeJson).not.toHaveBeenCalled();
+    expect(mocks.reproveTaskService).not.toHaveBeenCalled();
   });
 
   it("throws on invalid rollback mode", async () => {
     await expect(reproveCommand.parseAsync([
       "node",
       "synx",
+      "reprove",
       "--task-id",
       "task-1",
       "--rollback",

@@ -1,12 +1,12 @@
 import { Command } from "commander";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
-import { createTask } from "../lib/task.js";
 import { taskTypeSchema } from "../lib/schema.js";
 import type { E2EFramework, E2EPolicy, TaskType } from "../lib/types.js";
 import { promptRequiredText, selectOption } from "../lib/interactive.js";
 import { commandExample } from "../lib/cli-command.js";
 import { collectReadinessReport, printReadinessReport } from "../lib/readiness.js";
 import { resolveTaskQaPreferences } from "../lib/qa-preferences.js";
+import { createTaskService } from "../lib/services/task-services.js";
 
 function parseTaskType(value: string | undefined): TaskType | null {
   if (!value) return null;
@@ -134,7 +134,7 @@ export const newCommand = new Command("new")
       },
     };
     const resolvedPreferences = resolveTaskQaPreferences(draftTaskInput);
-    const { taskId, taskPath } = await createTask({
+    const { taskId, taskPath } = await createTaskService({
       ...draftTaskInput,
       extraContext: {
         ...draftTaskInput.extraContext,
