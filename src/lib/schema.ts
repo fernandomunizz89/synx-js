@@ -97,6 +97,19 @@ export const pipelineStateSchema = z.object({
   completedSteps: z.array(pipelineStepContextSchema),
 });
 
+export const learningEntrySchema = z.object({
+  timestamp: z.string(),
+  taskId: z.string(),
+  agentId: z.string(),
+  summary: z.string(),
+  outcome: z.enum(["approved", "reproved"]),
+  reproveReason: z.string().optional(),
+  pipelineId: z.string().optional(),
+  stepIndex: z.number().int().nonnegative().optional(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+});
+
 export const genericAgentOutputSchema = z.object({
   summary: z.string(),
   result: z.record(z.unknown()).optional(),

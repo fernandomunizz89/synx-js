@@ -59,6 +59,28 @@ export interface PipelineStepResult {
   output: Record<string, unknown>;
 }
 
+export type LearningOutcome = "approved" | "reproved";
+
+/**
+ * A single recorded outcome for one agent step.
+ * Appended to .ai-agents/learnings/<agentId>.jsonl after task resolution.
+ * Injected back into future prompts so the agent learns from past performance.
+ */
+export interface LearningEntry {
+  timestamp: string;
+  taskId: string;
+  agentId: string;
+  /** Short description of what the agent produced (from output.summary) */
+  summary: string;
+  outcome: LearningOutcome;
+  /** Set when the task was reproved; contains the human's feedback */
+  reproveReason?: string;
+  pipelineId?: string;
+  stepIndex?: number;
+  provider?: string;
+  model?: string;
+}
+
 /**
  * Compact context stored in pipeline-state.json and forwarded to subsequent steps.
  * Verbose fields (e.g. `edits` from builder agents) are stripped to avoid token bloat.
