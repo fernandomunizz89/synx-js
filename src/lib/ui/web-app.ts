@@ -424,6 +424,12 @@ export function buildWebUiHtml(): string {
       .command-console {
         margin-bottom: 14px;
       }
+      .command-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
       .command-shell {
         border: 1px solid var(--border);
         border-radius: 12px;
@@ -474,6 +480,48 @@ export function buildWebUiHtml(): string {
       }
       .command-log .line.system {
         color: var(--muted);
+      }
+      .command-ref {
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 10px;
+      }
+      .command-ref[hidden] {
+        display: none;
+      }
+      .command-ref-list {
+        margin-top: 8px;
+        display: grid;
+        gap: 8px;
+        max-height: 320px;
+        overflow: auto;
+      }
+      .command-ref-item {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface-soft);
+        padding: 8px 9px;
+      }
+      .command-ref-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .command-ref-code {
+        margin-top: 6px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.8rem;
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 5px 7px;
+      }
+      .command-ref-item .muted {
+        margin-top: 4px;
       }
       table {
         width: 100%;
@@ -652,6 +700,11 @@ export function buildWebUiHtml(): string {
         overflow-x: auto;
         padding-bottom: 6px;
       }
+      .board-mode {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
       .board-column {
         min-width: 270px;
         max-width: 320px;
@@ -707,6 +760,24 @@ export function buildWebUiHtml(): string {
       .board-card.blocked,
       .board-card.archived {
         border-color: color-mix(in srgb, var(--status-failed-fg) 34%, var(--border));
+      }
+      .board-column.kanban-backlog {
+        border-top: 3px solid color-mix(in srgb, var(--status-neutral-fg) 34%, var(--border));
+      }
+      .board-column.kanban-todo {
+        border-top: 3px solid color-mix(in srgb, var(--status-progress-fg) 32%, var(--border));
+      }
+      .board-column.kanban-progress {
+        border-top: 3px solid color-mix(in srgb, var(--accent) 46%, var(--border));
+      }
+      .board-column.kanban-review {
+        border-top: 3px solid color-mix(in srgb, var(--status-waiting-fg) 40%, var(--border));
+      }
+      .board-column.kanban-done {
+        border-top: 3px solid color-mix(in srgb, var(--status-done-fg) 40%, var(--border));
+      }
+      .board-column.kanban-blocked {
+        border-top: 3px solid color-mix(in srgb, var(--status-failed-fg) 40%, var(--border));
       }
       .event-card {
         border: 1px solid var(--border);
@@ -808,6 +879,14 @@ export function buildWebUiHtml(): string {
         .toolbar {
           flex-direction: column;
           align-items: stretch;
+        }
+        .command-head {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .board-mode {
+          width: 100%;
+          justify-content: space-between;
         }
         .command-quick {
           display: grid;
@@ -917,12 +996,13 @@ export function buildWebUiHtml(): string {
         <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
 
         <section class="card command-console">
-          <div class="toolbar">
-            <div><strong>Web Command Console</strong><div class="muted">TUI parity in the browser: run commands and human inputs directly here.</div></div>
+          <div class="command-head">
+            <div><strong>Command Console</strong><div class="muted">CLI-style input with fast templates and command reference.</div></div>
+            <button type="button" class="btn" data-toggle-command-ref>Commands</button>
           </div>
           <div class="command-shell">
             <form id="web-command-form" class="command-form">
-              <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='Examples: status --all | new "Fix timer bug" --type Bug | approve --task-id task-...' />
+              <input id="web-command-input" class="field-input command-input" autocomplete="off" placeholder='status --all | new "Fix bug" --type Bug | approve --task-id task-123' />
               <select id="web-command-mode" class="field-select">
                 <option value="command">Command mode</option>
                 <option value="human">Human input mode</option>
@@ -933,13 +1013,17 @@ export function buildWebUiHtml(): string {
               <button type="button" class="btn" data-web-command="help">help</button>
               <button type="button" class="btn" data-web-command="status">status</button>
               <button type="button" class="btn" data-web-command="status --all">status --all</button>
-              <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new template</button>
-              <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove template</button>
-              <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve template</button>
-              <button type="button" class="btn" data-runtime-action="pause">pause runtime</button>
-              <button type="button" class="btn approve" data-runtime-action="resume">resume runtime</button>
-              <button type="button" class="btn cancel" data-runtime-action="stop">stop runtime</button>
+              <button type="button" class="btn" data-web-command='new "Investigate issue" --type Feature' data-web-fill="true">new</button>
+              <button type="button" class="btn reprove" data-web-command='reprove --task-id task-... --reason "Need changes"' data-web-fill="true">reprove</button>
+              <button type="button" class="btn approve" data-web-command='approve --task-id task-...' data-web-fill="true">approve</button>
+              <button type="button" class="btn" data-runtime-action="pause">pause</button>
+              <button type="button" class="btn approve" data-runtime-action="resume">resume</button>
+              <button type="button" class="btn cancel" data-runtime-action="stop">stop</button>
             </div>
+            <section id="command-reference" class="command-ref" hidden>
+              <input id="command-ref-filter" class="field-input" placeholder="Filter command by name or usage..." />
+              <div id="command-ref-list" class="command-ref-list"></div>
+            </section>
             <div id="web-command-log" class="command-log" role="log" aria-live="polite"></div>
           </div>
         </section>
@@ -969,6 +1053,9 @@ export function buildWebUiHtml(): string {
         liveRenderedConnected: null,
         commandMode: "command",
         commandLog: [],
+        commandRefOpen: false,
+        commandRefQuery: "",
+        boardMode: "kanban",
         themePreference: "system",
         themeResolved: "light",
         renderedViews: {},
@@ -983,6 +1070,9 @@ export function buildWebUiHtml(): string {
       const commandInputEl = document.getElementById("web-command-input");
       const commandModeEl = document.getElementById("web-command-mode");
       const commandLogEl = document.getElementById("web-command-log");
+      const commandRefEl = document.getElementById("command-reference");
+      const commandRefFilterEl = document.getElementById("command-ref-filter");
+      const commandRefListEl = document.getElementById("command-ref-list");
       const reviewHotspotEl = document.getElementById("review-hotspot");
       const reviewHotspotMetaEl = document.getElementById("review-hotspot-meta");
       const locale = (() => {
@@ -1071,6 +1161,20 @@ export function buildWebUiHtml(): string {
         minimumFractionDigits: 2,
         maximumFractionDigits: 4,
       });
+      const commandCatalog = [
+        { mode: "command", name: "help", usage: "help", description: "Show command guide and usage hints." },
+        { mode: "command", name: "status", usage: "status", description: "Show concise runtime status." },
+        { mode: "command", name: "status --all", usage: "status --all", description: "Show all tasks and pipeline state." },
+        { mode: "command", name: "new", usage: 'new "Title" --type Feature', description: "Create a new task." },
+        { mode: "command", name: "approve", usage: "approve --task-id task-123", description: "Approve a task in waiting_human." },
+        { mode: "command", name: "reprove", usage: 'reprove --task-id task-123 --reason "Need changes"', description: "Reprove and send task back to flow." },
+        { mode: "command", name: "cancel", usage: 'cancel --task-id task-123 --reason "No longer needed"', description: "Request task cancellation." },
+        { mode: "command", name: "pause", usage: "pause", description: "Pause runtime loop." },
+        { mode: "command", name: "resume", usage: "resume", description: "Resume runtime loop." },
+        { mode: "command", name: "stop", usage: "stop", description: "Request graceful runtime stop." },
+        { mode: "human", name: "yes", usage: "yes", description: "Approve preferred pending review task." },
+        { mode: "human", name: "no", usage: "no because <reason>", description: "Reprove preferred review task with reason." },
+      ];
 
       function fmtNumber(value) {
         const n = Number(value || 0);
@@ -1226,6 +1330,36 @@ export function buildWebUiHtml(): string {
         commandLogEl.scrollTop = commandLogEl.scrollHeight;
       }
 
+      function renderCommandReference() {
+        if (!(commandRefEl instanceof HTMLElement) || !(commandRefListEl instanceof HTMLElement)) return;
+        if (!state.commandRefOpen) {
+          commandRefEl.setAttribute("hidden", "");
+          return;
+        }
+        commandRefEl.removeAttribute("hidden");
+        const filter = String(state.commandRefQuery || "").trim().toLowerCase();
+        const rows = commandCatalog.filter((row) => {
+          if (!filter) return true;
+          return row.name.toLowerCase().includes(filter)
+            || row.usage.toLowerCase().includes(filter)
+            || row.description.toLowerCase().includes(filter);
+        });
+        if (!rows.length) {
+          commandRefListEl.innerHTML = '<div class="empty">No commands match this filter.</div>';
+          return;
+        }
+        commandRefListEl.innerHTML = rows.map((row) => {
+          return [
+            '<article class="command-ref-item">',
+            '<div class="command-ref-top"><strong>' + escapeHtml(row.name) + '</strong><span class="status ' + (row.mode === "human" ? "waiting_human" : "in_progress") + '">' + escapeHtml(row.mode) + "</span></div>",
+            '<div class="command-ref-code">' + escapeHtml(row.usage) + "</div>",
+            '<div class="muted">' + escapeHtml(row.description) + "</div>",
+            '<div class="actions" style="margin-top:6px;"><button type="button" class="btn" data-command-snippet="' + escapeHtml(row.usage) + '">Use snippet</button></div>',
+            "</article>",
+          ].join("");
+        }).join("");
+      }
+
       function pushCommandLog(message, tone) {
         state.commandLog.push({
           message: String(message || ""),
@@ -1239,7 +1373,7 @@ export function buildWebUiHtml(): string {
         const raw = String(input || "").trim();
         if (!raw) return;
         const selectedMode = mode === "human" ? "human" : "command";
-        pushCommandLog((selectedMode === "human" ? "[human] " : "[cmd] ") + "> " + raw, "user");
+        pushCommandLog(selectedMode === "human" ? "human> " + raw : "$ " + raw, "user");
         try {
           const result = await postApi("/api/command", {
             input: raw,
@@ -1646,29 +1780,51 @@ export function buildWebUiHtml(): string {
         return "new";
       }
 
+      function boardKanbanColumnForTask(task) {
+        const status = String(task.status || "");
+        const stage = String(task.currentStage || "").toLowerCase();
+        if (status === "done") return "done";
+        if (status === "failed" || status === "blocked" || status === "archived") return "blocked";
+        if (status === "waiting_human" || task.humanApprovalRequired || stage.includes("review")) return "review";
+        if (status === "in_progress") return "progress";
+        if (status === "waiting_agent") return "todo";
+        if (status === "new") return "backlog";
+        return "todo";
+      }
+
       async function renderBoard() {
         const tasks = await api("/api/tasks");
-        const key = tasks
+        const mode = state.boardMode === "agent" ? "agent" : "kanban";
+        const key = mode + "::" + tasks
           .map((task) => [task.taskId, task.status, task.currentAgent, task.nextAgent, task.currentStage, task.updatedAt].join("|"))
           .join(";");
         if (state.boardRenderedKey === key && document.getElementById("board-root")) return;
 
-        const columns = [
-          { id: "new", title: "New Queue", hint: "Newly created or not yet assigned" },
-          { id: "dispatcher", title: "Dispatcher", hint: "Task routing and orchestration" },
-          { id: "planner", title: "Planner", hint: "Plan decomposition and sequencing" },
-          { id: "research", title: "Researcher", hint: "External discovery and grounding" },
-          { id: "experts", title: "Experts", hint: "Implementation by SYNX specialists" },
-          { id: "qa", title: "QA", hint: "Validation and retry loops" },
-          { id: "human", title: "Human Review", hint: "Waiting for approve/reprove" },
-          { id: "done", title: "Done", hint: "Completed successfully" },
-          { id: "failed", title: "Failed/Blocked", hint: "Needs intervention" },
-        ];
+        const columns = mode === "agent"
+          ? [
+            { id: "new", title: "New Queue", hint: "Newly created or not yet assigned", klass: "" },
+            { id: "dispatcher", title: "Dispatcher", hint: "Task routing and orchestration", klass: "" },
+            { id: "planner", title: "Planner", hint: "Plan decomposition and sequencing", klass: "" },
+            { id: "research", title: "Researcher", hint: "External discovery and grounding", klass: "" },
+            { id: "experts", title: "Experts", hint: "Implementation by SYNX specialists", klass: "" },
+            { id: "qa", title: "QA", hint: "Validation and retry loops", klass: "" },
+            { id: "human", title: "Human Review", hint: "Waiting for approve/reprove", klass: "" },
+            { id: "done", title: "Done", hint: "Completed successfully", klass: "" },
+            { id: "failed", title: "Failed/Blocked", hint: "Needs intervention", klass: "" },
+          ]
+          : [
+            { id: "backlog", title: "Backlog", hint: "Newly created requests", klass: "kanban-backlog" },
+            { id: "todo", title: "To Do", hint: "Queued for next agent execution", klass: "kanban-todo" },
+            { id: "progress", title: "In Progress", hint: "Active implementation / execution", klass: "kanban-progress" },
+            { id: "review", title: "In Review", hint: "Waiting for human decision", klass: "kanban-review" },
+            { id: "done", title: "Done", hint: "Completed successfully", klass: "kanban-done" },
+            { id: "blocked", title: "Blocked", hint: "Failed, blocked or archived", klass: "kanban-blocked" },
+          ];
 
         const byColumn = {};
         for (const column of columns) byColumn[column.id] = [];
         for (const task of tasks) {
-          const columnId = boardColumnForTask(task);
+          const columnId = mode === "agent" ? boardColumnForTask(task) : boardKanbanColumnForTask(task);
           if (!Array.isArray(byColumn[columnId])) byColumn[columnId] = [];
           byColumn[columnId].push(task);
         }
@@ -1678,7 +1834,7 @@ export function buildWebUiHtml(): string {
 
         contentEl.innerHTML = [
           '<div id="board-root">',
-          '<div class="toolbar"><div class="muted">Auto-updating board: cards move by agent/stage on each poll and realtime event.</div><div class="muted">' + fmtNumber(tasks.length) + " tasks</div></div>",
+          '<div class="toolbar"><div class="muted">Auto-updating board: cards move on each poll and realtime event.</div><div class="board-mode"><label for="board-mode" class="muted">View</label><select id="board-mode" class="field-select"><option value="kanban"' + (mode === "kanban" ? " selected" : "") + '>Jira Kanban</option><option value="agent"' + (mode === "agent" ? " selected" : "") + '>Agent Lanes</option></select><div class="muted">' + fmtNumber(tasks.length) + " tasks</div></div></div>",
           '<div class="board-columns">',
           columns.map((column) => {
             const cards = byColumn[column.id] || [];
@@ -1698,7 +1854,7 @@ export function buildWebUiHtml(): string {
               }).join("")
               : '<div class="empty">No tasks in this lane.</div>';
             return [
-              '<section class="board-column">',
+              '<section class="board-column ' + escapeHtml(column.klass || "") + '">',
               "<h3>" + escapeHtml(column.title) + "</h3>",
               '<div class="meta muted">' + escapeHtml(column.hint) + " • " + fmtNumber(cards.length) + "</div>",
               '<div class="board-stack">',
@@ -2045,6 +2201,23 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return;
 
+        const toggleCommandsTarget = target.closest("[data-toggle-command-ref]");
+        if (toggleCommandsTarget instanceof HTMLElement && toggleCommandsTarget.dataset.toggleCommandRef !== undefined) {
+          state.commandRefOpen = !state.commandRefOpen;
+          renderCommandReference();
+          return;
+        }
+
+        const snippetTarget = target.closest("[data-command-snippet]");
+        const snippet = snippetTarget instanceof HTMLElement ? String(snippetTarget.dataset.commandSnippet || "").trim() : "";
+        if (snippet) {
+          if (commandInputEl instanceof HTMLInputElement) {
+            commandInputEl.value = snippet;
+            commandInputEl.focus();
+          }
+          return;
+        }
+
         const webCommandTarget = target.closest("[data-web-command]");
         const webCommand = webCommandTarget instanceof HTMLElement ? String(webCommandTarget.dataset.webCommand || "").trim() : "";
         if (webCommand) {
@@ -2171,6 +2344,10 @@ export function buildWebUiHtml(): string {
           state.search = target.value;
           requestRender("user");
         }
+        if (target instanceof HTMLInputElement && target.id === "command-ref-filter") {
+          state.commandRefQuery = target.value || "";
+          renderCommandReference();
+        }
         if (target instanceof HTMLTextAreaElement && target.id === "review-reason") {
           state.reviewDraftReason = target.value;
         }
@@ -2195,6 +2372,11 @@ export function buildWebUiHtml(): string {
         const target = event.target;
         if (target instanceof HTMLSelectElement && target.id === "review-rollback") {
           state.reviewRollbackMode = target.value === "task" ? "task" : "none";
+        }
+        if (target instanceof HTMLSelectElement && target.id === "board-mode") {
+          state.boardMode = target.value === "agent" ? "agent" : "kanban";
+          state.boardRenderedKey = "";
+          requestRender("user");
         }
         if (target instanceof HTMLSelectElement && target.id === "web-command-mode") {
           state.commandMode = target.value === "human" ? "human" : "command";
@@ -2266,8 +2448,12 @@ export function buildWebUiHtml(): string {
       if (commandModeEl instanceof HTMLSelectElement) {
         commandModeEl.value = state.commandMode;
       }
+      if (commandRefFilterEl instanceof HTMLInputElement) {
+        commandRefFilterEl.value = state.commandRefQuery;
+      }
       pushCommandLog("Web command console ready. Try: status --all", "system");
       pushCommandLog("Human mode accepts: yes / no + reason", "system");
+      renderCommandReference();
       applyThemePreference(loadThemePreference(), false);
       bindSystemThemeSync();
       setInterval(() => {

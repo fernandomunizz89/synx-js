@@ -16,6 +16,8 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain('id="web-command-input"');
     expect(html).toContain('id="web-command-mode"');
     expect(html).toContain('id="web-command-log"');
+    expect(html).toContain('id="command-reference"');
+    expect(html).toContain('data-toggle-command-ref');
     expect(html).toContain("/api/command");
     expect(html).toContain("/api/overview");
     expect(html).toContain("/api/metrics/advanced");
@@ -62,7 +64,10 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("Task moved to waiting_human and needs your decision (");
     expect(html).toContain("Task state changed (");
     expect(html).toContain("boardColumnForTask(");
+    expect(html).toContain("boardKanbanColumnForTask(");
     expect(html).toContain("renderBoard()");
+    expect(html).toContain('id="board-mode"');
+    expect(html).toContain("Jira Kanban");
     expect(html).toContain("board-columns");
     expect(html).toContain("Loading agent board...");
     expect(html).toContain('data-theme-option="light"');
