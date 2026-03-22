@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   recordPipelineApproval: vi.fn<(taskId: string, pipelineId: string, completedSteps: unknown[]) => Promise<void>>(),
   recordPipelineReproval: vi.fn<(taskId: string, pipelineId: string, completedSteps: unknown[], reason: string) => Promise<void>>(),
   logTaskEvent: vi.fn<(taskDir: string, message: string) => Promise<void>>(),
+  logRuntimeEvent: vi.fn<(entry: unknown) => Promise<void>>(),
   taskDir: vi.fn<(taskId: string) => string>(),
   repoRoot: vi.fn<() => string>(),
   loadPipelineState: vi.fn<(taskId: string) => Promise<any>>(),
@@ -37,6 +38,7 @@ vi.mock("../learnings.js", () => ({
 
 vi.mock("../logging.js", () => ({
   logTaskEvent: mocks.logTaskEvent,
+  logRuntimeEvent: mocks.logRuntimeEvent,
 }));
 
 vi.mock("../paths.js", () => ({
@@ -83,6 +85,7 @@ describe("lib/services/task-services", () => {
     mocks.recordPipelineApproval.mockResolvedValue(undefined);
     mocks.recordPipelineReproval.mockResolvedValue(undefined);
     mocks.logTaskEvent.mockResolvedValue(undefined);
+    mocks.logRuntimeEvent.mockResolvedValue(undefined);
     mocks.taskDir.mockImplementation((taskId: string) => `/tmp/${taskId}`);
     mocks.repoRoot.mockReturnValue("/tmp/synx-repo");
     mocks.loadPipelineState.mockResolvedValue({
