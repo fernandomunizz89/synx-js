@@ -127,6 +127,12 @@ export function createUiRequestHandler(options: {
       const incomingUrl = new URL(req.url || "/", "http://localhost");
       const pathname = incomingUrl.pathname;
 
+      if (method === "GET" && pathname === "/favicon.ico") {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+
       if (method === "GET" && (pathname === "/" || pathname === "/index.html")) {
         sendHtml(res, 200, options.html);
         return;
