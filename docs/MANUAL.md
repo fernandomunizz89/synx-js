@@ -853,3 +853,87 @@ Environment variable examples:
 - `AI_AGENTS_TEMPERATURE_DISPATCHER_BUG=0.1`
 - `AI_AGENTS_TEMPERATURE_FEATURE=0.1`
 - `AI_AGENTS_TEMPERATURE_BUG=0.05`
+
+## Learning Loop
+
+Synx records the outcome of every pipeline task and feeds that history back into future agent prompts — a *do → analyse → learn → improve → repeat* cycle.
+
+### How it works
+
+1. **Record** — when you run `synx approve`, Synx writes one `LearningEntry` per completed pipeline step to `.ai-agents/learnings/<agent-id>.jsonl`.  
+   When you run `synx reprove`, Synx writes one entry for the **last** completed step only (the one that produced the output you rejected), including your rejection reason.
+
+2. **Inject** — before each pipeline step, the executor loads the last 5 entries for that agent and appends a *"Your recent performance"* section to its system prompt:
+
+   ```
+   ## Your recent performance (last N tasks)
+
+   1. [2026-03-20] ✅ Approved — Task: task-2026-03-20-abc
+      Output: "Analyzed requirements and identified 3 gaps"
+
+   2. [2026-03-21] ❌ Reproved — Task: task-2026-03-21-xyz
+      Output: "Implemented login form"
+      Feedback: "Missing input validation for the email field"
+   ```
+
+3. **Improve** — the agent reads its history and can adjust its approach for the current task.
+
+### Storage
+
+Learnings are stored as append-only JSONL files:
+
+```
+.ai-agents/
+  learnings/
+    analyst.jsonl
+    synx-front-expert.jsonl
+    synx-back-expert.jsonl
+    ...
+```
+
+Each line is a JSON object (`LearningEntry`) with:
+
+| Field | Description |
+|---|---|
+| `timestamp` | ISO-8601 datetime |
+| `taskId` | Task that generated this entry |
+| `agentId` | Agent that ran the step |
+| `summary` | What the agent produced (from `output.summary`) |
+| `outcome` | `"approved"` or `"reproved"` |
+| `reproveReason` | Human's feedback (reproved tasks only) |
+| `pipelineId` | Which pipeline definition was used |
+| `stepIndex` | Step position within the pipeline |
+| `provider` / `model` | Provider and model used for this step |
+
+### `synx learn` command
+
+Inspect recorded learnings from the CLI:
+
+```bash
+# All agents
+synx learn
+
+# Specific agent, last 20 entries
+synx learn analyst --limit 20
+```
+
+Output example:
+```
+────────────────────────────────────────────────────────────
+Agent: analyst
+  Total runs : 12
+  Approved   : 10
+  Reproved   : 2
+  Approval % : 83%
+  Last run   : 2026-03-21
+
+  Last 5 entries:
+    ✅ [2026-03-20] task-2026-03-20-abc — Analyzed requirements and identified 3 gaps
+    ❌ [2026-03-21] task-2026-03-21-xyz — Built login form without edge-case coverage
+       Feedback: Missing input validation for the email field
+    ...
+```
+
+### Non-pipeline tasks
+
+Learning recording only applies to **pipeline tasks** (tasks started with `synx pipeline run`). Regular tasks approved or reproved via `synx approve` / `synx reprove` are unaffected.
