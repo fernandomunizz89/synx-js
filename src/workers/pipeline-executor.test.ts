@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, vi, it } from "vitest";
 import { PipelineExecutor, PIPELINE_EXECUTOR_REQUEST_FILE, PIPELINE_EXECUTOR_WORKING_FILE } from "./pipeline-executor.js";
 import { createTask, loadTaskMeta } from "../lib/task.js";
 import { writeJson } from "../lib/fs.js";
+import { createProvider } from "../providers/factory.js";
 import type { PipelineDefinition, PipelineState } from "../lib/types.js";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -76,6 +77,76 @@ function makeSequentialPipeline(stepCount: number): PipelineDefinition {
       agent: `Agent ${i}`,
     })),
   };
+}
+
+function makeConditionalPipeline(steps: PipelineDefinition["steps"]): PipelineDefinition {
+  return {
+    id: "cond-pipeline",
+    name: "Conditional Pipeline",
+    routing: "conditional",
+    steps,
+  };
+}
+
+function mockOutput(output: Record<string, unknown>) {
+  vi.mocked(createProvider).mockReturnValue({
+    generateStructured: vi.fn().mockResolvedValue({
+      parsed: { summary: "done", ...output },
+      provider: "mock",
+      model: "static-mock",
+      parseRetries: 0,
+      validationPassed: true,
+      providerAttempts: 1,
+      providerBackoffRetries: 0,
+      providerBackoffWaitMs: 0,
+      estimatedInputTokens: 10,
+      estimatedOutputTokens: 10,
+      estimatedTotalTokens: 20,
+      estimatedCostUsd: 0,
+    }),
+  } as any);
+}
+
+async function runConditionalPipeline(
+  pipeline: PipelineDefinition,
+  output: Record<string, unknown>,
+): Promise<{ processed: boolean; nextStepArg: number }> {
+  const { loadPipelineState, advancePipelineState } = await import("../lib/pipeline-state.js");
+  const { loadPipelineDefinition } = await import("../lib/pipeline-registry.js");
+
+  // Clear accumulated mock call history from previous tests
+  vi.mocked(advancePipelineState).mockClear();
+
+  vi.mocked(loadPipelineDefinition).mockResolvedValue(pipeline);
+  vi.mocked(loadPipelineState).mockResolvedValue({
+    pipelineId: pipeline.id,
+    currentStep: 0,
+    completedSteps: [],
+  });
+  mockOutput(output);
+
+  const task = await createTask({
+    title: "Conditional routing test",
+    typeHint: "Feature",
+    project: "test",
+    rawRequest: "test",
+    extraContext: { relatedFiles: [], logs: [], notes: [] },
+  });
+
+  await writeJson(path.join(task.taskPath, "inbox", PIPELINE_EXECUTOR_REQUEST_FILE), {
+    taskId: task.taskId,
+    stage: "pipeline-executor",
+    status: "request",
+    createdAt: new Date().toISOString(),
+    agent: "Pipeline Executor",
+    inputRef: "input/pipeline-state.json",
+  });
+
+  const executor = new PipelineExecutor();
+  const processed = await executor.tryProcess(task.taskId);
+  const calls = vi.mocked(advancePipelineState).mock.calls;
+  const lastCall = calls[calls.length - 1];
+  return { processed, nextStepArg: lastCall ? (lastCall[1] as number) : -1 };
 }
 
 describe.sequential("workers/pipeline-executor", () => {
@@ -490,5 +561,94 @@ describe.sequential("workers/pipeline-executor", () => {
     const fallbackCall = calls.find((c) => (c[0] as { model?: string }).model === "fallback-mock");
     expect(primaryCall).toBeDefined();
     expect(fallbackCall).toBeDefined();
+  });
+
+  // ─── Conditional routing ────────────────────────────────────────────────────
+
+  // NOTE: genericAgentOutputSchema (Zod) strips unknown top-level keys during parse().
+  // Custom data from agents must live inside the `result` object.
+  // Conditions therefore reference `output.result.*` (or `output.summary`, `output.nextAgent`).
+
+  it("conditional routing — goes to first step whose condition is true", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage" },
+      { agent: "Bug Fixer", condition: "output.result && output.result.type === 'bug'" },
+      { agent: "Feature Builder", condition: "output.result && output.result.type === 'feature'" },
+      { agent: "Synx QA Engineer" },
+    ]);
+
+    const { nextStepArg } = await runConditionalPipeline(pipeline, { result: { type: "bug" } });
+    expect(nextStepArg).toBe(1); // Bug Fixer is at index 1
+  });
+
+  it("conditional routing — skips false conditions, picks correct branch", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage" },
+      { agent: "Bug Fixer", condition: "output.result && output.result.type === 'bug'" },
+      { agent: "Feature Builder", condition: "output.result && output.result.type === 'feature'" },
+      { agent: "Synx QA Engineer" },
+    ]);
+
+    const { nextStepArg } = await runConditionalPipeline(pipeline, { result: { type: "feature" } });
+    expect(nextStepArg).toBe(2); // Feature Builder is at index 2
+  });
+
+  it("conditional routing — falls back to defaultNextStep when no condition matches", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage", defaultNextStep: 3 },
+      { agent: "Bug Fixer", condition: "output.result && output.result.type === 'bug'" },
+      { agent: "Feature Builder", condition: "output.result && output.result.type === 'feature'" },
+      { agent: "Synx QA Engineer" },
+    ]);
+
+    const { nextStepArg } = await runConditionalPipeline(pipeline, { result: { type: "research" } });
+    expect(nextStepArg).toBe(3); // defaultNextStep → QA
+  });
+
+  it("conditional routing — first matching condition wins (not later one)", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage" },
+      { agent: "Step B", condition: "output.result && output.result.score > 50" },
+      { agent: "Step C", condition: "output.result && output.result.score > 10" }, // also true, but B wins
+      { agent: "Step D", condition: "output.result && output.result.score > 5" },
+    ]);
+
+    const { nextStepArg } = await runConditionalPipeline(pipeline, { result: { score: 60 } });
+    expect(nextStepArg).toBe(1); // Step B matched first
+  });
+
+  it("conditional routing — stops scan at unconditional step, uses defaultNextStep", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage", defaultNextStep: 3 },
+      { agent: "Bug Fixer", condition: "output.result && output.result.type === 'bug'" },
+      { agent: "Guard" }, // no condition — terminates scan
+      { agent: "Synx QA Engineer" },
+    ]);
+
+    // type=feature → Bug Fixer condition false → Guard has no condition → scan stops
+    // No match + defaultNextStep=3 → QA
+    const { nextStepArg } = await runConditionalPipeline(pipeline, { result: { type: "feature" } });
+    expect(nextStepArg).toBe(3);
+  });
+
+  it("conditional routing — no match and no defaultNextStep falls through to N+1", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage" }, // no defaultNextStep
+      { agent: "Bug Fixer", condition: "output.result && output.result.type === 'bug'" },
+    ]);
+
+    const { nextStepArg } = await runConditionalPipeline(pipeline, { result: { type: "feature" } });
+    expect(nextStepArg).toBe(1); // sequential fallthrough: 0+1=1
+  });
+
+  it("conditional routing — throwing condition expression is treated as false, scan continues", async () => {
+    const pipeline = makeConditionalPipeline([
+      { agent: "Triage", defaultNextStep: 2 },
+      { agent: "Step B", condition: "output.deeply.missing.chain === 'x'" }, // will throw
+      { agent: "Synx QA Engineer" },
+    ]);
+
+    const { nextStepArg } = await runConditionalPipeline(pipeline, {});
+    expect(nextStepArg).toBe(2); // throwing condition → false → defaultNextStep=2
   });
 });

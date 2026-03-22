@@ -4,6 +4,7 @@ import { loadPipelineDefinition } from "../lib/pipeline-registry.js";
 import { loadPipelineState, savePipelineState, advancePipelineState, buildStepContext, PIPELINE_STATE_FILE } from "../lib/pipeline-state.js";
 import { resolveStepProviderChain } from "../lib/pipeline-provider.js";
 import { resolveStepPrompt } from "../lib/pipeline-prompt.js";
+import { evaluateCondition } from "../lib/condition-evaluator.js";
 import { genericAgentOutputSchema } from "../lib/schema.js";
 import type { StageEnvelope } from "../lib/types.js";
 import { nowIso } from "../lib/utils.js";
@@ -160,7 +161,7 @@ export class PipelineExecutor extends WorkerBase {
 function resolveNextStep(args: {
   pipeline: { steps: Array<{ agent: string; defaultNextStep?: number; condition?: string }> };
   currentIndex: number;
-  output: { nextAgent?: string };
+  output: Record<string, unknown>;
   routing: string;
 }): number {
   const { pipeline, currentIndex, output, routing } = args;
@@ -169,16 +170,36 @@ function resolveNextStep(args: {
     return currentIndex + 1;
   }
 
-  if (routing === "dynamic" && output.nextAgent) {
-    const nextIdx = pipeline.steps.findIndex((s) => s.agent === output.nextAgent);
-    if (nextIdx !== -1) return nextIdx;
+  if (routing === "dynamic") {
+    const nextAgent = typeof output.nextAgent === "string" ? output.nextAgent : undefined;
+    if (nextAgent) {
+      const nextIdx = pipeline.steps.findIndex((s) => s.agent === nextAgent);
+      if (nextIdx !== -1) return nextIdx;
+    }
   }
 
   if (routing === "conditional") {
-    const step = pipeline.steps[currentIndex];
-    if (step.defaultNextStep !== undefined) return step.defaultNextStep;
+    // Scan steps after the current one. Steps with a `condition` are evaluated
+    // against the current output. The first one whose condition is true wins.
+    // A step with no `condition` terminates the scan — it's an unconditional
+    // "fence" that is reached via defaultNextStep or the sequential fallthrough.
+    for (let i = currentIndex + 1; i < pipeline.steps.length; i++) {
+      const candidate = pipeline.steps[i];
+      if (candidate.condition === undefined) {
+        break; // unconditional step terminates the scan
+      }
+      if (evaluateCondition(candidate.condition, output)) {
+        return i;
+      }
+    }
+
+    // No condition matched — fall back to the current step's explicit default.
+    const currentStep = pipeline.steps[currentIndex];
+    if (currentStep.defaultNextStep !== undefined) {
+      return currentStep.defaultNextStep;
+    }
   }
 
-  // Default: advance sequentially
+  // Default: advance sequentially.
   return currentIndex + 1;
 }
