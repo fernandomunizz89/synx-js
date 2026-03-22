@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   ensureGlobalInitialized: vi.fn<() => Promise<void>>(),
   ensureProjectInitialized: vi.fn<() => Promise<void>>(),
-  createTask: vi.fn<(input: unknown) => Promise<{ taskId: string; taskPath: string }>>(),
+  createTaskService: vi.fn<(input: unknown) => Promise<{ taskId: string; taskPath: string }>>(),
   collectReadinessReport: vi.fn<() => Promise<{ ok: boolean; issues: Array<{ severity: "error" | "warning"; message: string }> }>>(),
   printReadinessReport: vi.fn(),
   promptRequiredText: vi.fn<() => Promise<string>>(),
@@ -17,8 +17,8 @@ vi.mock("../lib/bootstrap.js", () => ({
   ensureProjectInitialized: mocks.ensureProjectInitialized,
 }));
 
-vi.mock("../lib/task.js", () => ({
-  createTask: mocks.createTask,
+vi.mock("../lib/services/task-services.js", () => ({
+  createTaskService: mocks.createTaskService,
 }));
 
 vi.mock("../lib/readiness.js", () => ({
@@ -47,7 +47,7 @@ describe.sequential("commands/new", () => {
   beforeEach(() => {
     mocks.ensureGlobalInitialized.mockReset().mockResolvedValue(undefined);
     mocks.ensureProjectInitialized.mockReset().mockResolvedValue(undefined);
-    mocks.createTask.mockReset().mockResolvedValue({
+    mocks.createTaskService.mockReset().mockResolvedValue({
       taskId: "task-1",
       taskPath: "/tmp/task-1",
     });
@@ -91,8 +91,8 @@ describe.sequential("commands/new", () => {
 
     expect(mocks.promptRequiredText).not.toHaveBeenCalled();
     expect(mocks.selectOption).not.toHaveBeenCalled();
-    expect(mocks.createTask).toHaveBeenCalledTimes(1);
-    const createTaskInput = mocks.createTask.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(mocks.createTaskService).toHaveBeenCalledTimes(1);
+    const createTaskInput = mocks.createTaskService.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(createTaskInput).toBeDefined();
     expect(createTaskInput).toMatchObject({
       title: "Fix timer export",
@@ -122,8 +122,8 @@ describe.sequential("commands/new", () => {
       "playwright",
     ]);
 
-    expect(mocks.createTask).toHaveBeenCalledTimes(1);
-    const createTaskInput = mocks.createTask.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(mocks.createTaskService).toHaveBeenCalledTimes(1);
+    const createTaskInput = mocks.createTaskService.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(createTaskInput).toBeDefined();
     expect(createTaskInput).toMatchObject({
       title: "Normalize type parsing",
@@ -144,8 +144,8 @@ describe.sequential("commands/new", () => {
       "playwright",
     ]);
 
-    expect(mocks.createTask).toHaveBeenCalledTimes(1);
-    const createTaskInput = mocks.createTask.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(mocks.createTaskService).toHaveBeenCalledTimes(1);
+    const createTaskInput = mocks.createTaskService.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
     expect(createTaskInput).toBeDefined();
     expect(createTaskInput).toMatchObject({
       title: "Alias type parsing",
@@ -174,7 +174,7 @@ describe.sequential("commands/new", () => {
 
     expect(mocks.promptRequiredText).toHaveBeenCalledWith(expect.stringContaining("Task title"));
     expect(mocks.selectOption).toHaveBeenCalledWith(expect.stringContaining("Choose task type"), expect.anything(), "Feature");
-    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.createTaskService).toHaveBeenCalledWith(expect.objectContaining({
       title: "Interactive Title",
       typeHint: "Refactor"
     }));
@@ -188,7 +188,7 @@ describe.sequential("commands/new", () => {
     ];
 
     for (const { input, expected } of scenarios) {
-      mocks.createTask.mockClear();
+      mocks.createTaskService.mockClear();
       await newCommand.parseAsync([
         "node",
         "synx",
@@ -200,7 +200,7 @@ describe.sequential("commands/new", () => {
         "--e2e-framework",
         "auto"
       ]);
-      expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mocks.createTaskService).toHaveBeenCalledWith(expect.objectContaining({
         extraContext: expect.objectContaining({
           qaPreferences: expect.objectContaining({
             e2ePolicy: expected
@@ -232,7 +232,7 @@ describe.sequential("commands/new", () => {
       "--e2e-framework",
       "other"
     ]);
-    expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.createTaskService).toHaveBeenCalledWith(expect.objectContaining({
       extraContext: expect.objectContaining({
         qaPreferences: expect.objectContaining({
           e2eFramework: "other"
@@ -254,12 +254,12 @@ describe.sequential("commands/new", () => {
   it("handles mixed/research/docs types", async () => {
     const types = ["Mixed", "Research", "Docs"];
     for (const type of types) {
-      mocks.createTask.mockClear();
+      mocks.createTaskService.mockClear();
       await newCommand.parseAsync([
         "node", "synx", "Test " + type, "--type", type, "--e2e", "skip", "--e2e-framework", "auto"
       ]);
       const expectedType = type === "Docs" ? "Documentation" : type;
-      expect(mocks.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mocks.createTaskService).toHaveBeenCalledWith(expect.objectContaining({
         typeHint: expectedType
       }));
     }

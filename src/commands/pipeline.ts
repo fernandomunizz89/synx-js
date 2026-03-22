@@ -8,6 +8,7 @@ import { PIPELINE_EXECUTOR_STAGE_FILE } from "../lib/constants.js";
 import { ensureTaskStructure } from "../lib/task.js";
 import type { PipelineStep, StageEnvelope } from "../lib/types.js";
 import { nowIso, randomId, slugify, todayDate } from "../lib/utils.js";
+import { resolveProjectName } from "../lib/services/task-services.js";
 
 function printStep(step: PipelineStep, index: number): void {
   const parts = [`  Step ${index + 1}: ${step.agent}`];
@@ -95,10 +96,12 @@ const pipelineRunCommand = new Command("run")
     const dir = taskDir(taskId);
     await ensureTaskStructure(dir);
 
+    const resolvedProject = await resolveProjectName(undefined);
+
     const taskInput = {
       title: input.slice(0, 120),
       typeHint: options.type,
-      project: "",
+      project: resolvedProject.project,
       rawRequest: input,
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     };
