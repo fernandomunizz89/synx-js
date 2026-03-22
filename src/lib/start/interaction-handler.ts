@@ -17,8 +17,9 @@ export function setupKeypressHandler(args: {
   requestStop: (signal: NodeJS.Signals) => void;
   pushEvent: (message: string, level?: "info" | "critical") => void;
   render: () => void;
+  onPauseToggle?: (paused: boolean) => void;
 }) {
-  const { state, queueCommand, requestStop, pushEvent, render } = args;
+  const { state, queueCommand, requestStop, pushEvent, render, onPauseToggle } = args;
 
   return (str: string, key: { name?: string; sequence?: string; ctrl?: boolean; meta?: boolean }): void => {
     if (key.ctrl && key.name === "c") {
@@ -46,6 +47,7 @@ export function setupKeypressHandler(args: {
     if (action === "pause_toggle") {
       state.paused = !state.paused;
       pushEvent(state.paused ? "Engine paused (F3)." : "Engine resumed (F3).");
+      onPauseToggle?.(state.paused);
       render();
       return;
     }

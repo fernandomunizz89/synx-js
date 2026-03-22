@@ -3,7 +3,7 @@ import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../constants.js";
 import { loadResolvedProjectConfig } from "../config.js";
 import { writeJson } from "../fs.js";
 import { recordPipelineApproval, recordPipelineReproval } from "../learnings.js";
-import { logTaskEvent } from "../logging.js";
+import { logRuntimeEvent, logTaskEvent } from "../logging.js";
 import { taskDir, repoRoot } from "../paths.js";
 import { loadPipelineState } from "../pipeline-state.js";
 import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
@@ -79,6 +79,17 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
     ...input,
     project: resolvedProject.project,
   });
+  await logRuntimeEvent({
+    event: "task.created",
+    taskId: created.taskId,
+    source: "task-service",
+    payload: {
+      title: input.title,
+      type: input.typeHint,
+      project: resolvedProject.project,
+      projectSource: resolvedProject.source,
+    },
+  });
 
   return {
     ...created,
@@ -112,6 +123,22 @@ export async function approveTaskService(taskId: string): Promise<void> {
     },
   });
   await logTaskEvent(taskDir(taskId), "Human approval completed. Task marked as done.");
+  await logRuntimeEvent({
+    event: "task.approved",
+    taskId,
+    source: "task-service",
+    payload: {
+      decision: "approved",
+    },
+  });
+  await logRuntimeEvent({
+    event: "task.decision_recorded",
+    taskId,
+    source: "task-service",
+    payload: {
+      decision: "approved",
+    },
+  });
 
   try {
     const pipelineState = await loadPipelineState(taskId);
@@ -172,6 +199,28 @@ export async function reproveTaskService(args: {
     },
   });
   await logTaskEvent(taskDir(args.taskId), `Human reprove completed. Task returned to ${target.agent}. Reason: ${reason}`);
+  await logRuntimeEvent({
+    event: "task.reproved",
+    taskId: args.taskId,
+    source: "task-service",
+    payload: {
+      decision: "reproved",
+      reason,
+      rollbackMode,
+      returnedTo: target.agent,
+    },
+  });
+  await logRuntimeEvent({
+    event: "task.decision_recorded",
+    taskId: args.taskId,
+    source: "task-service",
+    payload: {
+      decision: "reproved",
+      reason,
+      rollbackMode,
+      returnedTo: target.agent,
+    },
+  });
 
   try {
     const pipelineState = await loadPipelineState(args.taskId);
@@ -192,5 +241,13 @@ export async function cancelTaskService(args: { taskId: string; reason?: string 
     taskId: args.taskId,
     requestedBy: "human",
     reason: args.reason,
+  });
+  await logRuntimeEvent({
+    event: "task.cancel_requested",
+    taskId: args.taskId,
+    source: "task-service",
+    payload: {
+      reason: String(args.reason || "").trim(),
+    },
   });
 }
