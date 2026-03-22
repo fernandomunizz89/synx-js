@@ -1,4 +1,5 @@
 import path from "node:path";
+import { watch, type FSWatcher } from "node:fs";
 import { exists, readText } from "../fs.js";
 import { logsDir } from "../paths.js";
 import { nowIso } from "../utils.js";
@@ -43,15 +44,20 @@ async function parseJsonl(filePath: string): Promise<Array<Record<string, unknow
 export function createUiRealtime(args?: { pollMs?: number }) {
   const listeners = new Set<(event: UiStreamEvent) => void>();
   const pollMs = Math.max(500, Number(args?.pollMs || 1200));
-  const runtimeEventsPath = path.join(logsDir(), "runtime-events.jsonl");
-  const stageMetricsPath = path.join(logsDir(), "stage-metrics.jsonl");
-  const daemonLogPath = path.join(logsDir(), "daemon.log");
+  const logsRootPath = logsDir();
+  const runtimeEventsPath = path.join(logsRootPath, "runtime-events.jsonl");
+  const stageMetricsPath = path.join(logsRootPath, "stage-metrics.jsonl");
+  const daemonLogPath = path.join(logsRootPath, "daemon.log");
   let disposed = false;
   let seq = 0;
   let runtimeCursor = 0;
   let lastStageMetricsLineCount = 0;
   let lastDaemonLogLineCount = 0;
-  let timer: NodeJS.Timeout | null = null;
+  let fallbackTimer: NodeJS.Timeout | null = null;
+  let debounceTimer: NodeJS.Timeout | null = null;
+  const watchers: FSWatcher[] = [];
+  let pollInFlight = false;
+  let pollQueued = false;
 
   const emit = (event: Omit<UiStreamEvent, "id" | "at"> & { at?: string }) => {
     const payload: UiStreamEvent = {
@@ -68,8 +74,6 @@ export function createUiRealtime(args?: { pollMs?: number }) {
   };
 
   const poll = async () => {
-    if (disposed) return;
-
     const runtimeRows = await parseJsonl(runtimeEventsPath);
     if (runtimeRows.length > runtimeCursor) {
       for (let i = runtimeCursor; i < runtimeRows.length; i++) {
@@ -126,11 +130,63 @@ export function createUiRealtime(args?: { pollMs?: number }) {
     }
   };
 
-  timer = setInterval(() => {
-    void poll();
+  const runPoll = async () => {
+    if (disposed) return;
+    if (pollInFlight) {
+      pollQueued = true;
+      return;
+    }
+
+    pollInFlight = true;
+    try {
+      await poll();
+    } finally {
+      pollInFlight = false;
+      if (pollQueued) {
+        pollQueued = false;
+        void runPoll();
+      }
+    }
+  };
+
+  const schedulePoll = (delayMs = 60): void => {
+    if (disposed) return;
+    if (debounceTimer) return;
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      void runPoll();
+    }, Math.max(0, delayMs));
+    debounceTimer.unref();
+  };
+
+  const watchPath = (target: string): void => {
+    try {
+      const watcher = watch(target, { persistent: false }, () => {
+        schedulePoll(20);
+      });
+      watcher.on("error", () => undefined);
+      watchers.push(watcher);
+    } catch {
+      // watcher unavailable for this path in current environment
+    }
+  };
+
+  const initWatchers = async (): Promise<void> => {
+    if (!(await exists(logsRootPath))) return;
+    watchPath(logsRootPath);
+    for (const filePath of [runtimeEventsPath, stageMetricsPath, daemonLogPath]) {
+      if (await exists(filePath)) {
+        watchPath(filePath);
+      }
+    }
+  };
+
+  fallbackTimer = setInterval(() => {
+    schedulePoll(0);
   }, pollMs);
-  timer.unref();
-  void poll();
+  fallbackTimer.unref();
+  void initWatchers();
+  void runPoll();
 
   return {
     subscribe(listener: (event: UiStreamEvent) => void): () => void {
@@ -139,10 +195,22 @@ export function createUiRealtime(args?: { pollMs?: number }) {
     },
     close(): void {
       disposed = true;
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
+      if (fallbackTimer) {
+        clearInterval(fallbackTimer);
+        fallbackTimer = null;
       }
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      for (const watcher of watchers) {
+        try {
+          watcher.close();
+        } catch {
+          // ignore close failures
+        }
+      }
+      watchers.length = 0;
       listeners.clear();
     },
   };
