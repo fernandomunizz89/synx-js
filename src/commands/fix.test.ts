@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fixCommand } from "./fix.ts";
+import { fixCommand } from "./fix.js";
 import { Command } from "commander";
 import * as bootstrap from "../lib/bootstrap.js";
 import * as interactive from "../lib/interactive.js";

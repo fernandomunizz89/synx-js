@@ -20,6 +20,7 @@ export const IGNORED_DIRS = new Set([
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
 export interface PackageJsonShape {
+  name?: string;
   scripts?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
