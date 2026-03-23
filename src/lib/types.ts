@@ -1,4 +1,4 @@
-export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed";
+export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed" | "Project";
 export type TaskStatus =
   | "new"
   | "in_progress"
@@ -13,6 +13,7 @@ export type AgentName =
   // Orchestration layer
   | "Dispatcher"
   | "Human Review"
+  | "Project Orchestrator"
   // Expert Squad
   | "Synx Front Expert"
   | "Synx Mobile Expert"
@@ -21,6 +22,15 @@ export type AgentName =
   | "Synx SEO Specialist";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
+
+export interface FallbackModel {
+  type: ProviderType;
+  model: string;
+  baseUrlEnv?: string;
+  apiKeyEnv?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
 export type E2EPolicy = "auto" | "required" | "skip";
 export type E2EFramework = "auto" | "playwright" | "other";
 
@@ -110,7 +120,9 @@ export interface ProviderStageConfig {
   apiKeyEnv?: string;
   baseUrl?: string;
   apiKey?: string;
+  /** @deprecated Use fallbackModels instead */
   fallbackModel?: string;
+  fallbackModels?: FallbackModel[];
   autoDiscoverModel?: boolean;
 }
 
@@ -131,6 +143,7 @@ export interface LocalProjectConfig {
   framework: string;
   humanReviewer: string;
   tasksDir: string;
+  autoApproveThreshold?: number;
   providerOverrides?: Partial<{
     dispatcher: Partial<ProviderStageConfig>;
     planner: Partial<ProviderStageConfig>;

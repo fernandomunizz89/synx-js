@@ -27,6 +27,11 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "ROLE: Human Decision Gate",
     "- Final approval authority for task completion.",
   ].join("\n"),
+  "Project Orchestrator": [
+    "ROLE: Project Decomposition Coordinator",
+    "- Receive high-level project requests and decompose them into independent subtasks.",
+    "- Route each subtask to the appropriate domain expert.",
+  ].join("\n"),
   // ── Expert Squad ─────────────────────────────────────────────────────────
   "Synx Front Expert": [
     "ROLE: Front-end Architect",

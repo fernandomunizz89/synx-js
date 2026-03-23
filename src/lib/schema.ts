@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]);
+export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed", "Project"]);
 export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio", "google", "anthropic"]);
 export const taskStatusSchema = z.enum([
   "new",
@@ -16,6 +16,7 @@ export const agentNameSchema = z.enum([
   // Orchestration layer
   "Dispatcher",
   "Human Review",
+  "Project Orchestrator",
   // Expert Squad
   "Synx Front Expert",
   "Synx Mobile Expert",
@@ -35,6 +36,15 @@ const taskMetaCurrentAgentSchema = z
 export const e2ePolicySchema = z.enum(["auto", "required", "skip"]);
 export const e2eFrameworkSchema = z.enum(["auto", "playwright", "other"]);
 
+export const fallbackModelSchema = z.object({
+  type: providerTypeSchema,
+  model: z.string(),
+  baseUrlEnv: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKey: z.string().optional(),
+});
+
 export const providerStageConfigSchema = z.object({
   type: providerTypeSchema,
   model: z.string(),
@@ -43,6 +53,7 @@ export const providerStageConfigSchema = z.object({
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   fallbackModel: z.string().optional(),
+  fallbackModels: z.array(fallbackModelSchema).optional(),
   autoDiscoverModel: z.boolean().optional(),
 });
 
@@ -133,6 +144,7 @@ export const localProjectConfigSchema = z.object({
   framework: z.string(),
   humanReviewer: z.string(),
   tasksDir: z.string(),
+  autoApproveThreshold: z.number().min(0).max(1).optional(),
   providerOverrides: z.object({
     dispatcher: providerStageConfigSchema.partial().optional(),
     planner: providerStageConfigSchema.partial().optional(),
