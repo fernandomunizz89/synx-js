@@ -49,7 +49,7 @@ export class DispatcherWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert", "targetExpert": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert" }',
+        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "securityAuditRequired": false, "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer", "targetExpert": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);
@@ -64,7 +64,9 @@ export class DispatcherWorker extends WorkerBase {
       "Synx QA Engineer":    { stage: "synx-qa-engineer",    fileName: STAGE_FILE_NAMES.synxQaEngineer },
       "Synx SEO Specialist": { stage: "synx-seo-specialist", fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
       // Phase 2 – Extended Squad
-      "Synx DevOps Expert":  { stage: "synx-devops-expert",  fileName: STAGE_FILE_NAMES.synxDevopsExpert },
+      "Synx DevOps Expert":        { stage: "synx-devops-expert",  fileName: STAGE_FILE_NAMES.synxDevopsExpert },
+      // Phase 2.4
+      "Synx Documentation Writer": { stage: "synx-docs-writer",    fileName: STAGE_FILE_NAMES.synxDocsWriter },
     };
     const routing = stageMap[nextAgent] ?? { stage: "synx-front-expert", fileName: STAGE_FILE_NAMES.synxFrontExpert };
     const nextStage = routing.stage;

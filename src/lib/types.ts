@@ -21,7 +21,9 @@ export type AgentName =
   | "Synx QA Engineer"
   | "Synx SEO Specialist"
   | "Synx Code Reviewer"
-  | "Synx DevOps Expert";
+  | "Synx DevOps Expert"
+  | "Synx Security Auditor"
+  | "Synx Documentation Writer";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
 
@@ -228,6 +230,7 @@ export interface TaskMeta {
   createdAt: string;
   updatedAt: string;
   history: TaskMetaHistoryItem[];
+  securityAuditRequired?: boolean;
 }
 
 export interface TimingEntry {

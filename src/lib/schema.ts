@@ -25,6 +25,8 @@ export const agentNameSchema = z.enum([
   "Synx SEO Specialist",
   "Synx Code Reviewer",
   "Synx DevOps Expert",
+  "Synx Security Auditor",
+  "Synx Documentation Writer",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System"), z.string()])
@@ -237,6 +239,7 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx Back Expert"),
     z.literal("Synx SEO Specialist"),
   ]).optional(),
+  securityAuditRequired: z.boolean().optional(),
   nextAgent: z.union([
     // Dream Stack 2026 – Expert Squad routing
     z.literal("Synx Front Expert"),
@@ -245,6 +248,7 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx QA Engineer"),
     z.literal("Synx SEO Specialist"),
     z.literal("Synx DevOps Expert"),
+    z.literal("Synx Documentation Writer"),
   ]),
 });
 
@@ -515,5 +519,25 @@ export const codeReviewOutputSchema = z.object({
 });
 
 export type CodeReviewOutput = z.infer<typeof codeReviewOutputSchema>;
+
+export const securityAuditVulnerabilitySchema = z.object({
+  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  cve: z.string().optional(),
+  category: z.string().optional(),
+  description: z.string(),
+  file: z.string().optional(),
+  line: z.number().int().nonnegative().optional(),
+  fix: z.string(),
+});
+
+export const securityAuditOutputSchema = z.object({
+  auditPassed: z.boolean(),
+  vulnerabilities: z.array(securityAuditVulnerabilitySchema).default([]),
+  summary: z.string(),
+  blockedReason: z.string().optional(),
+  owaspCategories: z.array(z.string()).default([]),
+});
+
+export type SecurityAuditOutput = z.infer<typeof securityAuditOutputSchema>;
 
 // Legacy agent output schemas were removed.

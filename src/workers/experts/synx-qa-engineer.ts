@@ -5,6 +5,7 @@ import { buildAgentRoleContract } from "../../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../../lib/code-quality-bootstrap.js";
 import { exists, readJson, writeJson } from "../../lib/fs.js";
 import { taskDir } from "../../lib/paths.js";
+
 import { qaOutputSchema } from "../../lib/schema.js";
 import { loadTaskMeta } from "../../lib/task.js";
 import type { AgentName, StageEnvelope } from "../../lib/types.js";
@@ -239,15 +240,28 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       .map((f, i) => `${i + 1}. ${f.issue}\n   Expected: ${f.expectedResult}\n   Received: ${f.receivedResult}\n   Action: ${f.recommendedAction}`)
       .join("\n") || "- [none]";
 
-    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${verdict === "pass" ? "Human Review" : String(previousExpert)}\n`;
+    // Check if security audit is required (set by Dispatcher)
+    let needsSecurityAudit = false;
+    try {
+      const dispatcherDonePath = path.join(taskDir(taskId), "done", DONE_FILE_NAMES.dispatcher);
+      if (await exists(dispatcherDonePath)) {
+        const dispatcherDone = await readJson<{ output?: { securityAuditRequired?: boolean } }>(dispatcherDonePath);
+        needsSecurityAudit = dispatcherDone.output?.securityAuditRequired === true;
+      }
+    } catch { /* ignore */ }
 
     const effectiveNextAgent: AgentName = verdict === "pass"
-      ? "Human Review"
+      ? (needsSecurityAudit ? "Synx Security Auditor" : "Human Review")
       : (isExpertAgent(String(previousExpert)) ? (previousExpert as AgentName) : "Human Review");
 
+    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${effectiveNextAgent}\n`;
 
-
-    const nextMapping = effectiveNextAgent === "Human Review" ? null : expertStageMap[effectiveNextAgent];
+    const securityAuditorStageEntry = { stage: "synx-security-auditor", fileName: STAGE_FILE_NAMES.synxSecurityAuditor };
+    const nextMapping = effectiveNextAgent === "Human Review"
+      ? null
+      : effectiveNextAgent === "Synx Security Auditor"
+        ? securityAuditorStageEntry
+        : expertStageMap[effectiveNextAgent];
 
     await this.finishStage({
       taskId,
@@ -264,7 +278,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       nextStage: nextMapping?.stage || undefined,
       nextRequestFileName: nextMapping?.fileName || undefined,
       nextInputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
-      humanApprovalRequired: effectiveNextAgent === "Human Review",
+      humanApprovalRequired: effectiveNextAgent === "Human Review" && !needsSecurityAudit,
       startedAt,
       provider: result.provider,
       model: result.model,

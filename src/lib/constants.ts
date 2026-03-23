@@ -22,8 +22,11 @@ export const STAGE_FILE_NAMES = {
   synxQaEngineer:    "06-synx-qa-engineer.request.json",
   synxSeoSpecialist: "04-synx-seo-specialist.request.json",
   // Phase 2 – Extended Squad
-  synxCodeReviewer:  "07-synx-code-reviewer.request.json",
-  synxDevopsExpert:  "04-synx-devops-expert.request.json",
+  synxCodeReviewer:      "07-synx-code-reviewer.request.json",
+  synxDevopsExpert:      "04-synx-devops-expert.request.json",
+  // Phase 2.3 / 2.4
+  synxSecurityAuditor:   "08-synx-security-auditor.request.json",
+  synxDocsWriter:        "04-synx-docs-writer.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -35,8 +38,11 @@ export const DONE_FILE_NAMES = {
   synxQaEngineer:    "06-synx-qa-engineer.done.json",
   synxSeoSpecialist: "04-synx-seo-specialist.done.json",
   // Phase 2 – Extended Squad
-  synxCodeReviewer:  "07-synx-code-reviewer.done.json",
-  synxDevopsExpert:  "04-synx-devops-expert.done.json",
+  synxCodeReviewer:      "07-synx-code-reviewer.done.json",
+  synxDevopsExpert:      "04-synx-devops-expert.done.json",
+  // Phase 2.3 / 2.4
+  synxSecurityAuditor:   "08-synx-security-auditor.done.json",
+  synxDocsWriter:        "04-synx-docs-writer.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [
@@ -52,4 +58,7 @@ export const REQUIRED_PROMPT_FILES = [
   // Phase 2 – Extended Squad (optional – built-in defaults are used when absent)
   "synx-code-reviewer.md",
   "synx-devops-expert.md",
+  // Phase 2.3 / 2.4 (optional – built-in defaults are used when absent)
+  "synx-security-auditor.md",
+  "synx-docs-writer.md",
 ] as const;

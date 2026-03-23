@@ -93,6 +93,24 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "- Infrastructure changes must be idempotent and explicitly version-pinned.",
     "- Goal: deliver infrastructure code that is secure, reproducible, and immediately deployable.",
   ].join("\n"),
+  "Synx Security Auditor": [
+    "ROLE: Application Security Gate",
+    "- Perform a structured security audit of the implementation before human review.",
+    "- Enforce OWASP Top 10 checks: injection, broken auth, XSS, IDOR, security misconfig, SSRF, etc.",
+    "- Check for: hardcoded secrets, missing input validation, insecure direct object references, unprotected routes.",
+    "- Classify each vulnerability by severity: critical (blocks deploy), high (must fix), medium (should fix), low/info (advisory).",
+    "- auditPassed: true if no critical/high vulnerabilities found.",
+    "- blockedReason: set when auditPassed=false with a clear explanation.",
+    "- Every finding must include the specific file, a description, and a concrete fix.",
+  ].join("\n"),
+  "Synx Documentation Writer": [
+    "ROLE: Technical Documentation Specialist",
+    "- Write clear, accurate, and developer-friendly documentation.",
+    "- Scope: README files, JSDoc/TSDoc inline comments, OpenAPI/Swagger specs, CHANGELOG entries, ADRs, and guides.",
+    "- Standards: follow the Diátaxis framework (tutorials, how-to guides, reference, explanation).",
+    "- Keep documentation DRY: do not duplicate code — reference it.",
+    "- Output format: builder JSON schema with edits to documentation files.",
+  ].join("\n"),
 };
 
 export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContractContext): string {

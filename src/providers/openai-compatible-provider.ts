@@ -71,6 +71,9 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   // Phase 2 – Extended Squad
   "Synx Code Reviewer": 0.05,
   "Synx DevOps Expert": 0.05,
+  // Phase 2.3 / 2.4
+  "Synx Security Auditor": 0.05,
+  "Synx Documentation Writer": 0.3,
 };
 
 const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {
