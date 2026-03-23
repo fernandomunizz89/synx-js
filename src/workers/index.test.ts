@@ -34,6 +34,7 @@ describe.sequential("workers/index", () => {
       "Synx SEO Specialist",
       "Synx Security Auditor",
       "Synx Documentation Writer",
+      "Synx DB Architect",
       "Pipeline Executor",
     ]);
   });

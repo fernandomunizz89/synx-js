@@ -27,6 +27,8 @@ export const STAGE_FILE_NAMES = {
   // Phase 2.3 / 2.4
   synxSecurityAuditor:   "08-synx-security-auditor.request.json",
   synxDocsWriter:        "04-synx-docs-writer.request.json",
+  // Phase 2.5
+  synxDbArchitect:       "04-synx-db-architect.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -43,6 +45,8 @@ export const DONE_FILE_NAMES = {
   // Phase 2.3 / 2.4
   synxSecurityAuditor:   "08-synx-security-auditor.done.json",
   synxDocsWriter:        "04-synx-docs-writer.done.json",
+  // Phase 2.5
+  synxDbArchitect:       "04-synx-db-architect.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [
@@ -61,4 +65,6 @@ export const REQUIRED_PROMPT_FILES = [
   // Phase 2.3 / 2.4 (optional – built-in defaults are used when absent)
   "synx-security-auditor.md",
   "synx-docs-writer.md",
+  // Phase 2.5 (optional – built-in default used when absent)
+  "synx-db-architect.md",
 ] as const;

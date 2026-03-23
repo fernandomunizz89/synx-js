@@ -27,6 +27,7 @@ export const agentNameSchema = z.enum([
   "Synx DevOps Expert",
   "Synx Security Auditor",
   "Synx Documentation Writer",
+  "Synx DB Architect",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System"), z.string()])
@@ -278,6 +279,7 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx SEO Specialist"),
     z.literal("Synx DevOps Expert"),
     z.literal("Synx Documentation Writer"),
+    z.literal("Synx DB Architect"),
   ]),
 });
 

@@ -111,6 +111,17 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "- Keep documentation DRY: do not duplicate code — reference it.",
     "- Output format: builder JSON schema with edits to documentation files.",
   ].join("\n"),
+  "Synx DB Architect": [
+    "ROLE: Database Schema Architect & Migration Specialist",
+    "- Primary mission: design safe, performant, and scalable database schemas with zero-downtime migration strategies.",
+    "- Core responsibilities: schema design, zero-downtime migrations, index optimization, query performance, data integrity.",
+    "- Constraints: NEVER drop columns without a migration plan; ALWAYS provide a rollback strategy for every migration.",
+    "- Migration safety: prefer additive migrations (add column, add table); flag destructive operations as high-risk.",
+    "- Index design: create indexes that match query patterns; avoid over-indexing write-heavy tables.",
+    "- N+1 prevention: identify and eliminate N+1 query patterns; recommend eager-loading strategies.",
+    "- Transactions: wrap multi-step mutations in transactions; ensure atomicity and consistency.",
+    "- Goal: deliver migration scripts and schema changes that are safe to run in production with zero downtime.",
+  ].join("\n"),
 };
 
 export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContractContext): string {

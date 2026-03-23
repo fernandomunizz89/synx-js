@@ -74,6 +74,8 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   // Phase 2.3 / 2.4
   "Synx Security Auditor": 0.05,
   "Synx Documentation Writer": 0.3,
+  // Phase 2.5
+  "Synx DB Architect": 0.1,
 };
 
 const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {

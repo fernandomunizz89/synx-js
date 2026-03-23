@@ -8,6 +8,7 @@ import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
 import { SynxSeoSpecialist } from "./experts/synx-seo-specialist.js";
 import { SynxSecurityAuditor } from "./experts/synx-security-auditor.js";
 import { SynxDocsWriter } from "./experts/synx-docs-writer.js";
+import { SynxDbArchitect } from "./experts/synx-db-architect.js";
 import { GenericAgent } from "./generic-agent.js";
 import { PipelineExecutor } from "./pipeline-executor.js";
 import { ProjectOrchestrator } from "./project-orchestrator.js";
@@ -26,6 +27,7 @@ export const workers = {
   seo: new SynxSeoSpecialist(),
   securityAuditor: new SynxSecurityAuditor(),
   docsWriter: new SynxDocsWriter(),
+  dbArchitect: new SynxDbArchitect(),
   pipelineExecutor: new PipelineExecutor(),
 };
 
