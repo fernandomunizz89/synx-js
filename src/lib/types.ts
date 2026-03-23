@@ -19,7 +19,9 @@ export type AgentName =
   | "Synx Mobile Expert"
   | "Synx Back Expert"
   | "Synx QA Engineer"
-  | "Synx SEO Specialist";
+  | "Synx SEO Specialist"
+  | "Synx Code Reviewer"
+  | "Synx DevOps Expert";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
 

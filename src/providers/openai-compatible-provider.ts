@@ -68,6 +68,9 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   "Synx Back Expert": 0.05,
   "Synx QA Engineer": 0.05,
   "Synx SEO Specialist": 0.1,
+  // Phase 2 – Extended Squad
+  "Synx Code Reviewer": 0.05,
+  "Synx DevOps Expert": 0.05,
 };
 
 const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {

@@ -1,8 +1,6 @@
-# SYNX Web UI Operations Guide
+# SYNX Web UI
 
-## Goal
-
-`synx ui` starts a local web surface for observability and human review on top of the same filesystem/runtime used by the CLI and TUI.
+`synx ui` starts a local web interface for observability and human review on top of the same filesystem used by the CLI.
 
 ## Start
 
@@ -10,128 +8,90 @@
 synx ui
 ```
 
-Default bind:
-- host: `127.0.0.1`
-- port: `4317`
-
-Custom bind:
+Default bind: `http://127.0.0.1:4317`
 
 ```bash
-synx ui --host 127.0.0.1 --port 4318
+synx ui --host 127.0.0.1 --port 4318   # custom bind
+synx ui --read-only                     # disable approve/reprove/cancel
 ```
 
-Read-only mode (no approve/reprove/cancel/runtime commands):
+## Interface
 
-```bash
-synx ui --read-only
-```
+Three tabs — always in sync with the live filesystem.
 
-## Views
+### Tasks
 
-- **Overview:** daemon health, task counters, queue size, token/cost estimates
-- **Tasks:** searchable task table
-- **Review Queue:** tasks in `waiting_human`
-- **Task Detail:** status/stage/agent, recent events, artifacts, review controls
-- **Live Stream:** runtime/task/metrics events over SSE
-- **Analytics:** rankings for tasks/agents/projects plus timeline, QA-loop indicators, and 30-day cost/token/duration curves
+- Searchable table: filter by text (title, ID, project) or by status.
+- Click any row to expand task details: ID, status, type, current agent, timestamps, raw request.
+- Action buttons appear in the expanded row based on current status:
+  - **Approve** — available when status is `waiting_human`
+  - **Reprove…** — opens the reprove modal (reason required, optional rollback)
+  - **Cancel** — available when status is `new`, `in_progress`, or `waiting_agent`
+- Auto-refreshes every 15 s and immediately after SSE task events.
 
-## Frontend architecture (incremental React)
+### Review
 
-The current UI follows an incremental migration path that keeps the existing local API/SSE contract stable.
+- Focused list of tasks currently in `waiting_human`.
+- Each item shows title, short ID, type, current agent, and age.
+- Approve and Reprove buttons inline — no need to navigate to task detail.
+- Badge on the tab shows the current queue count.
+- Auto-refreshes every 20 s and after SSE task events.
 
-- Server renders the shell and legacy fallback containers.
-- Browser loads `dist/ui-assets/task-assistant.react.js` via `GET /ui-assets/task-assistant.react.js`.
-- React islands mount progressively inside the shell.
-- Legacy fallback remains active only if the React bundle fails to load or mount.
+### Stream
 
-Current React islands:
-- Task Assistant (simple form + advanced panel behind "Advanced").
-- Header global search.
-- Task Board (Kanban and Agent Lanes).
+- Real-time event log via Server-Sent Events.
+- Each entry shows: time, event type, and event message.
+- Events that affect tasks or the engine also trigger a background refresh of Tasks, Review, and the header stats.
+- Clear button resets the local buffer.
+- Reconnects automatically on connection loss (3 s backoff).
 
-Fallback containers currently used by the shell:
-- `#simple-action-fallback`
-- `#header-search-fallback`
-- `#board-fallback`
+## Header
 
-## Build and validation
+Always visible. Shows:
+- **Engine status dot** — green (running) or red (stopped).
+- **Active tasks count.**
+- **Waiting review count** — also drives the Review tab badge.
+- **Last updated** relative timestamp.
 
-Run from project root:
+Polls `/api/overview` every 10 s.
 
-```bash
-npm run build
-```
+## Reprove modal
 
-Build breakdown:
-- `npm run build:ts` compiles TypeScript.
-- `npm run build:ui` bundles React islands into `dist/ui-assets/task-assistant.react.js`.
+- Requires a reason.
+- Optional checkbox to roll back file changes for that task (`rollbackMode: task`).
 
-Recommended UI verification:
+## Read-only mode
 
-```bash
-npm run test -- src/lib/ui/web-app.test.ts src/lib/ui/layout.test.ts src/lib/ui/server.test.ts src/lib/ui/server-contract.test.ts src/lib/ui/server-actions.test.ts
-npm run check
-```
+When started with `--read-only`, all mutating actions are disabled:
+- Approve, reprove, cancel buttons are blocked at the API level (HTTP 405).
+- Use this mode for passive monitoring.
 
-## Incremental rollout and legacy removal
+## API endpoints
 
-Migration is done module by module to avoid downtime or UX breakage.
+All served by the same process as `synx ui`.
 
-1. Migrate one module to React while preserving existing API payloads and routes.
-2. Keep fallback in place while tests and manual flows stabilize.
-3. Remove fallback markup and legacy handlers for the stabilized module.
-4. Repeat for the next module until legacy rendering is fully retired.
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Engine health check |
+| `GET` | `/api/overview` | Engine status + task counters |
+| `GET` | `/api/tasks` | Task list (filters: `status`, `project`, `q`) |
+| `GET` | `/api/tasks/:id` | Task detail |
+| `GET` | `/api/review-queue` | Tasks in `waiting_human` |
+| `GET` | `/api/stream` | SSE stream of runtime events |
+| `POST` | `/api/tasks/:id/approve` | Approve task |
+| `POST` | `/api/tasks/:id/reprove` | Reprove task (body: `reason`, `rollbackMode`) |
+| `POST` | `/api/tasks/:id/cancel` | Cancel task (body: `reason`) |
+| `POST` | `/api/runtime/pause` | Pause engine |
+| `POST` | `/api/runtime/resume` | Resume engine |
+| `POST` | `/api/runtime/stop` | Stop engine |
 
-Suggested next modules:
-- Header and Omnisearch hardening (keyboard navigation and result grouping).
-- Task Board interactions expansion (drag/drop and detail drawer transitions).
-- Live Stream and Review Panel migration using the same island pattern.
-- Analytics migration with chart wrappers and export controls.
-
-## API and SSE endpoints
-
-- `GET /api/health`
-- `GET /api/overview`
-- `GET /api/tasks`
-- `GET /api/tasks/:taskId`
-- `GET /api/review-queue`
-- `GET /api/metrics/overview`
-- `GET /api/metrics/tasks`
-- `GET /api/metrics/agents`
-- `GET /api/metrics/projects`
-- `GET /api/metrics/timeline`
-- `GET /api/metrics/advanced`
-- `GET /api/stream` (SSE)
-
-Mutating endpoints (disabled in `--read-only`):
-- `POST /api/tasks/:taskId/approve`
-- `POST /api/tasks/:taskId/reprove`
-- `POST /api/tasks/:taskId/cancel`
-- `POST /api/runtime/pause`
-- `POST /api/runtime/resume`
-- `POST /api/runtime/stop`
-
-## Error behavior
-
-- task not found on mutating routes: `404`
-- invalid JSON body on mutating routes: `400`
-- read-only mutation attempt: `405`
-
-All API responses follow:
-
-```json
-{ "ok": true, "data": {} }
-```
-
-or
-
-```json
-{ "ok": false, "error": "message" }
-```
+All responses follow `{ "ok": true, "data": ... }` or `{ "ok": false, "error": "..." }`.
 
 ## Troubleshooting
 
-- **Blank queue / tasks:** confirm `.ai-agents/tasks/` exists in the current repo.
-- **No live events:** verify `.ai-agents/logs/runtime-events.jsonl` and daemon activity (`synx start`).
-- **Action rejected in UI:** check if UI was started in `--read-only` mode.
-- **Port in use:** start with another port, e.g. `synx ui --port 4318`.
+| Problem | Fix |
+|---|---|
+| Blank task list | Confirm `.ai-agents/tasks/` exists in the current repo. |
+| No live events in Stream | Check that `synx start` is running and `.ai-agents/logs/runtime-events.jsonl` exists. |
+| Actions rejected | Check if UI was started with `--read-only`. |
+| Port in use | Use `synx ui --port 4318` or another free port. |

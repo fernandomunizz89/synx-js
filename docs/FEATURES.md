@@ -9,12 +9,13 @@
 - Task type flags for `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
 - Per-task E2E preferences via `--e2e`, `--e2e-framework`, `--qa-objective`.
 - `status` defaults to focused view (current or latest task); `--all` for full history.
-- `ui` starts a local observability and human-review web surface (`Overview`, `Tasks`, `Review Queue`, `Task Detail`, `Live Stream`, `Analytics`), with optional read-only mode.
+- `ui` starts a local observability and human-review web surface with three tabs — **Tasks** (searchable, inline approve/reprove/cancel), **Review** (focused `waiting_human` queue), and **Stream** (live SSE event log) — with optional `--read-only` mode.
 
 ## Setup & Configuration
 
 - Guided `setup` with required human reviewer name.
 - Provider selection via interactive menu with model discovery (LM Studio auto-detect).
+- Optional per-expert provider configuration in `setup` — assign different providers/models to Front, Mobile, Back, QA, and SEO experts individually.
 - Config cascade: global `~/.ai-agents/config.json` → project `.ai-agents/config/project.json`.
 - `show-config` command to inspect resolved config.
 
@@ -34,7 +35,7 @@
 - QA retry loop capped at 3 (default). Exceeded cap → `waiting_human` escalation.
 - Root-cause intelligence: QA surfaced hints map to source files and git-changed files.
 - Post-edit sanity checks after every expert stage (lint, TypeScript compile, build).
-- E2E enforcement for `Feature`, `Bug`, `Refactor`, `Mixed` tasks.
+- E2E enforcement for `Feature`, `Bug`, `Refactor`, `Mixed` tasks. `Research` and `Documentation` tasks skip E2E questions automatically.
 - QA strategy: Playwright for web E2E; Vitest for isolated logic. Never mixed.
 - Language-aware fallback checks (TypeScript/Python/Go/Rust/Java) when no package scripts match.
 

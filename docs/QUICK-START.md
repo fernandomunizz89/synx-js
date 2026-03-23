@@ -28,6 +28,7 @@ Interactive wizard — it will ask for:
 | Provider | `anthropic`, `openai-compatible`, `google`, or `lmstudio` |
 | Model | Pick from the list or type manually |
 | API key | Only if cloud provider is selected |
+| Per-expert providers | Optional — configure different provider/model per expert (Front, Mobile, Back, QA, SEO). Skip to use the Dispatcher provider for all. |
 
 After setup, `.ai-agents/` is created in your repo and global config is saved to `~/.ai-agents/config.json`.
 
@@ -45,7 +46,19 @@ Leave this running in a terminal. It polls for tasks, processes them through the
 
 ---
 
-## 4. Create a task
+## 4. Send work to the agents
+
+### Option A — Web UI (recommended)
+
+```bash
+synx ui
+```
+
+Open `http://localhost:4316` in your browser. Type what you want to build in the **prompt bar** at the top and hit **Send**.
+
+The **Project Orchestrator** reads your prompt, breaks it into independent subtasks, and the agent squad picks them up in parallel — exactly like a dev team.
+
+### Option B — CLI (single task)
 
 ```bash
 synx new
@@ -60,6 +73,8 @@ synx new "Add dark mode toggle" --type Feature --raw "Add a dark mode toggle to 
 ```
 
 **Task types:** `Feature` · `Bug` · `Refactor` · `Research` · `Documentation` · `Mixed`
+
+> Research and Documentation tasks skip E2E questions automatically.
 
 **QA options (optional):**
 

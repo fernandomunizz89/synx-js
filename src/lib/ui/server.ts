@@ -1,7 +1,7 @@
 import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
-import { approveTaskService, cancelTaskService, reproveTaskService } from "../services/task-services.js";
+import { approveTaskService, cancelTaskService, reproveTaskService, createTaskService } from "../services/task-services.js";
 import { getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
 import { applyTaskRollback } from "../services/task-rollback.js";
 import { loadTaskMeta } from "../task.js";
@@ -465,6 +465,32 @@ export function createUiRequestHandler(options: {
             lines,
           },
         });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/project") {
+        if (!options.enableMutations) {
+          sendJson(res, 405, { ok: false, error: "Mutating actions are disabled in read-only mode." });
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const prompt = normalizeString(body.prompt);
+        if (!prompt) {
+          sendJson(res, 400, { ok: false, error: "prompt is required." });
+          return;
+        }
+        const created = await createTaskService({
+          title: prompt.length > 120 ? prompt.slice(0, 117) + "..." : prompt,
+          typeHint: "Project",
+          rawRequest: prompt,
+          extraContext: {
+            relatedFiles: [],
+            logs: [],
+            notes: [],
+            qaPreferences: { e2ePolicy: "auto", e2eFramework: "auto", objective: "" },
+          },
+        });
+        sendJson(res, 200, { ok: true, data: { taskId: created.taskId, taskPath: created.taskPath } });
         return;
       }
 

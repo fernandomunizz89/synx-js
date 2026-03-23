@@ -1,38 +1,30 @@
 # SYNX – Implementation Notes
 
-## Web UI Incremental React Migration (2026-03-22)
+## Web UI Rewrite (2026-03-23)
 
 ### Decision
 
-Adopted a progressive React-island migration instead of a full frontend rewrite. This keeps the Web UI online while preserving the same API and SSE contracts already used in production-like local flows.
+Replaced the Codex-generated 7,156-line HTML monolith (`web-app.ts`) with a clean, self-contained vanilla JS implementation (~490 lines). The React island build pipeline (`scripts/build-ui-react.mjs`, `dist/ui-assets/`) and the associated modules (`layout.ts`, `theme.ts`, `theme-provider.ts`, `react-task-assistant/`) were removed.
 
-### Why this path
+### Why
 
-- Avoids breaking already working operations during migration.
-- Maintains compatibility with current backend routes and payloads.
-- Allows per-module rollback through legacy fallback containers.
-- Enables focused testing per migrated surface.
+- The previous UI was generated across 8 incremental phases by an automated agent, accumulating duplicate code, Portuguese strings, two conflicting "simple/advanced" modes, and a legacy fallback layer that was never removed.
+- The React island approach added a mandatory build step and a 205 KB JS bundle for functionality achievable without a framework.
+- The API layer (`server.ts`) was already solid — the problem was only the frontend shell.
 
-### Delivered in current wave
+### What the new UI provides
 
-- React island for Task Assistant (simple-first UX with Advanced option).
-- React island for Header Global Search.
-- React island for Task Board (Kanban and Agent Lanes).
-- Bundle pipeline for UI islands via `scripts/build-ui-react.mjs`.
+- **Tasks tab:** searchable table with inline expand, approve/reprove/cancel per task.
+- **Review tab:** focused queue of `waiting_human` tasks with approve and reprove actions.
+- **Stream tab:** real-time SSE event log.
+- **Header:** engine status dot, active task count, waiting review count.
+- No build step — `npm run build:ts` is sufficient.
 
-### Stabilization and removal plan
+### API contract
 
-1. Keep module fallback enabled during stabilization.
-2. Validate with UI tests, TypeScript check, and manual interaction sweep.
-3. Remove fallback markup and legacy handlers only for the stabilized module.
-4. Repeat for the next module until legacy renderers are retired.
+Unchanged. All existing `/api/*` routes and SSE stream continue to work identically.
 
-### Remaining migration targets
-
-- Review Inbox and Decision Station.
-- Live Stream timeline and filter bar.
-- Analytics module charts and period comparators.
-- Global drill-down behavior hardening across all views.
+---
 
 ## Dream Stack 2026 – Strategic Pivot (2026-03-16)
 

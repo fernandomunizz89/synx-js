@@ -2,208 +2,106 @@ import { describe, expect, it } from "vitest";
 import { buildWebUiHtml } from "./web-app.js";
 
 describe("lib/ui/web-app", () => {
-  it("emits syntactically valid inline scripts", () => {
+  it("returns a non-empty HTML string", () => {
     const html = buildWebUiHtml();
-    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+    expect(typeof html).toBe("string");
+    expect(html.length).toBeGreaterThan(1000);
+    expect(html).toContain("<!doctype html>");
+    expect(html).toContain("</html>");
+  });
+
+  it("contains valid inline script", () => {
+    const html = buildWebUiHtml();
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
     expect(scripts.length).toBeGreaterThan(0);
     for (const source of scripts) {
       expect(() => new Function(source)).not.toThrow();
     }
   });
 
-  it("renders core dashboard sections and actions", () => {
+  it("renders the sidebar navigation", () => {
     const html = buildWebUiHtml();
-    expect(html).toContain("SYNX.js - Mission Control");
-    expect(html).toContain('data-view="overview"');
-    expect(html).toContain('data-view="tasks"');
-    expect(html).toContain('data-view="board"');
-    expect(html).toContain('data-view="review"');
-    expect(html).toContain('data-view="detail"');
-    expect(html).toContain('data-view="live"');
-    expect(html).toContain('data-view="analytics"');
-    expect(html).toContain('id="web-command-form"');
-    expect(html).toContain('id="web-command-input"');
-    expect(html).toContain('id="web-command-mode"');
-    expect(html).toContain('id="web-command-log"');
-    expect(html).toContain('id="command-suggest"');
-    expect(html).toContain('id="command-reference"');
-    expect(html).toContain('id="command-palette"');
-    expect(html).toContain('id="command-palette-filter"');
-    expect(html).toContain('id="command-palette-list"');
-    expect(html).toContain("Global Search");
-    expect(html).toContain('id="simple-console"');
-    expect(html).toContain('id="react-task-assistant-root"');
-    expect(html).toContain('id="simple-action-fallback"');
-    expect(html).toContain('id="simple-action-form"');
-    expect(html).toContain('id="simple-action"');
-    expect(html).toContain('id="simple-title"');
-    expect(html).toContain('id="simple-type"');
-    expect(html).toContain('id="simple-progress-feed"');
-    expect(html).toContain('data-ui-mode="advanced"');
-    expect(html).toContain('data-ui-mode="simple"');
-    expect(html).toContain('id="advanced-console"');
-    expect(html).toContain('id="command-confirm"');
-    expect(html).toContain('id="task-context-drawer"');
-    expect(html).toContain('id="task-drawer-content"');
-    expect(html).toContain('data-close-task-drawer');
-    expect(html).toContain('data-toggle-command-ref');
-    expect(html).toContain('data-open-command-palette');
-    expect(html).toContain('data-confirm-command');
-    expect(html).toContain('data-command-filter="all"');
-    expect(html).toContain("/pause-all");
-    expect(html).toContain("/resume-runtime");
-    expect(html).toContain("/stop-runtime");
-    expect(html).toContain('id="app-sidebar"');
-    expect(html).toContain('id="header-screen-title"');
-    expect(html).toContain('id="header-view-key"');
-    expect(html).toContain('id="react-header-search-root"');
-    expect(html).toContain('id="header-search-fallback"');
-    expect(html).toContain('id="global-search-input"');
-    expect(html).toContain('id="connectivity-indicator"');
-    expect(html).toContain('id="runtime-status-pill"');
-    expect(html).toContain('data-sidebar-toggle');
-    expect(html).toContain('data-sidebar-close');
-    expect(html).toContain("/api/command");
+    expect(html).toContain('data-page="dashboard"');
+    expect(html).toContain('data-page="tasks"');
+    expect(html).toContain('data-page="review"');
+    expect(html).toContain('data-page="stream"');
+  });
+
+  it("renders the tasks page with search and status filter", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="page-tasks"');
+    expect(html).toContain('id="task-search"');
+    expect(html).toContain('id="task-filter"');
+    expect(html).toContain('id="tasks-body"');
+  });
+
+  it("renders the review page", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="page-review"');
+    expect(html).toContain('id="review-list"');
+    expect(html).toContain('id="nb-review"');
+  });
+
+  it("renders the stream page", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="page-stream"');
+    expect(html).toContain('id="stream-log"');
+    expect(html).toContain('id="stream-count"');
+  });
+
+  it("renders the reprove modal", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="reprove-modal"');
+    expect(html).toContain('id="reprove-reason"');
+    expect(html).toContain('id="reprove-rollback"');
+    expect(html).toContain('id="reprove-submit"');
+  });
+
+  it("renders the engine status indicators", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="engine-dot"');
+    expect(html).toContain('id="engine-label"');
+    expect(html).toContain('id="s-active"');
+    expect(html).toContain('id="s-waiting"');
+  });
+
+  it("renders the prompt bar", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="prompt-ta"');
+    expect(html).toContain('id="btn-send"');
+    expect(html).toContain('id="prompt-msg"');
+  });
+
+  it("renders the agent squad list", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('data-agent="Dispatcher"');
+    expect(html).toContain('data-agent="Synx Front Expert"');
+    expect(html).toContain('data-agent="Synx QA Engineer"');
+  });
+
+  it("uses the correct API endpoints", () => {
+    const html = buildWebUiHtml();
     expect(html).toContain("/api/overview");
-    expect(html).toContain("/api/metrics/advanced");
-    expect(html).toContain('/ui-assets/task-assistant.react.js');
-    expect(html).not.toContain('setInterval(() => {');
-    expect(html).toContain("refreshSimpleProgress()");
-    expect(html).toContain('new EventSource("/api/stream")');
-    expect(html).toContain('id="react-task-board-root"');
-    expect(html).toContain('id="board-fallback"');
-    expect(html).toContain("mountReactTaskBoardIfReady()");
-    expect(html).toContain("synx-react-board-state");
-    expect(html).toContain("synx-react-ui-ready");
-    expect(html).toContain("refreshGlobalSnapshot()");
+    expect(html).toContain("/api/tasks");
+    expect(html).toContain("/api/project");
     expect(html).toContain("/api/stream");
     expect(html).toContain("/approve");
     expect(html).toContain("/reprove");
     expect(html).toContain("/cancel");
-    expect(html).toContain("/api/runtime/");
-    expect(html).toContain("Cost Curve (30d)");
-    expect(html).toContain("Token Curve (30d)");
-    expect(html).toContain("Duration Curve (30d)");
-    expect(html).toContain("overview-root");
-    expect(html).toContain("Welcome to SYNX Control");
-    expect(html).toContain("renderStatCard(");
-    expect(html).toContain("renderOverviewSkeleton(");
-    expect(html).toContain('data-stat-view="tasks"');
-    expect(html).toContain('class="recent-list"');
   });
 
-  it("includes phase 5 UX hardening markers for loading, accessibility, and retries", () => {
+  it("does not contain Portuguese strings from the old UI", () => {
     const html = buildWebUiHtml();
-    expect(html).toContain('class="skip-link"');
-    expect(html).toContain('id="content" role="region" aria-live="polite" aria-busy="false"');
-    expect(html).toContain('id="feedback" class="feedback" role="status" aria-live="polite"');
-    expect(html).toContain("showLoading(");
-    expect(html).toContain("overview-skeleton");
-    expect(html).toContain("skeleton-grid");
-    expect(html).toContain("recent-item");
-    expect(html).toContain("hero-card");
-    expect(html).toContain("kpi-grid");
-    expect(html).toContain("renderedViews");
-    expect(html).toContain("setTextIfChanged(");
-    expect(html).toContain("Loading task list...");
-    expect(html).toContain('data-retry-render');
-    expect(html).toContain('class="table-wrap"');
-    expect(html).toContain('caption class="sr-only"');
-    expect(html).toContain('class="chart-grid"');
-    expect(html).toContain("renderCurveChart(");
-    expect(html).toContain("@media (max-width: 1120px)");
-    expect(html).toContain("@media (max-width: 940px)");
-    expect(html).toContain("@media (max-width: 640px)");
-    expect(html).toContain("reviewRenderedKey");
-    expect(html).toContain("liveRenderedCount");
-    expect(html).toContain('id="review-root"');
-    expect(html).toContain('id="live-root"');
-    expect(html).toContain('id="review-reason"');
-    expect(html).toContain('id="review-rollback"');
-    expect(html).toContain('id="action-rollback-step"');
-    expect(html).toContain('data-quick-reason="Hallucination"');
-    expect(html).toContain("decision-station");
-    expect(html).toContain("review-panel");
-    expect(html).toContain('data-task-id="');
-    expect(html).toContain('target.closest("[data-task-action]")');
-    expect(html).toContain('target.closest("[data-open-task]")');
-    expect(html).toContain('target.closest("[data-runtime-action]")');
-    expect(html).toContain("A tarefa está aguardando decisão humana (");
-    expect(html).toContain("A tarefa mudou de estado (");
-    expect(html).toContain("boardColumnForTask(");
-    expect(html).toContain("boardKanbanColumnForTask(");
-    expect(html).toContain("renderBoardColumn(");
-    expect(html).toContain("renderBoardCard(");
-    expect(html).toContain("boardTaskMatchesFilter(");
-    expect(html).toContain("boardProgressMeta(");
-    expect(html).toContain("renderBoard()");
-    expect(html).toContain('data-board-mode="kanban"');
-    expect(html).toContain('data-board-mode="agent"');
-    expect(html).toContain('id="board-filter"');
-    expect(html).toContain("Agent Lanes");
-    expect(html).toContain("board-columns");
-    expect(html).toContain("board-column-head");
-    expect(html).toContain("priority-badge");
-    expect(html).toContain("board-progress-track");
-    expect(html).toContain("agent-avatar");
-    expect(html).toContain("Loading agent board...");
-    expect(html).toContain('data-live-filter="all"');
-    expect(html).toContain('data-live-filter="alerts"');
-    expect(html).toContain('data-live-view-logs="');
-    expect(html).toContain('id="live-scroll"');
-    expect(html).toContain("liveAutoScroll");
-    expect(html).toContain("streamFilterMatches(");
-    expect(html).toContain("fuzzyScore(");
-    expect(html).toContain("highlightFuzzyMatch(");
-    expect(html).toContain("buildOmniResults(");
-    expect(html).toContain("applyOmniSelection(");
-    expect(html).toContain("refreshOmniTasksCache(");
-    expect(html).toContain("syncUrlState(");
-    expect(html).toContain("applyRouteState(");
-    expect(html).toContain("persistUiPrefs(");
-    expect(html).toContain("loadUiPrefs(");
-    expect(html).toContain("status:blocked");
-    expect(html).toContain("status:waiting_human");
-    expect(html).toContain('data-board-preset="blocked"');
-    expect(html).toContain('data-open-task-drawer="');
-    expect(html).toContain('data-live-view-logs="');
-    expect(html).toContain("updateHeaderMeta(");
-    expect(html).toContain("openTaskDrawer(");
-    expect(html).toContain("buildStreamItem(");
-    expect(html).toContain("event-pins-label");
-    expect(html).toContain("virtual list enabled");
-    expect(html).toContain("renderEventIcon(");
-    expect(html).toContain("event-card-enter");
-    expect(html).toContain("document.addEventListener(\"scroll\"");
-    expect(html).toContain('data-theme-option="light"');
-    expect(html).toContain('data-theme-option="system"');
-    expect(html).toContain('data-theme-option="dark"');
-    expect(html).toContain("setConnectivityIndicator(");
-    expect(html).toContain("setRuntimeStatusPill(");
-    expect(html).toContain("setHeaderNotificationCount(");
-    expect(html).toContain("openSidebarOverlay(");
-    expect(html).toContain("closeSidebarOverlay(");
-    expect(html).toContain("applyThemePreference(");
-    expect(html).toContain("loadThemePreference(");
-    expect(html).toContain("bindSystemThemeSync(");
-    expect(html).toContain("requestRender(");
-    expect(html).toContain("executeWebCommand(");
-    expect(html).toContain("renderCommandPalette(");
-    expect(html).toContain("renderCommandSuggestions(");
-    expect(html).toContain("resolveCommandDispatch(");
-    expect(html).toContain("browseCommandHistory(");
-    expect(html).toContain("openCommandConfirm(");
-    expect(html).toContain("executeTaskAction(");
-    expect(html).toContain("setDecisionPending(");
-    expect(html).toContain("/artifact?scope=");
-    expect(html).toContain("pushCommandLog(");
-    expect(html).toContain("Intl.NumberFormat");
-    expect(html).toContain("Intl.DateTimeFormat");
-    expect(html).toContain("currencyFormatter");
-    expect(html).toContain("fmtDateTime(");
-    expect(html).not.toContain("UI build:");
-    expect(html).toContain("SYNX.js - Mission Control");
-    expect(html).toContain("--synx-cyan");
-    expect(html).toContain('html[data-theme="dark"]');
+    expect(html).not.toContain("Fluxo simples");
+    expect(html).not.toContain("Buscar tarefas");
+    expect(html).not.toContain("Avancado");
+    expect(html).not.toContain("Reprovar");
+    expect(html).not.toContain("Mostrar ajuda");
+  });
+
+  it("does not reference the removed React island bundle", () => {
+    const html = buildWebUiHtml();
+    expect(html).not.toContain("task-assistant.react.js");
+    expect(html).not.toContain("react-task-assistant-root");
   });
 });

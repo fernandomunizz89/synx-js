@@ -76,44 +76,53 @@ export const newCommand = new Command("new")
       ));
     }
 
+    const e2eNotApplicable = (finalType === "Research" || finalType === "Documentation");
+
     let e2ePolicy = parseE2EPolicy(options.e2e);
     if (!e2ePolicy) {
-      const recommendedPolicy = ["Feature", "Bug", "Refactor", "Mixed"].includes(finalType!) ? "required" : "auto";
-      e2ePolicy = await selectOption<E2EPolicy>(
-        "E2E policy for this task",
-        [
-          {
-            value: "required",
-            label: "Required (Recommended)",
-            description: "QA must validate E2E and remediation agents must fix/generate E2E as needed.",
-          },
-          {
-            value: "skip",
-            label: "Skip E2E",
-            description: "Do not require E2E generation/execution for this task.",
-          },
-          {
-            value: "auto",
-            label: "Auto",
-            description: "Use pipeline defaults based on task type.",
-          },
-        ],
-        recommendedPolicy as E2EPolicy,
-      );
+      if (e2eNotApplicable) {
+        e2ePolicy = "skip";
+      } else {
+        const recommendedPolicy = ["Feature", "Bug", "Refactor", "Mixed"].includes(finalType!) ? "required" : "auto";
+        e2ePolicy = await selectOption<E2EPolicy>(
+          "E2E policy for this task",
+          [
+            {
+              value: "required",
+              label: "Required (Recommended)",
+              description: "QA must validate E2E and remediation agents must fix/generate E2E as needed.",
+            },
+            {
+              value: "skip",
+              label: "Skip E2E",
+              description: "Do not require E2E generation/execution for this task.",
+            },
+            {
+              value: "auto",
+              label: "Auto",
+              description: "Use pipeline defaults based on task type.",
+            },
+          ],
+          recommendedPolicy as E2EPolicy,
+        );
+      }
     }
 
     let e2eFramework = parseE2EFramework(options.e2eFramework);
     if (!e2eFramework) {
-      const recommendedFramework: E2EFramework = "auto";
-      e2eFramework = await selectOption<E2EFramework>(
-        "Preferred E2E framework",
-        [
-          { value: "playwright", label: "Playwright" },
-          { value: "auto", label: "Auto detect" },
-          { value: "other", label: "Other framework" },
-        ],
-        recommendedFramework,
-      );
+      if (e2eNotApplicable) {
+        e2eFramework = "auto";
+      } else {
+        e2eFramework = await selectOption<E2EFramework>(
+          "Preferred E2E framework",
+          [
+            { value: "playwright", label: "Playwright" },
+            { value: "auto", label: "Auto detect" },
+            { value: "other", label: "Other framework" },
+          ],
+          "auto",
+        );
+      }
     }
 
     const rawRequest = options.raw || finalTitle!;
