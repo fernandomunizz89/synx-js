@@ -14,6 +14,7 @@ import { clearTaskCancelRequest, isTaskCancelRequested, loadTaskCancelRequest } 
 import { formatSynxStreamLog } from "../lib/synx-ui.js";
 import { loadLocalProjectConfig } from "../lib/config.js";
 import { approveTaskService } from "../lib/services/task-services.js";
+import { loadProjectMemory, type ProjectMemory } from "../lib/project-memory.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -442,11 +443,14 @@ export abstract class WorkerBase {
     previousStage: unknown | null;
     /** Phase 4.3 — ordered agent pipeline suggested by the Dispatcher */
     suggestedChain: string[] | undefined;
+    /** Phase 4.1 — project memory loaded for injection into expert prompts */
+    projectMemory: ProjectMemory | null;
   }> {
-    const [task, previousStage, meta] = await Promise.all([
+    const [task, previousStage, meta, projectMemory] = await Promise.all([
       this.loadTaskInput(taskId),
       this.loadReferencedInput(taskId, request),
       loadTaskMeta(taskId),
+      loadProjectMemory(),
     ]);
 
     return {
@@ -454,6 +458,7 @@ export abstract class WorkerBase {
       request,
       previousStage,
       suggestedChain: meta.suggestedChain,
+      projectMemory,
     };
   }
 }

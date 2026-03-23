@@ -1,6 +1,7 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../../lib/constants.js";
 import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../../lib/config.js";
 import { buildAgentRoleContract } from "../../lib/agent-role-contract.js";
+import { formatProjectMemoryForContext } from "../../lib/project-memory.js";
 import { normalizeBuilderLikeModelOutput } from "../../lib/model-output-recovery.js";
 import { ARTIFACT_FILES, loadTaskArtifact } from "../../lib/task-artifacts.js";
 import { builderOutputSchema } from "../../lib/schema.js";
@@ -74,6 +75,10 @@ SYNX DOCUMENTATION WRITER – EXECUTION CONTRACT:
     const roleContract = buildAgentRoleContract("Synx Documentation Writer", {
       stage: "synx-docs-writer",
       taskTypeHint: baseInput.task.typeHint,
+      suggestedChain: baseInput.suggestedChain,
+      projectMemoryContext: baseInput.projectMemory
+        ? formatProjectMemoryForContext(baseInput.projectMemory)
+        : undefined,
     });
 
     const modelInput = {

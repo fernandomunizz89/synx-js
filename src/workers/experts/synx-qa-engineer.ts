@@ -1,5 +1,6 @@
 import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../../lib/constants.js";
+import { extractAndPersistMemoryFacts } from "../../lib/memory-extractor.js";
 import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../../lib/config.js";
 import { buildAgentRoleContract } from "../../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../../lib/code-quality-bootstrap.js";
@@ -327,6 +328,16 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       : noProgressAbort
         ? "Human Review"  // Early abort: no-progress detected
         : (isExpertAgent(String(previousExpert)) ? (previousExpert as AgentName) : "Human Review");
+
+    // Phase 4.1 — persist memory facts from this successful pipeline run
+    if (verdict === "pass" && !needsSecurityAudit) {
+      await extractAndPersistMemoryFacts({
+        taskId,
+        taskTitle: baseInput.task.title,
+        taskType: baseInput.task.typeHint ?? "feature",
+        agentChain: baseInput.suggestedChain,
+      }).catch(() => { /* best-effort: never fail the QA stage */ });
+    }
 
     const retrySection = retryDecision
       ? `\n## Retry Strategy\n${retryDecision.strategy} (attempt ${currentAttempt}/${maxRetries})\n${retryDecision.reason}`

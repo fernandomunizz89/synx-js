@@ -4,6 +4,10 @@ export interface AgentRoleContractContext {
   stage: string;
   taskTypeHint?: TaskType | string;
   qaAttempt?: number;
+  /** Phase 4.3 — full agent chain as suggested by Dispatcher */
+  suggestedChain?: string[];
+  /** Phase 4.1 — pre-formatted project memory context string */
+  projectMemoryContext?: string;
 }
 
 const TEAM_OPERATING_MODEL = [
@@ -143,7 +147,7 @@ export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContr
     `- qaAttempt=${typeof context.qaAttempt === "number" ? context.qaAttempt : 0}`,
   ].join("\n");
 
-  return [
+  const sections = [
     TEAM_OPERATING_MODEL,
     "",
     ROLE_BY_AGENT[agent],
@@ -156,5 +160,22 @@ export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContr
     "- Avoid Loops: never repeat a failed strategy; pivot to a new approach when evidence dictates.",
     "",
     runtimeContext,
-  ].join("\n");
+  ];
+
+  // Phase 4.3 — Pipeline position
+  if (context.suggestedChain && context.suggestedChain.length > 0) {
+    const idx = context.suggestedChain.indexOf(agent as string);
+    const positionStr = idx >= 0
+      ? `You are step ${idx + 1} of ${context.suggestedChain.length} in this pipeline.`
+      : `You are part of a ${context.suggestedChain.length}-step pipeline.`;
+    const chainList = context.suggestedChain.map((a, i) => `  ${i + 1}. ${a}${i === idx ? " ← YOU" : ""}`).join("\n");
+    sections.push(`PIPELINE POSITION:\n${positionStr}\nFull chain:\n${chainList}`);
+  }
+
+  // Phase 4.1 — Project memory
+  if (context.projectMemoryContext) {
+    sections.push(`PROJECT MEMORY (established patterns and decisions):\n${context.projectMemoryContext}`);
+  }
+
+  return sections.join("\n");
 }
