@@ -104,4 +104,69 @@ describe("lib/ui/web-app", () => {
     expect(html).not.toContain("task-assistant.react.js");
     expect(html).not.toContain("react-task-assistant-root");
   });
+
+  // ── Phase 3 new UI features ──────────────────────────────────────────────────
+
+  it("Phase 3 — renders Metrics and Settings pages", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="page-metrics"');
+    expect(html).toContain('id="page-settings"');
+    expect(html).toContain('data-page="metrics"');
+    expect(html).toContain('data-page="settings"');
+    // Metrics cards
+    expect(html).toContain('id="m-tokens"');
+    expect(html).toContain('id="m-cost"');
+    expect(html).toContain('id="sparkline"');
+    // Settings sections
+    expect(html).toContain('id="cfg-providers-table"');
+    expect(html).toContain('id="cfg-threshold"');
+    expect(html).toContain('id="cfg-project-info"');
+    expect(html).toContain('id="settings-msg"');
+  });
+
+  it("Phase 3 — renders the task detail drawer", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="drawer"');
+    expect(html).toContain('id="drawer-title"');
+    expect(html).toContain('id="drawer-subtitle"');
+    expect(html).toContain('id="dtab-overview"');
+    expect(html).toContain('id="dtab-artifacts"');
+    expect(html).toContain('id="dtab-history"');
+    expect(html).toContain('id="drawer-overlay"');
+  });
+
+  it("Phase 3 — renders the new task modal", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="newtask-modal"');
+    expect(html).toContain('id="nt-title"');
+    expect(html).toContain('id="nt-desc"');
+    expect(html).toContain('id="nt-type"');
+    expect(html).toContain('id="nt-submit"');
+    expect(html).toContain('id="nt-err"');
+  });
+
+  it("Phase 3 — renders topbar extras (new-task button, notif bell, inline command)", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('class="btn-newtask"');
+    expect(html).toContain('id="btn-notif"');
+    expect(html).toContain('id="cmd-input"');
+    expect(html).toContain('id="cmd-out"');
+  });
+
+  it("Phase 3 — agent squad shows Code Reviewer and DevOps Expert", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('data-agent="Synx Code Reviewer"');
+    expect(html).toContain('data-agent="Synx DevOps Expert"');
+  });
+
+  it("Phase 3 — uses new API endpoints", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain("/api/config");
+    expect(html).toContain("/api/tasks/");
+    expect(html).toContain("/api/metrics/overview");
+    expect(html).toContain("/api/metrics/agents");
+    // runtime control uses dynamic path: '/api/runtime/' + cmd
+    expect(html).toContain("/api/runtime/");
+    expect(html).toContain("/api/command");
+  });
 });

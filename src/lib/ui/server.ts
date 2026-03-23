@@ -17,8 +17,10 @@ import {
 } from "../observability/analytics.js";
 import { parseHumanInputCommand, parseInlineCommand, type InlineCommand } from "../start-inline-command.js";
 import { runInlineCommand } from "../start/command-handler.js";
-import { exists, readText } from "../fs.js";
-import { taskDir } from "../paths.js";
+import { exists, listFiles, readJson, readText, writeJson } from "../fs.js";
+import { configDir, taskDir } from "../paths.js";
+import { loadGlobalConfig, loadLocalProjectConfig } from "../config.js";
+import { localProjectConfigSchema } from "../schema.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -465,6 +467,107 @@ export function createUiRequestHandler(options: {
             lines,
           },
         });
+        return;
+      }
+
+      // ── GET /api/config ───────────────────────────────────────────────────────
+      if (method === "GET" && pathname === "/api/config") {
+        const [global, local] = await Promise.all([
+          loadGlobalConfig().catch(() => null),
+          loadLocalProjectConfig().catch(() => null),
+        ]);
+        sendJson(res, 200, { ok: true, data: { global, local } });
+        return;
+      }
+
+      // ── POST /api/config ──────────────────────────────────────────────────────
+      if (method === "POST" && pathname === "/api/config") {
+        if (!options.enableMutations) {
+          sendJson(res, 405, { ok: false, error: "Mutating actions are disabled in read-only mode." });
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const projectConfigPath = `${configDir()}/project.json`;
+        let raw: Record<string, unknown> = {};
+        try {
+          raw = await readJson<Record<string, unknown>>(projectConfigPath);
+        } catch {
+          // file may not exist; will create/update
+        }
+        // Allow only safe runtime-settable fields
+        if ("autoApproveThreshold" in body) {
+          const v = body.autoApproveThreshold;
+          raw.autoApproveThreshold = typeof v === "number" ? Math.min(1, Math.max(0, v)) : undefined;
+          if (raw.autoApproveThreshold === undefined) delete raw.autoApproveThreshold;
+        }
+        const validated = localProjectConfigSchema.parse(raw);
+        await writeJson(projectConfigPath, validated);
+        sendJson(res, 200, { ok: true, data: validated });
+        return;
+      }
+
+      // ── GET /api/tasks/:id/files ───────────────────────────────────────────────
+      const taskFilesMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/files$/);
+      if (method === "GET" && taskFilesMatch) {
+        const taskId = decodeURIComponent(taskFilesMatch[1]);
+        await assertTaskExists(taskId);
+        const base = taskDir(taskId);
+        const listSafe = async (dir: string): Promise<string[]> => {
+          const full = `${base}/${dir}`;
+          if (!(await exists(full))) return [];
+          const files = await listFiles(full);
+          return files.map((f) => f.replace(full + "/", "").replace(full, "")).filter(Boolean);
+        };
+        const [doneFiles, viewFiles, artifactFiles] = await Promise.all([
+          listSafe("done"),
+          listSafe("views"),
+          listSafe("artifacts"),
+        ]);
+        sendJson(res, 200, { ok: true, data: { done: doneFiles, views: viewFiles, artifacts: artifactFiles } });
+        return;
+      }
+
+      // ── POST /api/tasks (individual task, not project) ────────────────────────
+      if (method === "POST" && pathname === "/api/tasks") {
+        if (!options.enableMutations) {
+          sendJson(res, 405, { ok: false, error: "Mutating actions are disabled in read-only mode." });
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const title = normalizeString(body.title);
+        const rawRequest = normalizeString(body.rawRequest || body.description);
+        const typeHint = normalizeString(body.typeHint) || "Feature";
+        const e2ePolicy = normalizeString(body.e2ePolicy) || "auto";
+        if (!title) {
+          sendJson(res, 400, { ok: false, error: "title is required." });
+          return;
+        }
+        if (!rawRequest) {
+          sendJson(res, 400, { ok: false, error: "rawRequest is required." });
+          return;
+        }
+        const validTypes = ["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed", "Project"];
+        const safeTypeHint = validTypes.includes(typeHint) ? typeHint : "Feature";
+        const relatedFiles = Array.isArray(body.relatedFiles)
+          ? (body.relatedFiles as unknown[]).map(String).filter(Boolean)
+          : [];
+        const notes = Array.isArray(body.notes)
+          ? (body.notes as unknown[]).map(String).filter(Boolean)
+          : [];
+        const project = normalizeString(body.project) || undefined;
+        const created = await createTaskService({
+          title,
+          typeHint: safeTypeHint as "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed" | "Project",
+          rawRequest,
+          project,
+          extraContext: {
+            relatedFiles,
+            logs: [],
+            notes,
+            qaPreferences: { e2ePolicy: e2ePolicy as "auto" | "required" | "skip", e2eFramework: "auto", objective: "" },
+          },
+        });
+        sendJson(res, 200, { ok: true, data: { taskId: created.taskId, taskPath: created.taskPath } });
         return;
       }
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import type { NewTaskInput } from "../types.js";
 import { startUiServer } from "./server.js";
+import { writeJson } from "../fs.js";
 
 const originalCwd = process.cwd();
 
@@ -165,6 +166,89 @@ describe.sequential("lib/ui/server", () => {
         body: JSON.stringify({}),
       });
       expect(approveResponse.status).toBe(405);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("Phase 3 — POST /api/tasks creates individual task and GET /api/tasks/:id/files lists artifacts", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: true,
+    });
+
+    try {
+      // POST /api/tasks — create individual task (pass project explicitly to skip config loading)
+      const createRes = await fetch(`${server.baseUrl}/api/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Fix login button focus ring",
+          rawRequest: "The login button has no visible focus ring, failing WCAG 2.1 AA.",
+          typeHint: "Bug",
+          e2ePolicy: "skip",
+          project: "phase3-test",
+        }),
+      });
+      expect(createRes.status).toBe(200);
+      const created = await createRes.json() as { ok: boolean; data: { taskId: string } };
+      expect(created.ok).toBe(true);
+      expect(typeof created.data.taskId).toBe("string");
+
+      // Verify meta was written correctly
+      const meta = await loadTaskMeta(created.data.taskId);
+      expect(meta.title).toBe("Fix login button focus ring");
+      expect(meta.type).toBe("Bug");
+
+      // GET /api/tasks/:id/files — lists done/views/artifacts dirs
+      const doneDir = path.join(fixture.repoRoot, ".ai-agents", "tasks", created.data.taskId, "done");
+      await fs.mkdir(doneDir, { recursive: true });
+      await writeJson(path.join(doneDir, "00-dispatcher.done.json"), { ok: true });
+
+      const filesRes = await fetch(`${server.baseUrl}/api/tasks/${encodeURIComponent(created.data.taskId)}/files`);
+      expect(filesRes.status).toBe(200);
+      const filesPayload = await filesRes.json() as { ok: boolean; data: { done: string[]; views: string[]; artifacts: string[] } };
+      expect(filesPayload.ok).toBe(true);
+      expect(filesPayload.data.done).toContain("00-dispatcher.done.json");
+      expect(Array.isArray(filesPayload.data.views)).toBe(true);
+      expect(Array.isArray(filesPayload.data.artifacts)).toBe(true);
+
+      // POST /api/tasks — missing title returns 400
+      const badRes = await fetch(`${server.baseUrl}/api/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rawRequest: "no title here" }),
+      });
+      expect(badRes.status).toBe(400);
+
+      // GET /api/config — returns global/local config (may be null if no config files)
+      const cfgRes = await fetch(`${server.baseUrl}/api/config`);
+      expect(cfgRes.status).toBe(200);
+      const cfgPayload = await cfgRes.json() as { ok: boolean; data: { global: unknown; local: unknown } };
+      expect(cfgPayload.ok).toBe(true);
+      expect("global" in cfgPayload.data).toBe(true);
+      expect("local" in cfgPayload.data).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("Phase 3 — POST /api/tasks blocked in read-only mode", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: false,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/api/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "test", rawRequest: "test" }),
+      });
+      expect(res.status).toBe(405);
     } finally {
       await server.close();
     }
