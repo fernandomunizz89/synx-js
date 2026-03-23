@@ -218,7 +218,30 @@ export const taskMetaSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   history: z.array(taskMetaHistoryItemSchema),
+  securityAuditRequired: z.boolean().optional(),
+  /** Phase 4.3 — persisted suggested chain from Dispatcher output */
+  suggestedChain: z.array(z.string()).optional(),
 });
+
+// ── Phase 4.1 — Project Memory ────────────────────────────────────────────────
+
+export const projectMemoryEntrySchema = z.object({
+  fact: z.string(),
+  source: z.string(),
+  addedAt: z.string(),
+});
+
+export const projectMemorySchema = z.object({
+  version: z.literal(1),
+  patterns: z.array(projectMemoryEntrySchema).default([]),
+  decisions: z.array(projectMemoryEntrySchema).default([]),
+  knownIssues: z.array(projectMemoryEntrySchema).default([]),
+  updatedAt: z.string(),
+});
+
+export type ProjectMemoryType = z.infer<typeof projectMemorySchema>;
+
+// ── Phase 4.3 — Enhanced Dispatcher Chain ─────────────────────────────────────
 
 export const dispatcherOutputSchema = z.object({
   type: taskTypeSchema,
@@ -240,6 +263,12 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx SEO Specialist"),
   ]).optional(),
   securityAuditRequired: z.boolean().optional(),
+  /**
+   * Phase 4.3 — Suggested ordered agent chain for this task.
+   * Example: ["Synx Back Expert", "Synx Code Reviewer", "Synx QA Engineer"]
+   * Injected into every expert's context so they know what comes next.
+   */
+  suggestedChain: z.array(z.string()).optional(),
   nextAgent: z.union([
     // Dream Stack 2026 – Expert Squad routing
     z.literal("Synx Front Expert"),

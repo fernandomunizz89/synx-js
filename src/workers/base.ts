@@ -440,16 +440,20 @@ export abstract class WorkerBase {
     task: NewTaskInput;
     request: StageEnvelope;
     previousStage: unknown | null;
+    /** Phase 4.3 — ordered agent pipeline suggested by the Dispatcher */
+    suggestedChain: string[] | undefined;
   }> {
-    const [task, previousStage] = await Promise.all([
+    const [task, previousStage, meta] = await Promise.all([
       this.loadTaskInput(taskId),
       this.loadReferencedInput(taskId, request),
+      loadTaskMeta(taskId),
     ]);
 
     return {
       task,
       request,
       previousStage,
+      suggestedChain: meta.suggestedChain,
     };
   }
 }

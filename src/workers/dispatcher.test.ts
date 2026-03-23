@@ -185,15 +185,185 @@ describe.sequential("workers/dispatcher", () => {
     });
 
     const dispatcher = new DispatcherWorker();
-    
+
     // 2. Act
     const processed = await dispatcher.tryProcess(task.taskId);
 
     // 3. Assert
     expect(processed).toBe(true);
-    
+
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_agent");
     expect(meta.nextAgent).toBe("Synx Back Expert");
+  });
+
+  // ── Phase 4.1 — Project Memory ─────────────────────────────────────────────
+
+  it("Phase 4.1 — injects project memory into model input when memory file exists", async () => {
+    // Pre-populate project memory file
+    await fs.mkdir(path.join(repoRoot, ".ai-agents", "memory"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, ".ai-agents", "memory", "project-memory.json"),
+      JSON.stringify({
+        version: 1,
+        patterns: [{ fact: "Always use TypeScript strict mode", source: "manual", addedAt: "" }],
+        decisions: [{ fact: "Chose Fastify over Express", source: "manual", addedAt: "" }],
+        knownIssues: [],
+        updatedAt: "",
+      }),
+      "utf-8",
+    );
+
+    let capturedInput: unknown = null;
+    const { createProvider } = await import("../providers/factory.js");
+    vi.mocked(createProvider).mockReturnValueOnce({
+      generateStructured: vi.fn().mockImplementation(async (req: { input: unknown }) => {
+        capturedInput = req.input;
+        return {
+          parsed: {
+            type: "Feature",
+            goal: "test memory",
+            context: "memory context",
+            knownFacts: [],
+            unknowns: [],
+            assumptions: [],
+            constraints: [],
+            requiresHumanInput: false,
+            nextAgent: "Synx Front Expert",
+          },
+          provider: "mock",
+          model: "mock",
+          parseRetries: 0,
+          estimatedTotalTokens: 0,
+        };
+      }),
+    } as any);
+
+    const task = await createTask({
+      title: "Memory test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Test memory injection",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "dispatcher",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Dispatcher",
+    });
+
+    await new DispatcherWorker().tryProcess(task.taskId);
+
+    // The model input must carry projectMemory
+    const input = capturedInput as { projectMemory?: { patterns: unknown[] } };
+    expect(input.projectMemory).toBeDefined();
+    expect(Array.isArray(input.projectMemory!.patterns)).toBe(true);
+    expect(input.projectMemory!.patterns).toHaveLength(1);
+  });
+
+  it("Phase 4.1 — proceeds normally when no memory file exists", async () => {
+    const task = await createTask({
+      title: "No memory test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Test with no memory",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "dispatcher",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Dispatcher",
+    });
+
+    const processed = await new DispatcherWorker().tryProcess(task.taskId);
+    expect(processed).toBe(true);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.nextAgent).toBe("Synx Front Expert");
+  });
+
+  // ── Phase 4.3 — Enhanced Dispatcher Chain ──────────────────────────────────
+
+  it("Phase 4.3 — persists suggestedChain to TaskMeta when dispatcher outputs it", async () => {
+    const { createProvider } = await import("../providers/factory.js");
+    vi.mocked(createProvider).mockReturnValueOnce({
+      generateStructured: vi.fn().mockResolvedValue({
+        parsed: {
+          type: "Feature",
+          goal: "add auth",
+          context: "full stack auth feature",
+          knownFacts: [],
+          unknowns: [],
+          assumptions: [],
+          constraints: [],
+          requiresHumanInput: false,
+          nextAgent: "Synx Back Expert",
+          suggestedChain: ["Synx Back Expert", "Synx Code Reviewer", "Synx QA Engineer"],
+        },
+        provider: "mock",
+        model: "mock",
+        parseRetries: 0,
+        estimatedTotalTokens: 0,
+      }),
+    } as any);
+
+    const task = await createTask({
+      title: "Add auth",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Add JWT auth",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "dispatcher",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Dispatcher",
+    });
+
+    await new DispatcherWorker().tryProcess(task.taskId);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.suggestedChain).toEqual([
+      "Synx Back Expert",
+      "Synx Code Reviewer",
+      "Synx QA Engineer",
+    ]);
+  });
+
+  it("Phase 4.3 — suggestedChain is absent from TaskMeta when dispatcher omits it", async () => {
+    const task = await createTask({
+      title: "Simple task",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "A simple feature",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "dispatcher",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Dispatcher",
+    });
+
+    await new DispatcherWorker().tryProcess(task.taskId);
+
+    const meta = await loadTaskMeta(task.taskId);
+    // Default mock doesn't output suggestedChain — should be undefined/empty
+    expect(meta.suggestedChain == null || meta.suggestedChain.length === 0).toBe(true);
   });
 });

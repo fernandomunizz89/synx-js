@@ -75,6 +75,23 @@ export interface PipelineStepResult {
 
 export type LearningOutcome = "approved" | "reproved";
 
+// ── Phase 4.1 — Project Memory ────────────────────────────────────────────────
+
+export interface ProjectMemoryEntry {
+  fact: string;
+  /** "manual" or the taskId that produced this fact */
+  source: string;
+  addedAt: string;
+}
+
+export interface ProjectMemory {
+  version: 1;
+  patterns: ProjectMemoryEntry[];
+  decisions: ProjectMemoryEntry[];
+  knownIssues: ProjectMemoryEntry[];
+  updatedAt: string;
+}
+
 /**
  * A single recorded outcome for one agent step.
  * Appended to .ai-agents/learnings/<agentId>.jsonl after task resolution.
@@ -231,6 +248,8 @@ export interface TaskMeta {
   updatedAt: string;
   history: TaskMetaHistoryItem[];
   securityAuditRequired?: boolean;
+  /** Phase 4.3 — ordered list of agents the Dispatcher suggests for this task */
+  suggestedChain?: string[];
 }
 
 export interface TimingEntry {

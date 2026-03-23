@@ -51,6 +51,11 @@ export function learningsDir(): string {
   return path.join(aiRoot(), "learnings");
 }
 
+/** Phase 4.1 — Project Memory */
+export function projectMemoryDir(): string {
+  return path.join(aiRoot(), "memory");
+}
+
 export function globalAiRoot(): string {
   return path.join(os.homedir(), ".ai-agents");
 }
