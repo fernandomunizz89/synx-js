@@ -4,10 +4,10 @@ import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootst
 import { configDir, globalConfigPath, repoRoot } from "../lib/paths.js";
 import { readJson, writeJson } from "../lib/fs.js";
 import { checkProviderHealth } from "../lib/provider-health.js";
-import { confirmAction, promptRequiredText, selectOption } from "../lib/interactive.js";
+import { confirmAction, promptRequiredText, promptTextWithDefault, selectOption } from "../lib/interactive.js";
 import { providerHealthToHuman } from "../lib/human-messages.js";
 import { commandExample } from "../lib/cli-command.js";
-import type { GlobalConfig, LocalProjectConfig, ProviderStageConfig } from "../lib/types.js";
+import type { AgentName, GlobalConfig, LocalProjectConfig, ProviderStageConfig } from "../lib/types.js";
 import {
   defaultOpenAiCompatibleFields,
   isProviderHealthy,
@@ -21,6 +21,77 @@ import {
 } from "../lib/setup-providers.js";
 
 type SetupProviderChoice = "mock" | "lm-studio" | "openai-compatible" | "google" | "anthropic";
+
+const EXPERT_AGENTS: Array<{ name: AgentName; label: string }> = [
+  { name: "Synx Front Expert", label: "Front Expert (Next.js, TailwindCSS)" },
+  { name: "Synx Mobile Expert", label: "Mobile Expert (Expo, React Native)" },
+  { name: "Synx Back Expert", label: "Back Expert (NestJS, Fastify, Prisma)" },
+  { name: "Synx QA Engineer", label: "QA Engineer (Playwright, Vitest)" },
+  { name: "Synx SEO Specialist", label: "SEO Specialist (Core Web Vitals)" },
+];
+
+async function chooseProvider(currentGlobal: GlobalConfig): Promise<ProviderStageConfig> {
+  const providerChoice = await selectOption<SetupProviderChoice>(
+    "Choose provider",
+    [
+      { value: "mock", label: "Mock (offline/demo mode)" },
+      { value: "lm-studio", label: "LM Studio (local OpenAI-compatible server)" },
+      { value: "openai-compatible", label: "OpenAI-compatible endpoint (remote or self-hosted)" },
+      { value: "google", label: "Google Generative AI (Gemini)", description: "Requires Google API key" },
+      { value: "anthropic", label: "Anthropic Claude", description: "Requires Anthropic API key" },
+    ],
+    "mock"
+  );
+
+  if (providerChoice === "mock") {
+    return { type: "mock", model: "mock-dispatcher-v1", ...defaultOpenAiCompatibleFields() };
+  } else if (providerChoice === "lm-studio") {
+    return configureLmStudio(currentGlobal);
+  } else if (providerChoice === "google") {
+    return configureGoogle(currentGlobal);
+  } else if (providerChoice === "anthropic") {
+    return configureAnthropic(currentGlobal);
+  } else {
+    return configureOpenAiCompatible(currentGlobal);
+  }
+}
+
+async function configureExpertProviders(
+  currentGlobal: GlobalConfig,
+  defaultProvider: ProviderStageConfig,
+  existingAgentProviders: Partial<Record<AgentName, ProviderStageConfig>>,
+): Promise<Partial<Record<AgentName, ProviderStageConfig>>> {
+  const result: Partial<Record<AgentName, ProviderStageConfig>> = { ...existingAgentProviders };
+
+  console.log("\nPer-expert provider configuration");
+  console.log(`Default (inherited from Dispatcher): ${defaultProvider.type} / ${defaultProvider.model}`);
+  console.log("Configure a different provider for any expert, or keep the default.");
+
+  for (const expert of EXPERT_AGENTS) {
+    const current = result[expert.name];
+    const currentLabel = current
+      ? `${current.type} / ${current.model}`
+      : `default (${defaultProvider.type} / ${defaultProvider.model})`;
+
+    const action = await selectOption<"keep" | "configure" | "reset">(
+      `${expert.label} — currently: ${currentLabel}`,
+      [
+        { value: "keep", label: "Keep current" },
+        { value: "configure", label: "Configure a different provider" },
+        ...(current ? [{ value: "reset" as const, label: "Reset to default" }] : []),
+      ],
+      "keep"
+    );
+
+    if (action === "configure") {
+      result[expert.name] = await chooseProvider(currentGlobal);
+    } else if (action === "reset") {
+      delete result[expert.name];
+    }
+  }
+
+  return result;
+}
 
 export const setupCommand = new Command("setup")
   .description("Guided setup for the current machine and repository")
@@ -114,6 +185,38 @@ export const setupCommand = new Command("setup")
       }
 
       if (dispatcherOk && plannerOk) {
+        const configureExperts = await confirmAction(
+          "Configure different providers for individual experts? (optional)",
+          false
+        );
+
+        if (configureExperts) {
+          nextGlobal.agentProviders = await configureExpertProviders(
+            currentGlobal,
+            nextGlobal.providers.dispatcher,
+            currentGlobal.agentProviders ?? {},
+          );
+        }
+
+        // Auto-approve threshold (optional)
+        const enableAutoApprove = await confirmAction(
+          "Enable auto-approve? (automatically approve tasks above a confidence threshold)",
+          false,
+        );
+        if (enableAutoApprove) {
+          const thresholdInput = await promptTextWithDefault(
+            "Auto-approve confidence threshold (0.0 to 1.0):",
+            "0.85",
+          );
+          const parsed = Number(thresholdInput);
+          if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
+            nextLocal.autoApproveThreshold = parsed;
+            console.log(`Auto-approve threshold set to ${parsed}`);
+          } else {
+            console.log("Invalid threshold value — auto-approve disabled.");
+          }
+        }
+
         await writeJson(globalPath, nextGlobal);
         await writeJson(projectPath, nextLocal);
         console.log("\nSetup complete.");

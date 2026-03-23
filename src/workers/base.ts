@@ -12,6 +12,8 @@ import { nowIso, sleep } from "../lib/utils.js";
 import { newTaskInputSchema, stageEnvelopeSchema } from "../lib/schema.js";
 import { clearTaskCancelRequest, isTaskCancelRequested, loadTaskCancelRequest } from "../lib/task-cancel.js";
 import { formatSynxStreamLog } from "../lib/synx-ui.js";
+import { loadLocalProjectConfig } from "../lib/config.js";
+import { approveTaskService } from "../lib/services/task-services.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -289,6 +291,35 @@ export abstract class WorkerBase {
     meta.humanApprovalRequired = args.humanApprovalRequired ?? false;
     meta.status = args.humanApprovalRequired ? "waiting_human" : args.nextAgent ? "waiting_agent" : "in_progress";
     await saveTaskMeta(args.taskId, meta);
+
+    // Auto-approve: if threshold is configured and dispatcher confidence is sufficient,
+    // approve automatically instead of waiting for human review.
+    if (meta.humanApprovalRequired && meta.status === "waiting_human") {
+      try {
+        const localConfig = await loadLocalProjectConfig().catch(() => null);
+        const threshold = localConfig?.autoApproveThreshold;
+        if (typeof threshold === "number") {
+          const dispatcherDoneFile = path.join(taskDir(args.taskId), "done", "00-dispatcher.done.json");
+          const dispatcherDone = await fs.readFile(dispatcherDoneFile, "utf8")
+            .then((text) => JSON.parse(text) as { output?: { confidenceScore?: unknown } })
+            .catch(() => null);
+          const confidenceScore = typeof dispatcherDone?.output?.confidenceScore === "number"
+            ? dispatcherDone.output.confidenceScore
+            : undefined;
+          if (typeof confidenceScore === "number" && confidenceScore >= threshold) {
+            await logTaskEvent(
+              taskDir(args.taskId),
+              `Auto-approved: confidenceScore ${confidenceScore} >= threshold ${threshold}`,
+            );
+            await logDaemon(`Auto-approve triggered for ${args.taskId}: score=${confidenceScore} threshold=${threshold}`);
+            await approveTaskService(args.taskId);
+            return;
+          }
+        }
+      } catch {
+        // Auto-approve failure should not block the stage completion
+      }
+    }
     await logRuntimeEvent({
       event: meta.status === "waiting_human" ? "task.review_required" : "task.updated",
       source: "worker-base",
