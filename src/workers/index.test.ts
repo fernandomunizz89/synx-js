@@ -23,6 +23,7 @@ describe.sequential("workers/index", () => {
   // Dream Stack 2026 – Squad Factory
   it("registers the Dream Stack 2026 squad in expected orchestration order", () => {
     expect(workerList.map((worker) => worker.agent)).toEqual([
+      "Project Orchestrator",
       "Dispatcher",
       "Synx Front Expert",
       "Synx Mobile Expert",

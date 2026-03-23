@@ -6,10 +6,12 @@ import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
 import { SynxSeoSpecialist } from "./experts/synx-seo-specialist.js";
 import { GenericAgent } from "./generic-agent.js";
 import { PipelineExecutor } from "./pipeline-executor.js";
+import { ProjectOrchestrator } from "./project-orchestrator.js";
 import { loadAgentDefinitions } from "../lib/agent-registry.js";
 import type { WorkerBase } from "./base.js";
 
 export const workers = {
+  projectOrchestrator: new ProjectOrchestrator(),
   dispatcher: new DispatcherWorker(),
   front: new SynxFrontExpert(),
   mobile: new SynxMobileExpert(),
