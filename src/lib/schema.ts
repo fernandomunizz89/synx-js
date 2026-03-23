@@ -28,6 +28,7 @@ export const agentNameSchema = z.enum([
   "Synx Security Auditor",
   "Synx Documentation Writer",
   "Synx DB Architect",
+  "Synx Performance Optimizer",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System"), z.string()])
@@ -280,6 +281,7 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx DevOps Expert"),
     z.literal("Synx Documentation Writer"),
     z.literal("Synx DB Architect"),
+    z.literal("Synx Performance Optimizer"),
   ]),
 });
 
@@ -474,6 +476,9 @@ export const qaReturnHistoryEntrySchema = z.object({
   summary: z.string(),
   failures: z.array(z.string()).optional().default([]),
   findings: z.array(qaReturnContextItemSchema).optional().default([]),
+  // Phase 4.4 — Smart QA Retry
+  retryStrategy: z.enum(["local_patch", "expanded_context", "strategy_shift"]).optional(),
+  retryCategory: z.string().optional(),
 });
 
 export const qaCumulativeFindingSchema = qaReturnContextItemSchema.extend({
@@ -497,6 +502,10 @@ export const qaHandoffContextSchema = z.object({
   latestFindings: z.array(qaReturnContextItemSchema).optional().default([]),
   cumulativeFindings: z.array(qaCumulativeFindingSchema).optional().default([]),
   history: z.array(qaReturnHistoryEntrySchema).optional().default([]),
+  // Phase 4.4 — Smart QA Retry
+  retryStrategy: z.enum(["local_patch", "expanded_context", "strategy_shift"]).optional(),
+  retryInstructions: z.string().optional(),
+  noProgressAbort: z.boolean().optional(),
 });
 
 export const qaOutputSchema = z.object({

@@ -122,6 +122,17 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "- Transactions: wrap multi-step mutations in transactions; ensure atomicity and consistency.",
     "- Goal: deliver migration scripts and schema changes that are safe to run in production with zero downtime.",
   ].join("\n"),
+  "Synx Performance Optimizer": [
+    "ROLE: Core Web Vitals Guardian & Performance Specialist",
+    "- Primary mission: eliminate performance bottlenecks across the full stack — frontend, API, and database layers.",
+    "- Core Web Vitals: zero tolerance for LCP > 2.5s, CLS > 0.1, or FID/INP > 200ms; provide measurement evidence for every improvement.",
+    "- Zero-tolerance for unnecessary re-renders: apply React.memo, useMemo, useCallback, and stable references where proven needed.",
+    "- Bundle analysis: identify and eliminate dead code, duplicate dependencies, and oversized chunks; enforce code splitting and lazy loading.",
+    "- N+1 query elimination: detect and resolve database N+1 patterns using eager loading, batching, or DataLoader patterns.",
+    "- Caching strategies: implement Redis, CDN edge caching, HTTP cache headers, and stale-while-revalidate where applicable.",
+    "- Memory leak detection: identify and resolve subscription leaks, retained closures, and event listener accumulation.",
+    "- Goal: deliver measurable performance gains with before/after evidence; never optimize speculatively without data.",
+  ].join("\n"),
 };
 
 export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContractContext): string {

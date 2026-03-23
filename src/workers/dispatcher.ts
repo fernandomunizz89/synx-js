@@ -84,6 +84,8 @@ export class DispatcherWorker extends WorkerBase {
       "Synx Documentation Writer": { stage: "synx-docs-writer",    fileName: STAGE_FILE_NAMES.synxDocsWriter },
       // Phase 2.5
       "Synx DB Architect":         { stage: "synx-db-architect",   fileName: STAGE_FILE_NAMES.synxDbArchitect },
+      // Phase 2.6
+      "Synx Performance Optimizer": { stage: "synx-performance-optimizer", fileName: STAGE_FILE_NAMES.synxPerfOptimizer },
     };
     const routing = stageMap[nextAgent] ?? { stage: "synx-front-expert", fileName: STAGE_FILE_NAMES.synxFrontExpert };
     const nextStage = routing.stage;

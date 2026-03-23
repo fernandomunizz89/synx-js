@@ -24,7 +24,8 @@ export type AgentName =
   | "Synx DevOps Expert"
   | "Synx Security Auditor"
   | "Synx Documentation Writer"
-  | "Synx DB Architect";
+  | "Synx DB Architect"
+  | "Synx Performance Optimizer";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
 

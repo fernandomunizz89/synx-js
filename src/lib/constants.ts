@@ -29,6 +29,8 @@ export const STAGE_FILE_NAMES = {
   synxDocsWriter:        "04-synx-docs-writer.request.json",
   // Phase 2.5
   synxDbArchitect:       "04-synx-db-architect.request.json",
+  // Phase 2.6
+  synxPerfOptimizer:     "04-synx-performance-optimizer.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -47,6 +49,8 @@ export const DONE_FILE_NAMES = {
   synxDocsWriter:        "04-synx-docs-writer.done.json",
   // Phase 2.5
   synxDbArchitect:       "04-synx-db-architect.done.json",
+  // Phase 2.6
+  synxPerfOptimizer:     "04-synx-performance-optimizer.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [
@@ -67,4 +71,6 @@ export const REQUIRED_PROMPT_FILES = [
   "synx-docs-writer.md",
   // Phase 2.5 (optional – built-in default used when absent)
   "synx-db-architect.md",
+  // Phase 2.6 (optional – built-in default used when absent)
+  "synx-performance-optimizer.md",
 ] as const;

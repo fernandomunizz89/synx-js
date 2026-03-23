@@ -21,6 +21,9 @@ export interface QaReturnHistoryEntry {
   summary: string;
   failures: string[];
   findings: QaReturnContextItem[];
+  // Phase 4.4 — Smart QA Retry
+  retryStrategy?: "local_patch" | "expanded_context" | "strategy_shift";
+  retryCategory?: string;
 }
 
 export interface QaCumulativeFinding extends QaReturnContextItem {
@@ -37,6 +40,10 @@ export interface QaHandoffContext {
   latestFindings: QaReturnContextItem[];
   cumulativeFindings: QaCumulativeFinding[];
   history: QaReturnHistoryEntry[];
+  // Phase 4.4 — Smart QA Retry
+  retryStrategy?: "local_patch" | "expanded_context" | "strategy_shift";
+  retryInstructions?: string;
+  noProgressAbort?: boolean;
 }
 
 export interface CheckLike {
