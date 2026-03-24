@@ -429,6 +429,25 @@ Exit criteria:
 
 - the system gets measurably better at choosing plans, agents, and verification strategies
 
+Implementation notes (2026-03-24):
+
+- Unified learning capture now records outcomes for:
+  - standard built-in tasks
+  - project-intake tasks
+  - project child subtasks
+  - pipeline steps
+- Learning entries now include workflow and task metadata:
+  - `workflow`, `taskType`, `sourceKind`, `project`, `rootProjectId`, `parentTaskId`, `stage`, `capabilities`
+- Routing now uses capability-level quality feedback in scoring:
+  - `capabilityApprovalRate` signal added to capability routing scores
+- Project Orchestrator now consumes its own recent learning history during:
+  - pre-build planning prompt
+  - decomposition prompt
+- Collaboration metrics now expose:
+  - agent-level quality metrics
+  - capability-level quality metrics
+  - project-level quality metrics (`decompositionQuality`, `reworkRate`, `qaReturnRate`, `humanInterventionRate`, `deliveryLeadTimeMs`)
+
 ### Phase 8 - Open an External Control Plane
 
 Goal:

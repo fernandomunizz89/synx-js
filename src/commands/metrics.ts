@@ -61,6 +61,29 @@ export const metricsCommand = new Command("metrics")
     console.log("\nCollaboration quality");
     console.log(`- Useful logs: ${report.collaboration.logsUseful} | informative logs: ${report.collaboration.logsInformative} | useful ratio: ${pct(report.collaboration.usefulLogRatio)}`);
     console.log(`- Loop totals: QA returns=${report.collaboration.loopsByType.qaReturnsTotal} | quality-repair retries=${report.collaboration.loopsByType.qualityRepairRetriesTotal}`);
+    const topAgentLearning = report.learningQuality.agents[0];
+    const topCapabilityLearning = report.learningQuality.capabilities[0];
+    if (topAgentLearning || topCapabilityLearning) {
+      console.log("- Learning quality:");
+      if (topAgentLearning) {
+        console.log(`  top agent=${topAgentLearning.agent} (approval ${pct(topAgentLearning.approvalRate)} on ${topAgentLearning.total} outcomes)`);
+      }
+      if (topCapabilityLearning) {
+        console.log(`  top capability=${topCapabilityLearning.capability} (approval ${pct(topCapabilityLearning.approvalRate)} on ${topCapabilityLearning.total} outcomes)`);
+      }
+    } else {
+      console.log("- Learning quality: no learning outcomes recorded in this window");
+    }
+
+    console.log("\nProject quality");
+    console.log(`- Projects tracked: ${report.projectQuality.overall.projects}`);
+    console.log(`- Avg decomposition quality: ${pct(report.projectQuality.overall.avgDecompositionQuality)}`);
+    console.log(`- Avg rework rate: ${pct(report.projectQuality.overall.avgReworkRate)} | avg QA return rate: ${pct(report.projectQuality.overall.avgQaReturnRate)}`);
+    console.log(`- Avg human intervention rate: ${pct(report.projectQuality.overall.avgHumanInterventionRate)} | avg lead time: ${report.projectQuality.overall.avgDeliveryLeadTimeMs}ms`);
+    if (report.projectQuality.projects.length) {
+      const riskiestProject = report.projectQuality.projects[0];
+      console.log(`- Highest rework project: ${riskiestProject.project} (rework ${pct(riskiestProject.reworkRate)}, decomposition ${pct(riskiestProject.decompositionQuality)})`);
+    }
 
     console.log("\nBottlenecks");
     console.log(`- Top stage: ${report.bottlenecks.topStage} (avg ${report.bottlenecks.topStageAvgMs}ms)`);

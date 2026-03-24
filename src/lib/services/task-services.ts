@@ -1,8 +1,8 @@
 import path from "node:path";
 import { STAGE_FILE_NAMES, DONE_FILE_NAMES } from "../constants.js";
 import { loadResolvedProjectConfig } from "../config.js";
-import { writeJson } from "../fs.js";
-import { recordPipelineApproval, recordPipelineReproval } from "../learnings.js";
+import { exists, listFiles, readJson, writeJson } from "../fs.js";
+import { recordPipelineApproval, recordPipelineReproval, recordTaskOutcomeLearning } from "../learnings.js";
 import { logRuntimeEvent, logTaskEvent } from "../logging.js";
 import { taskDir, repoRoot } from "../paths.js";
 import { loadPipelineState } from "../pipeline-state.js";
@@ -54,6 +54,42 @@ function normalizeProjectName(value: string | undefined): string {
 function inferProjectFromRepository(): string {
   const repo = path.basename(repoRoot()).trim();
   return repo || "workspace";
+}
+
+async function findPreviousDecisionAt(taskId: string, beforeIso: string): Promise<string | undefined> {
+  const humanDir = path.join(taskDir(taskId), "human");
+  if (!(await exists(humanDir))) return undefined;
+
+  const beforeMs = Date.parse(beforeIso);
+  if (!Number.isFinite(beforeMs)) return undefined;
+
+  let files: string[] = [];
+  try {
+    files = await listFiles(humanDir);
+  } catch {
+    return undefined;
+  }
+
+  let best: string | undefined;
+  let bestMs = Number.NEGATIVE_INFINITY;
+  for (const file of files) {
+    if (!/^90-final-review\.(approved|reproved)\.json$/.test(file)) continue;
+    try {
+      const record = await readJson<{ createdAt?: string }>(path.join(humanDir, file));
+      const createdAt = String(record.createdAt || "").trim();
+      const createdAtMs = Date.parse(createdAt);
+      if (!Number.isFinite(createdAtMs)) continue;
+      if (createdAtMs >= beforeMs) continue;
+      if (createdAtMs > bestMs) {
+        best = createdAt;
+        bestMs = createdAtMs;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return best;
 }
 
 export async function resolveProjectName(project: string | undefined): Promise<{ project: string; source: ProjectSource }> {
@@ -152,6 +188,7 @@ export async function approveTaskService(taskId: string): Promise<void> {
   }
 
   const createdAt = nowIso();
+  const previousDecisionAt = await findPreviousDecisionAt(taskId, createdAt);
   meta.status = "done";
   meta.currentStage = "approved";
   meta.currentAgent = "Human Review";
@@ -187,11 +224,27 @@ export async function approveTaskService(taskId: string): Promise<void> {
     },
   });
 
+  let pipelineRecorded = false;
   try {
     const pipelineState = await loadPipelineState(taskId);
     await recordPipelineApproval(taskId, pipelineState.pipelineId, pipelineState.completedSteps);
+    pipelineRecorded = true;
   } catch {
-    // Not a pipeline task or state unavailable — skip learning record.
+    // Non-pipeline task.
+  }
+  if (!pipelineRecorded) {
+    await recordTaskOutcomeLearning({
+      taskId,
+      taskType: meta.type,
+      sourceKind: meta.sourceKind,
+      project: meta.project,
+      history: meta.history,
+      outcome: "approved",
+      decidedAt: createdAt,
+      rootProjectId: meta.rootProjectId,
+      parentTaskId: meta.parentTaskId,
+      previousDecisionAt,
+    });
   }
 
   // Phase 5 — webhook delivery (best-effort)
@@ -212,6 +265,7 @@ export async function reproveTaskService(args: {
 
   const target = remediationTarget(meta.type);
   const createdAt = nowIso();
+  const previousDecisionAt = await findPreviousDecisionAt(args.taskId, createdAt);
   const reason = String(args.reason || "").trim();
   const rollbackMode = args.rollbackMode || "none";
   const rollbackStep = String(args.rollbackStep || "").trim();
@@ -277,11 +331,28 @@ export async function reproveTaskService(args: {
     },
   });
 
+  let pipelineRecorded = false;
   try {
     const pipelineState = await loadPipelineState(args.taskId);
     await recordPipelineReproval(args.taskId, pipelineState.pipelineId, pipelineState.completedSteps, reason);
+    pipelineRecorded = true;
   } catch {
-    // Not a pipeline task or state unavailable — skip learning record.
+    // Non-pipeline task.
+  }
+  if (!pipelineRecorded) {
+    await recordTaskOutcomeLearning({
+      taskId: args.taskId,
+      taskType: meta.type,
+      sourceKind: meta.sourceKind,
+      project: meta.project,
+      history: meta.history,
+      outcome: "reproved",
+      decidedAt: createdAt,
+      reproveReason: reason,
+      rootProjectId: meta.rootProjectId,
+      parentTaskId: meta.parentTaskId,
+      previousDecisionAt,
+    });
   }
 
   // Phase 5 — webhook delivery (best-effort)

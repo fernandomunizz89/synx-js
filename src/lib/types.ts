@@ -101,6 +101,7 @@ export interface PipelineStepResult {
 }
 
 export type LearningOutcome = "approved" | "reproved";
+export type LearningWorkflow = "pipeline" | "standalone" | "project-intake" | "project-subtask";
 
 // ── Phase 4.1 — Project Memory ────────────────────────────────────────────────
 
@@ -131,6 +132,14 @@ export interface LearningEntry {
   /** Short description of what the agent produced (from output.summary) */
   summary: string;
   outcome: LearningOutcome;
+  workflow?: LearningWorkflow;
+  taskType?: TaskType;
+  sourceKind?: TaskSourceKind;
+  project?: string;
+  rootProjectId?: string;
+  parentTaskId?: string;
+  stage?: string;
+  capabilities?: string[];
   /** Set when the task was reproved; contains the human's feedback */
   reproveReason?: string;
   pipelineId?: string;

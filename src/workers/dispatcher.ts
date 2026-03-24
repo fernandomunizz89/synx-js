@@ -100,8 +100,9 @@ ${routingDecision.candidates.slice(0, 3).map((candidate, index) => {
   const stack = candidate.score.projectStackMatch.toFixed(2);
   const taskType = candidate.score.taskTypeMatch.toFixed(2);
   const quality = candidate.score.approvalRate.toFixed(2);
+  const capQuality = candidate.score.capabilityApprovalRate.toFixed(2);
   const failure = candidate.score.recentFailurePattern.toFixed(2);
-  return `  ${index + 1}. ${candidate.agentName} — total=${total} (cap=${capability}, stack=${stack}, type=${taskType}, approval=${quality}, failure=${failure})`;
+  return `  ${index + 1}. ${candidate.agentName} — total=${total} (cap=${capability}, stack=${stack}, type=${taskType}, approval=${quality}, capApproval=${capQuality}, failure=${failure})`;
 }).join("\n")}`;
 
     const view = `# HANDOFF

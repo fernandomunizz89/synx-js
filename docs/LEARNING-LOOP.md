@@ -2,7 +2,8 @@
 
 ## Overview
 
-The learning loop gives pipeline agents a memory of their past performance.
+The learning loop gives Synx agents a memory of their past performance across
+standard tasks, project workflows, and pipelines.
 After every human decision (`approve` or `reprove`), Synx records what the agent
 produced and what the outcome was. Before the next task, that history is injected
 back into the agent's system prompt so it can build on successes and address failures.
@@ -19,8 +20,14 @@ Execute → Human reviews → Record outcome → Inject into next prompt → Exe
 
 ### 1. Execution
 
-When you run a pipeline task (`synx pipeline run <pipeline-id>`), the Pipeline
-Executor processes each step sequentially. Before calling the LLM for a step it:
+When Synx runs a task workflow, learning is used in two ways:
+
+1. Pipeline steps (`synx pipeline run <pipeline-id>`) load recent learnings for
+   the current step agent before each model call.
+2. Project planning (`Project Orchestrator`) loads recent orchestrator learnings
+   before generating planning and decomposition outputs.
+
+For pipeline steps, before calling the LLM it:
 
 1. Loads the **5 most recent** learning entries for that agent from disk.
 2. Formats them into a markdown *"Your recent performance"* section.
@@ -30,8 +37,11 @@ The agent receives full context about its own track record and can adjust accord
 
 ### 2. Recording on approval (`synx approve`)
 
-When you approve a pipeline task, Synx writes **one `LearningEntry` per completed
-step** — every agent that contributed gets a positive record.
+When you approve a task, Synx records outcomes:
+
+- **Pipeline tasks:** one `LearningEntry` per completed step.
+- **Standard/project tasks:** one `LearningEntry` per completed non-human stage
+  since the previous human decision.
 
 ```
 Pipeline: analyst → builder → qa-engineer
@@ -41,9 +51,11 @@ Pipeline: analyst → builder → qa-engineer
 
 ### 3. Recording on reproval (`synx reprove`)
 
-When you reprove a pipeline task, Synx writes **one entry for the last completed
-step only** — the agent that produced the output you rejected — and attaches your
-rejection reason as feedback.
+When you reprove a task, Synx records outcomes:
+
+- **Pipeline tasks:** one entry for the last completed pipeline step.
+- **Standard/project tasks:** one entry for the last completed non-human stage
+  since the previous human decision.
 
 ```
 Pipeline: analyst → builder → qa-engineer
@@ -103,6 +115,14 @@ Each line in a `.jsonl` file is a single JSON object (`LearningEntry`):
 | `agentId` | `string` | Agent that ran the step |
 | `summary` | `string` | What the agent produced (from `output.summary`) |
 | `outcome` | `"approved" \| "reproved"` | Human decision |
+| `workflow` | `"pipeline" \| "standalone" \| "project-intake" \| "project-subtask"` | Workflow source |
+| `taskType` | `TaskType?` | Task type associated with the outcome |
+| `sourceKind` | `TaskSourceKind?` | Source classification (`standalone`, `project-intake`, `project-subtask`) |
+| `project` | `string?` | Project name |
+| `rootProjectId` | `string?` | Root project task identifier |
+| `parentTaskId` | `string?` | Parent task identifier for subtasks |
+| `stage` | `string?` | Stage where the recorded outcome came from |
+| `capabilities` | `string[]?` | Capability tags attributed to the agent/stage |
 | `reproveReason` | `string?` | Human's feedback — present on reproved entries only |
 | `pipelineId` | `string?` | Pipeline definition that was used |
 | `stepIndex` | `number?` | Position of this step within the pipeline |
@@ -191,9 +211,16 @@ Agent: analyst
 
 ## Scope
 
-Learning recording applies **only to pipeline tasks** — tasks started with
-`synx pipeline run`. Approving or reproving a regular task (standard Synx
-workflow) has no effect on the learnings store.
+Learning recording applies to:
+
+- pipeline tasks
+- standard built-in task workflows
+- project-intake tasks and project subtasks
+
+Prompt-side injection currently runs in:
+
+- pipeline step execution
+- Project Orchestrator planning/decomposition prompts
 
 ---
 

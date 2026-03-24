@@ -11,9 +11,50 @@ import path from "node:path";
 import { learningEntrySchema } from "./schema.js";
 import { learningsDir } from "./paths.js";
 import { nowIso } from "./utils.js";
-import type { LearningEntry, LearningOutcome, PipelineStepContext } from "./types.js";
+import type {
+  LearningEntry,
+  LearningOutcome,
+  LearningWorkflow,
+  PipelineStepContext,
+  TaskMetaHistoryItem,
+  TaskSourceKind,
+  TaskType,
+} from "./types.js";
 
 export { type LearningEntry };
+
+const BUILTIN_AGENT_CAPABILITY_TAGS: Record<string, string[]> = {
+  dispatcher: ["routing", "triage", "capability-routing"],
+  "project-orchestrator": ["project-planning", "decomposition", "delivery-planning"],
+  "synx-front-expert": ["frontend", "ui", "web", "react", "nextjs"],
+  "synx-mobile-expert": ["mobile", "react-native", "expo", "ios", "android"],
+  "synx-back-expert": ["backend", "api", "database", "server"],
+  "synx-qa-engineer": ["qa", "testing", "verification", "validation"],
+  "synx-seo-specialist": ["seo", "metadata", "search"],
+  "synx-code-reviewer": ["review", "code-quality", "maintainability"],
+  "synx-devops-expert": ["devops", "ci", "cd", "infrastructure"],
+  "synx-security-auditor": ["security", "auth", "vulnerability"],
+  "synx-documentation-writer": ["documentation", "guides", "readme"],
+  "synx-db-architect": ["database", "schema", "sql", "migration"],
+  "synx-performance-optimizer": ["performance", "latency", "optimization"],
+  "synx-release-manager": ["release", "delivery", "deployment", "rollback"],
+  "synx-incident-triage": ["incident", "triage", "stabilization"],
+  "synx-customer-feedback-synthesizer": ["feedback", "post-release", "customer-impact"],
+};
+
+export interface TaskOutcomeLearningInput {
+  taskId: string;
+  taskType: TaskType;
+  sourceKind: TaskSourceKind;
+  project: string;
+  history: TaskMetaHistoryItem[];
+  outcome: LearningOutcome;
+  decidedAt?: string;
+  reproveReason?: string;
+  rootProjectId?: string;
+  parentTaskId?: string;
+  previousDecisionAt?: string;
+}
 
 // ─── File helpers ─────────────────────────────────────────────────────────────
 
@@ -32,12 +73,90 @@ export function learningFilePath(agentId: string): string {
   return path.join(learningsDir(), `${agentToFileName(agentId)}.jsonl`);
 }
 
+function parseMs(value: string | undefined): number | null {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function summarizeHistoryItem(item: TaskMetaHistoryItem): string {
+  const stage = String(item.stage || "").trim() || "unknown-stage";
+  const durationMs = Number(item.durationMs || 0);
+  if (durationMs > 0) return `${stage} completed in ${durationMs}ms`;
+  return `${stage} completed`;
+}
+
+function workflowFromSourceKind(sourceKind: TaskSourceKind): LearningWorkflow {
+  if (sourceKind === "project-intake") return "project-intake";
+  if (sourceKind === "project-subtask") return "project-subtask";
+  return "standalone";
+}
+
+export function inferCapabilityTagsForAgent(agentId: string): string[] {
+  const key = agentToFileName(agentId);
+  const tags = BUILTIN_AGENT_CAPABILITY_TAGS[key] || [];
+  if (!tags.length) return [];
+  return Array.from(new Set(tags.map((tag) => String(tag || "").trim().toLowerCase()).filter(Boolean)));
+}
+
+function eligibleHistorySince(
+  history: TaskMetaHistoryItem[],
+  previousDecisionAt: string | undefined,
+): TaskMetaHistoryItem[] {
+  const previousDecisionMs = parseMs(previousDecisionAt);
+  const filtered = history
+    .filter((item) => String(item.agent || "").trim().toLowerCase() !== "human review")
+    .filter((item) => {
+      if (previousDecisionMs === null) return true;
+      const endedAtMs = parseMs(item.endedAt);
+      if (endedAtMs === null) return false;
+      return endedAtMs > previousDecisionMs;
+    });
+
+  if (filtered.length) return filtered;
+
+  const nonHuman = history.filter((item) => String(item.agent || "").trim().toLowerCase() !== "human review");
+  if (!nonHuman.length) return [];
+  return [nonHuman[nonHuman.length - 1]];
+}
+
 // ─── Write ────────────────────────────────────────────────────────────────────
 
 export async function recordLearning(entry: LearningEntry): Promise<void> {
   const dir = learningsDir();
   await fs.mkdir(dir, { recursive: true });
   await fs.appendFile(learningFilePath(entry.agentId), JSON.stringify(entry) + "\n", "utf8");
+}
+
+export async function recordTaskOutcomeLearning(input: TaskOutcomeLearningInput): Promise<void> {
+  const candidates = eligibleHistorySince(input.history, input.previousDecisionAt);
+  if (!candidates.length) return;
+
+  const workflow = workflowFromSourceKind(input.sourceKind);
+  const timestamp = input.decidedAt || nowIso();
+  const selected = input.outcome === "approved" ? candidates : [candidates[candidates.length - 1]];
+
+  await Promise.all(
+    selected.map((item) =>
+      recordLearning({
+        timestamp,
+        taskId: input.taskId,
+        agentId: String(item.agent || "Unknown"),
+        summary: summarizeHistoryItem(item),
+        outcome: input.outcome,
+        workflow,
+        taskType: input.taskType,
+        sourceKind: input.sourceKind,
+        project: input.project,
+        rootProjectId: input.rootProjectId,
+        parentTaskId: input.parentTaskId,
+        stage: item.stage,
+        capabilities: inferCapabilityTagsForAgent(String(item.agent || "")),
+        reproveReason: input.outcome === "reproved" ? input.reproveReason : undefined,
+        provider: item.provider,
+        model: item.model,
+      }),
+    ),
+  );
 }
 
 /**
@@ -57,8 +176,10 @@ export async function recordPipelineApproval(
         agentId: step.agent,
         summary: step.summary,
         outcome: "approved",
+        workflow: "pipeline",
         pipelineId,
         stepIndex: step.stepIndex,
+        capabilities: inferCapabilityTagsForAgent(step.agent),
         provider: step.provider,
         model: step.model,
       }),
@@ -83,9 +204,11 @@ export async function recordPipelineReproval(
     agentId: lastStep.agent,
     summary: lastStep.summary,
     outcome: "reproved",
+    workflow: "pipeline",
     reproveReason,
     pipelineId,
     stepIndex: lastStep.stepIndex,
+    capabilities: inferCapabilityTagsForAgent(lastStep.agent),
     provider: lastStep.provider,
     model: lastStep.model,
   });
@@ -140,7 +263,8 @@ export function buildLearningsPromptSection(entries: LearningEntry[]): string {
     const date = e.timestamp.slice(0, 10);
     const icon = e.outcome === "approved" ? "✅" : "❌";
     const label = e.outcome === "approved" ? "Approved" : "Reproved";
-    let text = `${i + 1}. [${date}] ${icon} ${label} — Task: ${e.taskId}\n   Output: "${e.summary}"`;
+    const workflow = e.workflow ? ` | Workflow: ${e.workflow}` : "";
+    let text = `${i + 1}. [${date}] ${icon} ${label} — Task: ${e.taskId}${workflow}\n   Output: "${e.summary}"`;
     if (e.outcome === "reproved" && e.reproveReason) {
       text += `\n   Feedback: "${e.reproveReason}"`;
     }
