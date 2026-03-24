@@ -91,7 +91,7 @@ describe.sequential("workers/dispatcher", () => {
     if (root) await fs.rm(root, { recursive: true, force: true });
   });
 
-  it("processes a feature request and routes to planner", async () => {
+  it("processes a feature request and routes to the selected expert", async () => {
     // 1. Arrange
     const { createProvider } = await import("../providers/factory.js");
     vi.mocked(createProvider).mockReturnValue({

@@ -15,7 +15,7 @@
 SYNX is a CLI orchestrator for a multi-agent AI pipeline. It manages autonomous software development tasks inside local repositories using a file-driven, stage-based approach.
 
 **Dream Stack 2026 – Active Architecture:**
-The engine runs a specialized squad of domain experts. The Dispatcher triages each task and routes it directly to the right expert.
+Project prompts are first decomposed by the Project Orchestrator; single tasks are triaged by the Dispatcher and routed directly to the right expert.
 
 Expert Squad:
 - `Synx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
@@ -41,7 +41,7 @@ You can now configure a specific model for each agent and connect to external pr
 
 ## 📖 Overview
 
-SYNX orchestrates a squad of specialized AI agents that work autonomously inside your repo. Each task is triaged by the Dispatcher and routed to the right domain expert — front-end, mobile, back-end, or SEO — before reaching the QA Engineer for validation.
+SYNX orchestrates a squad of specialized AI agents that work autonomously inside your repo. Project prompts go through Project Intake (`Project Orchestrator`) to create subtasks. Individual tasks go directly through the Dispatcher, then to the right domain expert — front-end, mobile, back-end, SEO, and others — before QA and human review.
 
 The pipeline is file-driven: every stage writes a JSON handoff to `.ai-agents/tasks/<task-id>/`, enabling crash recovery, auditing, and human review at any point.
 
@@ -122,7 +122,7 @@ Three tabs:
 - **Review** — focused queue of tasks waiting for your decision.
 - **Stream** — real-time SSE event log.
 
-The **prompt bar** at the top lets you describe a feature or project in plain text. SYNX creates all necessary subtasks automatically and runs them in parallel.
+The **prompt bar** at the top lets you describe a feature or project in plain text. SYNX creates project subtasks automatically and runs them in parallel.
 
 ---
 
@@ -187,17 +187,29 @@ synx metrics --since 2026-03-16T00:00:00Z
 
 ## 🧠 Architecture — Dream Stack 2026
 
-SYNX uses a two-layer model: the Project Orchestrator breaks high-level requests into subtasks, then the Dispatcher routes each subtask to the right expert.
+SYNX uses a project-intake + execution model: the Project Orchestrator breaks high-level requests into subtasks, then the Dispatcher routes each subtask to the right expert.
+
+### Official Vocabulary
+
+- `project`: a high-level prompt that may produce multiple implementation subtasks.
+- `epic`: a thematic slice of a project (tracked by convention today; first-class graph support is planned).
+- `task`: one executable unit with its own task folder under `.ai-agents/tasks/<task-id>/`.
+- `subtask`: a task created by Project Orchestrator from a project intake prompt.
+- `stage`: one handoff step in a task lifecycle (for example `dispatcher`, `synx-front-expert`, `synx-qa-engineer`).
+- `agent`: the worker responsible for one stage.
+- `capability`: the skill/profile used to decide which agent should execute a task type.
 
 ### Routing
 
 ```
-Project prompt (web UI / API):
-  Project Orchestrator ──► creates N independent subtasks ──► run in parallel
+Project prompt (web UI prompt bar or /api/project):
+  Project Intake ──► Project Orchestrator ──► creates N subtasks
 
-Each subtask:
+Subtask execution:
   Dispatcher ──► Expert ──► QA Engineer ──► Human Review
 ```
+
+Project intake tasks are marked complete after decomposition. Project-level aggregation/final-review tracking across child tasks is planned in later phases.
 
 ### Expert Squad
 
@@ -233,7 +245,7 @@ npm run test:coverage # generate coverage report
 npm run check         # TypeScript type check
 ```
 
-**Current status:** 112 test files · 731 tests · 100% pass
+**Current status (2026-03-24):** 126 test files · 823 tests · 100% pass
 
 ---
 

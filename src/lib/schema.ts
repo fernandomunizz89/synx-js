@@ -261,15 +261,6 @@ export const dispatcherOutputSchema = z.object({
   constraints: z.array(z.string()),
   confidenceScore: z.number().min(0).max(1).optional(),
   requiresHumanInput: z.boolean(),
-  // Conditional Planning – Dream Stack 2026
-  // When nextAgent === "Spec Planner", targetExpert tells the planner
-  // which domain expert to hand off to after decomposing the task.
-  targetExpert: z.union([
-    z.literal("Synx Front Expert"),
-    z.literal("Synx Mobile Expert"),
-    z.literal("Synx Back Expert"),
-    z.literal("Synx SEO Specialist"),
-  ]).optional(),
   securityAuditRequired: z.boolean().optional(),
   /**
    * Phase 4.3 — Suggested ordered agent chain for this task.
@@ -288,26 +279,6 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx Documentation Writer"),
     z.literal("Synx DB Architect"),
     z.literal("Synx Performance Optimizer"),
-  ]),
-});
-
-export const plannerOutputSchema = z.object({
-  technicalContext: z.string(),
-  knownFacts: z.array(z.string()),
-  unknowns: z.array(z.string()),
-  assumptions: z.array(z.string()),
-  confidenceScore: z.number().min(0).max(1).optional(),
-  requiresHumanInput: z.boolean(),
-  conditionalPlan: z.array(z.string()),
-  edgeCases: z.array(z.string()),
-  risks: z.array(z.string()),
-  validationCriteria: z.array(z.string()),
-  // Planner routes to the specific expert identified by Dispatcher
-  nextAgent: z.union([
-    z.literal("Synx Front Expert"),
-    z.literal("Synx Mobile Expert"),
-    z.literal("Synx Back Expert"),
-    z.literal("Synx SEO Specialist"),
   ]),
 });
 

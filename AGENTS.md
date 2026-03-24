@@ -20,14 +20,26 @@ Expand it as project conventions evolve.
 ## Version Control
 
 - Create one branch per task.
+- The default workflow is one task branch created from `main`.
 - Name branches with the repository pattern `<type>/<short-kebab-summary>`.
 - Use a prefix that matches the change, such as `feat/`, `fix/`, `docs/`, `refactor/`, `chore/`, or `test/`.
 - Keep the branch suffix short, lowercase, and hyphenated, for example `feat/pipeline-executor` or `fix/ts-build-errors`.
+- For large features or large refactors with dependent workstreams, use a dedicated feature branch as a temporary integration branch.
+- In that case, create sub-branches from the feature branch and merge them back into the feature branch until the full initiative is complete.
+- Merge the feature branch into `main` only when the combined work is stable, reviewable, and ready to land together.
+- Keep long-lived feature branches synchronized with `main` to reduce drift and integration risk.
 - Create commits per logical change so each commit stays small, cohesive, and easy to review.
 - Do not mix unrelated changes in the same commit.
 - Write commit messages using the repository's Conventional Commits style: `<type>(<optional-scope>): <summary>`.
 - Common commit types in this repo include `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`.
 - Use scope when it adds clarity, for example `feat(ui): add task drawer`.
+
+## Pull Requests
+
+- Any change merged into `main` should go through a pull request.
+- Pull requests targeting `main` should have a clear title and a structured Markdown description.
+- The pull request description should include context, scope, validation performed, and any relevant risks or follow-up work.
+- Keep pull requests focused and reviewable.
 
 ## Code Quality
 

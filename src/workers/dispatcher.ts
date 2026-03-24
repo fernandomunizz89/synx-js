@@ -55,7 +55,7 @@ export class DispatcherWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "securityAuditRequired": false, "suggestedChain": ["Synx Back Expert", "Synx Code Reviewer", "Synx QA Engineer"], "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer", "targetExpert": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert" }',
+        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "securityAuditRequired": false, "suggestedChain": ["Synx Back Expert", "Synx Code Reviewer", "Synx QA Engineer"], "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx QA Engineer | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer | Synx DB Architect | Synx Performance Optimizer" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);

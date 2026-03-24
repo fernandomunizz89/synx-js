@@ -5,11 +5,12 @@ import { loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib
 import { taskDir } from "../lib/paths.js";
 import { createProvider } from "../providers/factory.js";
 import { createTaskService } from "../lib/services/task-services.js";
-import { logDaemon, logTaskEvent } from "../lib/logging.js";
+import { logDaemon, logRuntimeEvent, logTaskEvent } from "../lib/logging.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 import type { NewTaskInput, StageEnvelope, TaskType } from "../lib/types.js";
 import { z } from "zod";
+import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
 
 const ORCHESTRATOR_AGENT = "Project Orchestrator" as const;
 const MAX_SUBTASKS = 10;
@@ -98,7 +99,7 @@ export class ProjectOrchestrator extends WorkerBase {
     await logTaskEvent(taskDir(taskId), `Project Orchestrator: creating ${output.tasks.length} subtask(s)...`);
 
     const createdIds: string[] = [];
-    for (const subtask of output.tasks) {
+    for (const [index, subtask] of output.tasks.entries()) {
       const subtaskInput: Omit<NewTaskInput, "project"> = {
         title: subtask.title,
         typeHint: subtask.typeHint as TaskType,
@@ -106,7 +107,12 @@ export class ProjectOrchestrator extends WorkerBase {
         extraContext: {
           relatedFiles: [],
           logs: [],
-          notes: [`Part of project: ${input.title}`, `Project summary: ${output.projectSummary}`],
+          notes: [
+            `Part of project: ${input.title}`,
+            `Project summary: ${output.projectSummary}`,
+            `Parent project intake task: ${taskId}`,
+            `Subtask ${index + 1} of ${output.tasks.length}`,
+          ],
           qaPreferences: {
             e2ePolicy: "auto",
             e2eFramework: "auto",
@@ -152,6 +158,24 @@ export class ProjectOrchestrator extends WorkerBase {
       estimatedOutputTokens: result.estimatedOutputTokens,
       estimatedTotalTokens: result.estimatedTotalTokens,
       estimatedCostUsd: result.estimatedCostUsd,
+    });
+
+    // Intake tasks are complete once decomposition succeeds and child tasks are queued.
+    const meta = await loadTaskMeta(taskId);
+    meta.status = "done";
+    await saveTaskMeta(taskId, meta);
+    await logRuntimeEvent({
+      event: "task.updated",
+      source: "project-orchestrator",
+      taskId,
+      stage: "project-orchestrator",
+      agent: ORCHESTRATOR_AGENT,
+      payload: {
+        status: meta.status,
+        currentStage: meta.currentStage,
+        currentAgent: String(meta.currentAgent || ""),
+        nextAgent: String(meta.nextAgent || ""),
+      },
     });
 
     await logTaskEvent(taskDir(taskId), `Project Orchestrator: done. ${createdIds.length} subtask(s) are now queued and running in parallel.`);

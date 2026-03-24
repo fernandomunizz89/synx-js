@@ -28,6 +28,7 @@ interface NextStageRequest {
 }
 
 const WORKING_TO_REQUEST_FILE: Record<string, string> = {
+  "00-project-orchestrator.working.json": STAGE_FILE_NAMES.projectOrchestrator,
   "00-dispatcher.working.json": STAGE_FILE_NAMES.dispatcher,
   "06-synx-qa-engineer.working.json": STAGE_FILE_NAMES.synxQaEngineer,
 };
@@ -36,6 +37,13 @@ async function inferNextRequest(taskId: string, nextAgent: AgentName): Promise<N
   const done = (fileName: string) => path.join(taskDir(taskId), "done", fileName);
 
   switch (nextAgent) {
+    case "Project Orchestrator":
+      return {
+        stage: "project-orchestrator",
+        requestFileName: STAGE_FILE_NAMES.projectOrchestrator,
+        inputRef: "input/new-task.json",
+        agent: "Project Orchestrator",
+      };
     case "Dispatcher":
       return {
         stage: "dispatcher",
@@ -253,7 +261,9 @@ export async function detectInterruptedTasks(): Promise<InterruptedTaskRecoveryR
     const workingFiles = await listFilesIfExists(path.join(root, taskId, "working"));
     if (inboxFiles.length || workingFiles.length) continue;
 
-    const nextAgent = meta.nextAgent || (meta.status === "new" ? "Dispatcher" : "");
+    const nextAgent = meta.nextAgent || (meta.status === "new"
+      ? (meta.type === "Project" ? "Project Orchestrator" : "Dispatcher")
+      : "");
     if (!nextAgent) {
       findings.push({
         taskId,
@@ -301,7 +311,9 @@ export async function recoverInterruptedTasks(): Promise<InterruptedTaskRecovery
     const workingFiles = await listFilesIfExists(workingPath);
     if (inboxFiles.length || workingFiles.length) continue;
 
-    const nextAgent = meta.nextAgent || (meta.status === "new" ? "Dispatcher" : "");
+    const nextAgent = meta.nextAgent || (meta.status === "new"
+      ? (meta.type === "Project" ? "Project Orchestrator" : "Dispatcher")
+      : "");
     if (!nextAgent) {
       recovered.push({
         taskId,

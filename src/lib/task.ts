@@ -21,10 +21,31 @@ export async function ensureTaskStructure(baseTaskDir: string): Promise<void> {
   for (const dir of dirs) await ensureDir(path.join(baseTaskDir, dir));
 }
 
+function resolveInitialStage(input: NewTaskInput): {
+  stage: string;
+  requestFileName: string;
+  agent: TaskMeta["nextAgent"];
+} {
+  if (input.typeHint === "Project") {
+    return {
+      stage: "project-orchestrator",
+      requestFileName: STAGE_FILE_NAMES.projectOrchestrator,
+      agent: "Project Orchestrator",
+    };
+  }
+
+  return {
+    stage: "dispatcher",
+    requestFileName: STAGE_FILE_NAMES.dispatcher,
+    agent: "Dispatcher",
+  };
+}
+
 export async function createTask(input: NewTaskInput): Promise<{ taskId: string; taskPath: string }> {
   const id = `task-${todayDate()}-${randomId(4)}-${slugify(input.title)}`;
   const dir = taskDir(id);
   await ensureTaskStructure(dir);
+  const entryStage = resolveInitialStage(input);
 
   const meta: TaskMeta = {
     taskId: id,
@@ -34,7 +55,7 @@ export async function createTask(input: NewTaskInput): Promise<{ taskId: string;
     status: "new",
     currentStage: "submitted",
     currentAgent: "",
-    nextAgent: "Dispatcher",
+    nextAgent: entryStage.agent,
     humanApprovalRequired: false,
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -43,12 +64,12 @@ export async function createTask(input: NewTaskInput): Promise<{ taskId: string;
 
   await writeJson(path.join(dir, "meta.json"), meta);
   await writeJson(path.join(dir, "input", "new-task.json"), input);
-  await writeJson(path.join(dir, "inbox", STAGE_FILE_NAMES.dispatcher), {
+  await writeJson(path.join(dir, "inbox", entryStage.requestFileName), {
     taskId: id,
-    stage: "dispatcher",
+    stage: entryStage.stage,
     status: "request",
     createdAt: nowIso(),
-    agent: "Dispatcher",
+    agent: entryStage.agent,
     inputRef: "input/new-task.json",
   } satisfies StageEnvelope);
 
