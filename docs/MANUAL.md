@@ -388,6 +388,8 @@ synx agent create \
   --provider anthropic \
   --model claude-sonnet-4-6 \
   --output-schema generic \
+  --domains "analysis,planning" \
+  --task-types "Research,Documentation" \
   --default-next-agent "Synx QA Engineer"
 ```
 
@@ -429,11 +431,21 @@ What the file looks like after `synx agent create`:
     "apiKeyEnv": "AI_AGENTS_ANTHROPIC_API_KEY"
   },
   "outputSchema": "generic",
+  "capabilities": {
+    "domain": ["analysis"],
+    "frameworks": [],
+    "languages": [],
+    "taskTypes": ["Research", "Documentation", "Mixed"],
+    "riskProfile": "low",
+    "preferredVerificationModes": ["manual_review"]
+  },
   "defaultNextAgent": "Synx QA Engineer"
 }
 ```
 
 You can edit this file directly after creation to change any field.
+
+Capability fields are used by the autonomous Dispatcher router. A custom agent becomes eligible for automatic task routing when its capability profile is defined.
 
 #### Prompt file (`.ai-agents/prompts/<id>.md`)
 

@@ -418,6 +418,10 @@ describe.sequential("workers/generic-agent", () => {
       const meta = await loadTaskMeta(task.taskId);
       expect(meta.status).toBe("waiting_agent");
       expect(meta.nextAgent).toBe("Synx QA Engineer");
+
+      const qaInboxPath = path.join(task.taskPath, "inbox", "06-synx-qa-engineer.request.json");
+      const qaRequestExists = await fs.access(qaInboxPath).then(() => true).catch(() => false);
+      expect(qaRequestExists).toBe(true);
     });
 
     it("uses the provider from the definition (not from global config)", async () => {

@@ -366,4 +366,97 @@ describe.sequential("workers/dispatcher", () => {
     // Default mock doesn't output suggestedChain — should be undefined/empty
     expect(meta.suggestedChain == null || meta.suggestedChain.length === 0).toBe(true);
   });
+
+  it("Phase 3 — routes to a registered custom agent when capability score wins", async () => {
+    await fs.mkdir(path.join(repoRoot, ".ai-agents", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, ".ai-agents", "agents", "backend-specialist.json"),
+      JSON.stringify({
+        id: "backend-specialist",
+        name: "Backend Specialist",
+        prompt: ".ai-agents/prompts/backend-specialist.md",
+        provider: { type: "mock", model: "static-mock" },
+        outputSchema: "builder",
+        capabilities: {
+          domain: ["backend", "api", "endpoint"],
+          frameworks: ["Node"],
+          languages: ["TypeScript"],
+          taskTypes: ["Feature", "Bug", "Refactor"],
+          riskProfile: "medium",
+          preferredVerificationModes: ["integration_tests"],
+        },
+      }),
+      "utf8",
+    );
+
+    await fs.mkdir(path.join(repoRoot, ".ai-agents", "learnings"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoRoot, ".ai-agents", "learnings", "backend-specialist.jsonl"),
+      [
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          taskId: "t-1",
+          agentId: "Backend Specialist",
+          summary: "Implemented endpoint",
+          outcome: "approved",
+        }),
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          taskId: "t-2",
+          agentId: "Backend Specialist",
+          summary: "Hardened API auth",
+          outcome: "approved",
+        }),
+      ].join("\n") + "\n",
+      "utf8",
+    );
+
+    const { createProvider } = await import("../providers/factory.js");
+    vi.mocked(createProvider).mockReturnValueOnce({
+      generateStructured: vi.fn().mockResolvedValue({
+        parsed: {
+          type: "Feature",
+          goal: "build auth endpoint",
+          context: "backend API task",
+          knownFacts: [],
+          unknowns: [],
+          assumptions: [],
+          constraints: [],
+          requiresHumanInput: false,
+          nextAgent: "Unknown Specialist",
+        },
+        provider: "mock",
+        model: "static-mock",
+        parseRetries: 0,
+        estimatedTotalTokens: 100,
+      }),
+    } as any);
+
+    const task = await createTask({
+      title: "Create API endpoint",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Implement backend endpoint for auth refresh",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "dispatcher",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Dispatcher",
+    });
+
+    const processed = await new DispatcherWorker().tryProcess(task.taskId);
+    expect(processed).toBe(true);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.nextAgent).toBe("Backend Specialist");
+
+    const customInboxPath = path.join(task.taskPath, "inbox", "custom-backend-specialist.request.json");
+    const customRequestExists = await fs.access(customInboxPath).then(() => true).catch(() => false);
+    expect(customRequestExists).toBe(true);
+  });
 });

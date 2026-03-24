@@ -154,6 +154,8 @@ synx pipeline run feature-pipeline "Add CSV export" --type Feature
 | `synx agent show <id>` | Show details of a custom agent |
 | `synx agent create` | Interactive wizard to create a new agent |
 
+Custom agents can declare capability metadata (domains, frameworks, languages, task types, risk profile, verification modes) so the Dispatcher can route tasks to them automatically.
+
 ### Diagnostics & recovery
 
 | Command | What it does |

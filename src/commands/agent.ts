@@ -4,7 +4,15 @@ import { ensureDir, exists, writeJson, writeText } from "../lib/fs.js";
 import { agentsDir, promptsDir } from "../lib/paths.js";
 import { loadAgentDefinitions, loadAgentDefinition } from "../lib/agent-registry.js";
 import { promptRequiredText, promptTextWithDefault, selectOption, confirmAction } from "../lib/interactive.js";
-import type { AgentDefinition, AgentOutputSchema, ProviderStageConfig, ProviderType } from "../lib/types.js";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  AgentOutputSchema,
+  AgentRiskProfile,
+  AgentVerificationMode,
+  ProviderStageConfig,
+  ProviderType,
+} from "../lib/types.js";
 
 // ─── Provider defaults ──────────────────────────────────────────────────────
 
@@ -15,6 +23,78 @@ const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
   lmstudio: "auto",
   mock: "static-mock",
 };
+
+const KNOWN_TASK_TYPES = ["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed", "Project"] as const;
+const KNOWN_RISK_PROFILES = ["low", "medium", "high"] as const;
+const KNOWN_VERIFICATION_MODES = [
+  "static_review",
+  "unit_tests",
+  "integration_tests",
+  "e2e_tests",
+  "security_checks",
+  "performance_checks",
+  "manual_review",
+] as const;
+
+function parseCsv(value: string | undefined): string[] {
+  return String(value || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseTaskTypes(value: string | undefined, fallback: AgentCapabilities["taskTypes"]): AgentCapabilities["taskTypes"] {
+  const parsed = parseCsv(value);
+  if (!parsed.length) return fallback;
+  const invalid = parsed.filter((entry) => !KNOWN_TASK_TYPES.includes(entry as typeof KNOWN_TASK_TYPES[number]));
+  if (invalid.length) {
+    throw new Error(`Invalid --task-types value(s): ${invalid.join(", ")}. Allowed: ${KNOWN_TASK_TYPES.join(", ")}`);
+  }
+  return parsed as AgentCapabilities["taskTypes"];
+}
+
+function parseRiskProfile(value: string | undefined, fallback: AgentRiskProfile): AgentRiskProfile {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (!KNOWN_RISK_PROFILES.includes(normalized as typeof KNOWN_RISK_PROFILES[number])) {
+    throw new Error(`Invalid --risk-profile value "${value}". Allowed: ${KNOWN_RISK_PROFILES.join(", ")}`);
+  }
+  return normalized as AgentRiskProfile;
+}
+
+function parseVerificationModes(
+  value: string | undefined,
+  fallback: AgentCapabilities["preferredVerificationModes"],
+): AgentCapabilities["preferredVerificationModes"] {
+  const parsed = parseCsv(value);
+  if (!parsed.length) return fallback;
+  const invalid = parsed.filter((entry) => !KNOWN_VERIFICATION_MODES.includes(entry as typeof KNOWN_VERIFICATION_MODES[number]));
+  if (invalid.length) {
+    throw new Error(`Invalid --verification-modes value(s): ${invalid.join(", ")}. Allowed: ${KNOWN_VERIFICATION_MODES.join(", ")}`);
+  }
+  return parsed as AgentVerificationMode[];
+}
+
+function defaultCapabilitiesForOutputSchema(outputSchema: AgentOutputSchema): AgentCapabilities {
+  if (outputSchema === "builder") {
+    return {
+      domain: ["implementation"],
+      frameworks: [],
+      languages: [],
+      taskTypes: ["Feature", "Bug", "Refactor", "Mixed"],
+      riskProfile: "medium",
+      preferredVerificationModes: ["static_review", "unit_tests"],
+    };
+  }
+  return {
+    domain: ["analysis"],
+    frameworks: [],
+    languages: [],
+    taskTypes: ["Research", "Documentation", "Mixed"],
+    riskProfile: "low",
+    preferredVerificationModes: ["manual_review"],
+  };
+}
 
 function buildProviderConfig(type: ProviderType, model: string): ProviderStageConfig {
   const config: ProviderStageConfig = { type, model };
@@ -107,6 +187,13 @@ const agentListCommand = new Command("list")
       if (agent.defaultNextAgent) {
         console.log(`  - Next agent:   ${agent.defaultNextAgent}`);
       }
+      if (agent.capabilities) {
+        console.log(`  - Domain:       ${agent.capabilities.domain.join(", ") || "[none]"}`);
+        console.log(`  - Frameworks:   ${agent.capabilities.frameworks.join(", ") || "[none]"}`);
+        console.log(`  - Languages:    ${agent.capabilities.languages.join(", ") || "[none]"}`);
+        console.log(`  - Task types:   ${agent.capabilities.taskTypes.join(", ") || "[none]"}`);
+        console.log(`  - Risk:         ${agent.capabilities.riskProfile}`);
+      }
       console.log(`  - Prompt:       ${agent.prompt}`);
     }
   });
@@ -133,6 +220,15 @@ const agentShowCommand = new Command("show")
     if (agent.defaultNextAgent) {
       console.log(`- Default next:   ${agent.defaultNextAgent}`);
     }
+    if (agent.capabilities) {
+      console.log(`- Capabilities:`);
+      console.log(`    domain:       ${agent.capabilities.domain.join(", ") || "[none]"}`);
+      console.log(`    frameworks:   ${agent.capabilities.frameworks.join(", ") || "[none]"}`);
+      console.log(`    languages:    ${agent.capabilities.languages.join(", ") || "[none]"}`);
+      console.log(`    taskTypes:    ${agent.capabilities.taskTypes.join(", ") || "[none]"}`);
+      console.log(`    riskProfile:  ${agent.capabilities.riskProfile}`);
+      console.log(`    verification: ${agent.capabilities.preferredVerificationModes.join(", ") || "[none]"}`);
+    }
     console.log(`- Provider:`);
     console.log(`    type:         ${agent.provider.type}`);
     console.log(`    model:        ${agent.provider.model}`);
@@ -152,6 +248,12 @@ const agentCreateCommand = new Command("create")
   .option("--model <model>", "Model name")
   .option("--output-schema <schema>", "Output schema: generic | builder", "generic")
   .option("--default-next-agent <agent>", "Default next agent")
+  .option("--domains <domains>", "Comma-separated capability domains")
+  .option("--frameworks <frameworks>", "Comma-separated capability frameworks")
+  .option("--languages <languages>", "Comma-separated capability languages")
+  .option("--task-types <taskTypes>", "Comma-separated task types")
+  .option("--risk-profile <riskProfile>", "Risk profile: low | medium | high")
+  .option("--verification-modes <modes>", "Comma-separated verification modes")
   .option("--no-prompt-file", "Skip creating a starter prompt file")
   .action(async (options) => {
     console.log("\nCreate a custom agent");
@@ -251,6 +353,17 @@ const agentCreateCommand = new Command("create")
       "",
     );
 
+    // ── Capabilities ──
+    const fallbackCapabilities = defaultCapabilitiesForOutputSchema(outputSchema);
+    const capabilities: AgentCapabilities = {
+      domain: parseCsv(options.domains).length ? parseCsv(options.domains) : fallbackCapabilities.domain,
+      frameworks: parseCsv(options.frameworks),
+      languages: parseCsv(options.languages),
+      taskTypes: parseTaskTypes(options.taskTypes, fallbackCapabilities.taskTypes),
+      riskProfile: parseRiskProfile(options.riskProfile, fallbackCapabilities.riskProfile),
+      preferredVerificationModes: parseVerificationModes(options.verificationModes, fallbackCapabilities.preferredVerificationModes),
+    };
+
     // ── Build definition ──
     const definition: AgentDefinition = {
       id: agentId,
@@ -258,6 +371,7 @@ const agentCreateCommand = new Command("create")
       prompt: promptFile,
       provider: providerConfig,
       outputSchema,
+      capabilities,
       ...(defaultNext?.trim() ? { defaultNextAgent: defaultNext.trim() } : {}),
     };
 
