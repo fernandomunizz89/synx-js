@@ -25,6 +25,7 @@ import { buildHumanInputLines, loadMetasSafe, processTasksWithConcurrency, resol
 import { appendConsole, appendEvent } from "../lib/start/ui-renderer.js";
 import { runInlineCommand } from "../lib/start/command-handler.js";
 import { checkExistingDaemon, performReadinessChecks, getProviderStatus } from "../lib/start/startup-checks.js";
+import { printReadinessReport } from "../lib/readiness.js";
 import { resolvePollIntervalMs, resolveMaxImmediateCycles, resolveTaskConcurrency } from "../lib/start/loop-utils.js";
 import { setupKeypressHandler } from "../lib/start/interaction-handler.js";
 import { decideLoopAction } from "../lib/loop-action.js";
@@ -57,6 +58,7 @@ export const startCommand = new Command("start")
 
     const readiness = await performReadinessChecks({ force: options.force });
     if (readiness.shouldAbort) {
+      printReadinessReport(readiness.report);
       console.log("\nStart aborted to prevent failed runs in a broken setup.");
       console.log(`Next step: run \`${commandExample("setup")}\` and then \`${commandExample("start")}\`.`);
       console.log(`If you still want to start now, run \`${commandExample("start --force")}\`.`);
