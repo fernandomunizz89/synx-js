@@ -157,6 +157,7 @@ function buildProjectGraphPayload(projectId: string, tasks: Awaited<ReturnType<t
     blockedBy: task.blockedBy,
     ownershipBoundaries: task.ownershipBoundaries,
     mergeStrategy: task.mergeStrategy,
+    dispatchLockReservation: task.dispatchLockReservation,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   }));

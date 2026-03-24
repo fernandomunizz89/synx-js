@@ -48,6 +48,7 @@ export class SynxDevopsExpert extends WorkerBase {
   readonly agent = "Synx DevOps Expert" as const;
   readonly requestFileName = STAGE_FILE_NAMES.synxDevopsExpert;
   readonly workingFileName = "04-synx-devops-expert.working.json";
+  protected readonly requiresFileReservation = true;
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();

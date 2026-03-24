@@ -25,6 +25,12 @@ function printTask(meta: TaskMeta): void {
   console.log(`- Next agent: ${meta.nextAgent || "[none]"}`);
   console.log(`- Human approval required: ${meta.humanApprovalRequired ? "yes" : "no"}`);
   console.log(`- History items: ${meta.history.length}`);
+  if (meta.dispatchLockReservation) {
+    const reservation = meta.dispatchLockReservation;
+    console.log(`- Dispatch lock stage: ${reservation.stage}`);
+    console.log(`- Dispatch lock reserved at: ${reservation.reservedAt}`);
+    console.log(`- Dispatch lock files: ${reservation.reservedFiles.join(", ") || "[none]"}`);
+  }
 }
 
 function pickFocusedTask(metas: TaskMeta[]): { meta: TaskMeta; reason: string } {

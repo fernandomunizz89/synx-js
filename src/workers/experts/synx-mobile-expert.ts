@@ -30,6 +30,7 @@ export class SynxMobileExpert extends WorkerBase {
   readonly agent = "Synx Mobile Expert" as const;
   readonly requestFileName = STAGE_FILE_NAMES.synxMobileExpert;
   readonly workingFileName = "04-synx-mobile-expert.working.json";
+  protected readonly requiresFileReservation = true;
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();

@@ -6,6 +6,7 @@ import { DONE_FILE_NAMES, STAGE_FILE_NAMES, STALE_LOCK_MINUTES } from "./constan
 import { createTask, loadTaskMeta } from "./task.js";
 import { clearStaleLocks, recoverWorkingFiles } from "./runtime.js";
 import { readJson, writeJson } from "./fs.js";
+import { reserveDispatchLocks } from "./file-locks.js";
 import { nowIso } from "./utils.js";
 import type { NewTaskInput, StageEnvelope } from "./types.js";
 import { WorkerBase } from "../workers/base.js";
@@ -51,6 +52,18 @@ class LifecycleWorker extends WorkerBase {
       provider: "mock",
       model: "mock-v1",
     });
+  }
+}
+
+class ReservingLifecycleWorker extends WorkerBase {
+  readonly agent = "Synx Front Expert" as const;
+  readonly requestFileName = STAGE_FILE_NAMES.synxFrontExpert;
+  readonly workingFileName = "04-synx-front-expert.working.json";
+  protected readonly requiresFileReservation = true;
+  processCalls = 0;
+
+  protected async processTask(): Promise<void> {
+    this.processCalls += 1;
   }
 }
 
@@ -126,5 +139,70 @@ describe.sequential("integration/pipeline-critical-scenarios", () => {
 
     const requeued = await readJson(path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer));
     expect(requeued).toMatchObject({ ok: true });
+  });
+
+  it("reserves dispatch locks before running reserved expert stages", async () => {
+    const task = await createTask(baseTaskInput("Dispatch reservation success"), {
+      ownershipBoundaries: ["src/features/profile"],
+    });
+
+    await writeJson(path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxFrontExpert), {
+      taskId: task.taskId,
+      stage: "synx-front-expert",
+      status: "request",
+      createdAt: nowIso(),
+      agent: "Synx Front Expert",
+      inputRef: "input/new-task.json",
+    } satisfies StageEnvelope);
+
+    const worker = new ReservingLifecycleWorker();
+    const processed = await worker.tryProcess(task.taskId);
+    expect(processed).toBe(true);
+    expect(worker.processCalls).toBe(1);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.dispatchLockReservation).toBeDefined();
+    expect(meta.dispatchLockReservation?.stage).toBe("synx-front-expert");
+    expect(meta.dispatchLockReservation?.reservedFiles).toEqual(["src/features/profile"]);
+  });
+
+  it("re-queues expert stages when dispatch lock reservation conflicts", async () => {
+    const holderTask = await createTask(baseTaskInput("Dispatch reservation holder"), {
+      ownershipBoundaries: ["src/features/shared"],
+    });
+    await reserveDispatchLocks(holderTask.taskId, ["src/features/shared"]);
+
+    const blockedTask = await createTask(baseTaskInput("Dispatch reservation blocked"), {
+      ownershipBoundaries: ["src/features/shared"],
+      mergeStrategy: "auto-rebase",
+    });
+
+    await writeJson(path.join(blockedTask.taskPath, "inbox", STAGE_FILE_NAMES.synxFrontExpert), {
+      taskId: blockedTask.taskId,
+      stage: "synx-front-expert",
+      status: "request",
+      createdAt: nowIso(),
+      agent: "Synx Front Expert",
+      inputRef: "input/new-task.json",
+    } satisfies StageEnvelope);
+
+    const worker = new ReservingLifecycleWorker();
+    const processed = await worker.tryProcess(blockedTask.taskId);
+    expect(processed).toBe(false);
+    expect(worker.processCalls).toBe(0);
+
+    const meta = await loadTaskMeta(blockedTask.taskId);
+    expect(meta.status).toBe("waiting_agent");
+    expect(meta.currentStage).toBe("synx-front-expert-blocked");
+    expect(meta.nextAgent).toBe("Synx Front Expert");
+    expect(meta.blockedBy).toContain(holderTask.taskId);
+
+    const requeued = await readJson(path.join(blockedTask.taskPath, "inbox", STAGE_FILE_NAMES.synxFrontExpert));
+    expect(requeued).toMatchObject({
+      taskId: blockedTask.taskId,
+      stage: "synx-front-expert",
+      status: "request",
+      agent: "Synx Front Expert",
+    });
   });
 });

@@ -51,6 +51,7 @@ export class SynxPerformanceOptimizer extends WorkerBase {
   readonly agent = "Synx Performance Optimizer" as const;
   readonly requestFileName = STAGE_FILE_NAMES.synxPerfOptimizer;
   readonly workingFileName = "04-synx-performance-optimizer.working.json";
+  protected readonly requiresFileReservation = true;
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();

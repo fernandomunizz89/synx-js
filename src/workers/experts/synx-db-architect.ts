@@ -52,6 +52,7 @@ export class SynxDbArchitect extends WorkerBase {
   readonly agent = "Synx DB Architect" as const;
   readonly requestFileName = STAGE_FILE_NAMES.synxDbArchitect;
   readonly workingFileName = "04-synx-db-architect.working.json";
+  protected readonly requiresFileReservation = true;
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();

@@ -187,4 +187,25 @@ describe.sequential("commands/status", () => {
     const output = consoleSpy.mock.calls.flat().join("\n");
     expect(output).toContain("Showing the latest completed task.");
   });
+
+  it("prints dispatch lock reservation details when present", async () => {
+    mocks.allTaskIds.mockResolvedValue(["task-locked"]);
+    mocks.loadTaskMeta.mockResolvedValue(makeMeta({
+      taskId: "task-locked",
+      status: "in_progress",
+      currentStage: "synx-front-expert",
+      currentAgent: "Synx Front Expert",
+      nextAgent: "Synx QA Engineer",
+      dispatchLockReservation: {
+        reservedAt: "2026-03-16T00:00:00.000Z",
+        reservedFiles: ["src/features/shared"],
+        stage: "synx-front-expert",
+      },
+    }));
+
+    await statusCommand.parseAsync(["node", "synx"]);
+    const output = consoleSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Dispatch lock stage: synx-front-expert");
+    expect(output).toContain("Dispatch lock files: src/features/shared");
+  });
 });
