@@ -39,14 +39,20 @@ export const setupCommand = new Command("setup")
     console.log(`- Local project config: ${projectPath}`);
     console.log("- Navigation: use Arrow Up/Down and Enter.");
 
-    while (true) {
-      const existingReviewer = currentLocal.humanReviewer || currentGlobal.defaults.humanReviewer;
-      if (existingReviewer) {
-        console.log(`\nCurrent reviewer in config: ${existingReviewer}`);
-        console.log("Please type the reviewer name explicitly to confirm or update it.");
-      }
+    const existingReviewer = currentLocal.humanReviewer || currentGlobal.defaults.humanReviewer;
+    if (existingReviewer) {
+      console.log(`\nCurrent reviewer in config: ${existingReviewer}`);
+      console.log("Please type the reviewer name explicitly to confirm or update it.");
+    }
 
-      const reviewer = await promptRequiredText("Human reviewer name (required):");
+    const reviewer = await promptRequiredText("Human reviewer name (required):");
+
+    const nextLocal: LocalProjectConfig = {
+      ...currentLocal,
+      humanReviewer: reviewer,
+    };
+
+    while (true) {
       const providerChoice = await selectOption<SetupProviderChoice>(
         "Choose provider for Dispatcher and Planner",
         [
@@ -68,11 +74,6 @@ export const setupCommand = new Command("setup")
           ...currentGlobal.defaults,
           humanReviewer: reviewer,
         },
-      };
-
-      const nextLocal: LocalProjectConfig = {
-        ...currentLocal,
-        humanReviewer: reviewer,
       };
 
       if (providerChoice === "mock") {
@@ -129,15 +130,25 @@ export const setupCommand = new Command("setup")
       }
 
       console.log("\nSetup is not complete yet because provider validation failed.");
-      const nextAction = await selectOption<"retry" | "mock" | "cancel">(
+      const nextAction = await selectOption<"retry" | "save" | "mock" | "cancel">(
         "What do you want to do next?",
         [
-          { value: "retry", label: "Retry setup choices" },
+          { value: "retry", label: "Change provider or connection mode" },
+          { value: "save", label: "Save config anyway and finish (set API key later)" },
           { value: "mock", label: "Switch to mock provider and finish setup now" },
           { value: "cancel", label: "Cancel without writing changes" },
         ],
         "retry"
       );
+
+      if (nextAction === "save") {
+        await writeJson(globalPath, nextGlobal);
+        await writeJson(projectPath, nextLocal);
+        console.log("\nConfig saved (provider validation skipped).");
+        console.log("Make sure to set the required environment variables before running tasks.");
+        console.log(`You can re-validate by running \`${commandExample("setup")}\` again.`);
+        return;
+      }
 
       if (nextAction === "mock") {
         const mockConfig: ProviderStageConfig = {
