@@ -1,6 +1,7 @@
 export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed" | "Project";
 export type TaskSourceKind = "standalone" | "project-intake" | "project-subtask";
 export type TaskPriority = 1 | 2 | 3 | 4 | 5;
+export type TaskMergeStrategy = "auto-rebase" | "manual-review";
 export type TaskStatus =
   | "new"
   | "in_progress"
@@ -241,6 +242,8 @@ export interface TaskCreationMetadata {
   priority?: TaskPriority;
   milestone?: string;
   parallelizable?: boolean;
+  ownershipBoundaries?: string[];
+  mergeStrategy?: TaskMergeStrategy;
 }
 
 export interface StageEnvelope<T = unknown> {
@@ -295,6 +298,8 @@ export interface TaskMeta {
   priority?: TaskPriority;
   milestone?: string;
   parallelizable?: boolean;
+  ownershipBoundaries?: string[];
+  mergeStrategy?: TaskMergeStrategy;
   history: TaskMetaHistoryItem[];
   securityAuditRequired?: boolean;
   /** Phase 4.3 — ordered list of agents the Dispatcher suggests for this task */

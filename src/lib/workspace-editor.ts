@@ -4,7 +4,9 @@ import { ensureDir, exists } from "./fs.js";
 import { envBoolean } from "./env.js";
 import { unique } from "./text-utils.js";
 import { isBlockedPath, normalizeInputPath } from "./workspace-scanner.js";
-import { acquireFileLocks } from "./file-locks.js";
+import { acquireFileLocks, type FileConflict } from "./file-locks.js";
+import { loadTaskMeta } from "./task.js";
+import type { TaskMergeStrategy } from "./types.js";
 
 export type WorkspaceEditAction = "create" | "replace" | "replace_snippet" | "delete";
 
@@ -21,6 +23,30 @@ export interface AppliedWorkspaceEdits {
   changedFiles: string[];
   skippedEdits: string[];
   warnings: string[];
+}
+
+export class WorkspaceEditConflictError extends Error {
+  readonly taskId: string;
+  readonly mergeStrategy: TaskMergeStrategy;
+  readonly conflicts: FileConflict[];
+
+  constructor(args: {
+    taskId: string;
+    mergeStrategy: TaskMergeStrategy;
+    conflicts: FileConflict[];
+  }) {
+    const holders = Array.from(new Set(args.conflicts.map((conflict) => conflict.heldBy)));
+    const files = args.conflicts.map((conflict) => conflict.file).slice(0, 4).join(", ");
+    super(`Workspace edit blocked by file ownership conflict${files ? ` on ${files}` : ""}. Held by: ${holders.join(", ")}`);
+    this.name = "WorkspaceEditConflictError";
+    this.taskId = args.taskId;
+    this.mergeStrategy = args.mergeStrategy;
+    this.conflicts = args.conflicts;
+  }
+}
+
+export function isWorkspaceEditConflictError(error: unknown): error is WorkspaceEditConflictError {
+  return error instanceof WorkspaceEditConflictError;
 }
 
 function isInsideRoot(root: string, candidate: string): boolean {
@@ -55,6 +81,8 @@ export async function applyWorkspaceEdits(args: {
   edits: WorkspaceEdit[];
   dryRun?: boolean;
   taskId?: string;
+  ownershipBoundaries?: string[];
+  mergeStrategy?: TaskMergeStrategy;
 }): Promise<AppliedWorkspaceEdits> {
   const dryRun = typeof args.dryRun === "boolean" ? args.dryRun : envBoolean("AI_AGENTS_DRY_RUN", false);
   const appliedFiles: string[] = [];
@@ -66,20 +94,36 @@ export async function applyWorkspaceEdits(args: {
     warnings.push("Dry-run mode is enabled. Workspace edits are simulated and no files are written.");
   }
 
-  // Phase 1.4 — File conflict detection (advisory; does not block edits)
+  // Phase 5 — Enforced file reservation before edits.
   const taskId = args.taskId ?? "";
+  let mergeStrategy: TaskMergeStrategy = args.mergeStrategy || "auto-rebase";
+  let metadataOwnershipBoundaries: string[] = [];
   if (taskId && !dryRun) {
+    const taskMeta = await loadTaskMeta(taskId).catch(() => null);
+    metadataOwnershipBoundaries = Array.isArray(taskMeta?.ownershipBoundaries) ? taskMeta.ownershipBoundaries : [];
+    mergeStrategy = args.mergeStrategy || taskMeta?.mergeStrategy || "auto-rebase";
+
     const plannedFiles = args.edits
       .filter((e) => e.path)
       .map((e) => { try { return resolveWorkspacePath(args.workspaceRoot, e.path).relativePath; } catch { return ""; } })
       .filter(Boolean);
 
     if (plannedFiles.length > 0) {
-      const lockResult = await acquireFileLocks(taskId, plannedFiles);
+      const reservationScopes = unique([
+        ...(args.ownershipBoundaries || []),
+        ...metadataOwnershipBoundaries,
+      ]);
+      const lockResult = await acquireFileLocks(taskId, plannedFiles, {
+        allOrNothing: true,
+        includeParentScopes: true,
+        targetScopes: reservationScopes,
+      });
       if (lockResult.conflicts.length > 0) {
-        for (const c of lockResult.conflicts) {
-          warnings.push(`[file-lock] Conflict on "${c.file}" — held by task ${c.heldBy}. Proceeding but results may conflict.`);
-        }
+        throw new WorkspaceEditConflictError({
+          taskId,
+          mergeStrategy,
+          conflicts: lockResult.conflicts,
+        });
       }
     }
   }

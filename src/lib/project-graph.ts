@@ -1,9 +1,11 @@
 import { saveTaskMeta } from "./task.js";
-import type { TaskMeta, TaskStatus } from "./types.js";
+import { listFileLocks } from "./file-locks.js";
+import type { TaskMergeStrategy, TaskMeta, TaskStatus } from "./types.js";
 
 const READY_QUEUE_STATUSES: TaskStatus[] = ["new", "waiting_agent"];
 const ACTIVE_STATUSES: TaskStatus[] = ["new", "waiting_agent", "in_progress"];
 const TERMINAL_STATUSES: TaskStatus[] = ["done", "failed", "blocked", "archived"];
+const SCOPE_PREFIX = "scope:";
 
 export interface ProjectMilestoneProgress {
   milestone: string;
@@ -34,6 +36,8 @@ export interface TaskGraphNode {
   priority: number;
   milestone?: string;
   parallelizable: boolean;
+  ownershipBoundaries: string[];
+  mergeStrategy: TaskMergeStrategy;
 }
 
 export interface ProjectGraphSnapshot {
@@ -45,6 +49,12 @@ export interface ProjectGraphSnapshot {
 
 export interface PersistProjectGraphResult extends ProjectGraphSnapshot {
   updatedTaskIds: string[];
+}
+
+export interface ProjectGraphBuildOptions {
+  lockMap?: {
+    locks?: Record<string, string>;
+  } | null;
 }
 
 function isReadyQueueStatus(status: TaskStatus): boolean {
@@ -88,6 +98,55 @@ function normalizeParallelizable(value: unknown): boolean {
   return value !== false;
 }
 
+function normalizeOwnershipBoundary(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/, "");
+  return normalized || undefined;
+}
+
+function normalizeOwnershipBoundaries(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const normalized = value
+    .map((item) => normalizeOwnershipBoundary(item))
+    .filter((item): item is string => Boolean(item));
+  return Array.from(new Set(normalized));
+}
+
+function normalizeMergeStrategy(value: unknown): TaskMergeStrategy {
+  return String(value || "").trim().toLowerCase() === "manual-review" ? "manual-review" : "auto-rebase";
+}
+
+function overlapsBoundary(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+function boundariesOverlap(left: string[], right: string[]): boolean {
+  return left.some((leftBoundary) => right.some((rightBoundary) => overlapsBoundary(leftBoundary, rightBoundary)));
+}
+
+function parseLockTarget(target: string): { kind: "file" | "scope"; value: string } {
+  if (target.startsWith(SCOPE_PREFIX)) {
+    return {
+      kind: "scope",
+      value: target.slice(SCOPE_PREFIX.length),
+    };
+  }
+  return { kind: "file", value: target };
+}
+
+function lockTargetOverlapsBoundary(lockTarget: string, boundary: string): boolean {
+  const parsed = parseLockTarget(lockTarget);
+  if (parsed.kind === "file") {
+    return overlapsBoundary(parsed.value, boundary);
+  }
+  return overlapsBoundary(parsed.value, boundary);
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((value, index) => value === b[index]);
@@ -127,11 +186,14 @@ function buildChildTaskIdsByParent(metas: TaskMeta[], metaById: Map<string, Task
   return childTaskIdsByParent;
 }
 
-export function buildProjectGraphSnapshot(metas: TaskMeta[]): ProjectGraphSnapshot {
+export function buildProjectGraphSnapshot(metas: TaskMeta[], options?: ProjectGraphBuildOptions): ProjectGraphSnapshot {
   const metaById = new Map(metas.map((meta) => [meta.taskId, meta]));
   const childTaskIdsByParent = buildChildTaskIdsByParent(metas, metaById);
   const dependencyBlockersByTaskId = new Map<string, string[]>();
+  const manualBlockersByTaskId = new Map<string, string[]>();
   const conflictBlockersByTaskId = new Map<string, string[]>();
+  const ownershipBlockersByTaskId = new Map<string, string[]>();
+  const lockBlockersByTaskId = new Map<string, string[]>();
 
   for (const meta of metas) {
     const dependsOn = normalizeTaskIdList(meta.dependsOn, meta.taskId);
@@ -140,6 +202,15 @@ export function buildProjectGraphSnapshot(metas: TaskMeta[]): ProjectGraphSnapsh
       return !dependencyMeta || dependencyMeta.status !== "done";
     });
     dependencyBlockersByTaskId.set(meta.taskId, blockers);
+  }
+
+  for (const meta of metas) {
+    const blockers = normalizeTaskIdList(meta.blockedBy, meta.taskId)
+      .filter((blockerTaskId) => {
+        const blocker = metaById.get(blockerTaskId);
+        return Boolean(blocker) && blocker?.status !== "done";
+      });
+    manualBlockersByTaskId.set(meta.taskId, blockers);
   }
 
   const nonParallelizableByProject = new Map<string, TaskMeta[]>();
@@ -172,12 +243,59 @@ export function buildProjectGraphSnapshot(metas: TaskMeta[]): ProjectGraphSnapsh
     }
   }
 
+  const ownershipCandidates = metas
+    .filter((meta) => isActiveStatus(meta.status))
+    .filter((meta) => (dependencyBlockersByTaskId.get(meta.taskId) || []).length === 0)
+    .filter((meta) => normalizeOwnershipBoundaries(meta.ownershipBoundaries).length > 0);
+  const ownershipRunning = ownershipCandidates.filter((meta) => meta.status === "in_progress");
+  const ownershipQueued = ownershipCandidates
+    .filter((meta) => meta.status !== "in_progress")
+    .sort(byPriorityAndAgeAsc);
+  const ownershipClaims = ownershipRunning.map((meta) => ({
+    taskId: meta.taskId,
+    boundaries: normalizeOwnershipBoundaries(meta.ownershipBoundaries),
+  }));
+
+  for (const candidate of ownershipQueued) {
+    const candidateBoundaries = normalizeOwnershipBoundaries(candidate.ownershipBoundaries);
+    const blockers = ownershipClaims
+      .filter((claim) => claim.taskId !== candidate.taskId)
+      .filter((claim) => boundariesOverlap(candidateBoundaries, claim.boundaries))
+      .map((claim) => claim.taskId);
+    if (blockers.length > 0) {
+      ownershipBlockersByTaskId.set(candidate.taskId, blockers);
+      continue;
+    }
+    ownershipClaims.push({
+      taskId: candidate.taskId,
+      boundaries: candidateBoundaries,
+    });
+  }
+
+  const lockEntries = Object.entries(options?.lockMap?.locks || {});
+  if (lockEntries.length > 0) {
+    for (const meta of metas) {
+      if (!isActiveStatus(meta.status)) continue;
+      const boundaries = normalizeOwnershipBoundaries(meta.ownershipBoundaries);
+      if (!boundaries.length) continue;
+      const blockers = lockEntries
+        .filter(([, ownerTaskId]) => ownerTaskId !== meta.taskId)
+        .filter(([lockTarget]) => boundaries.some((boundary) => lockTargetOverlapsBoundary(lockTarget, boundary)))
+        .map(([, ownerTaskId]) => ownerTaskId);
+      if (!blockers.length) continue;
+      lockBlockersByTaskId.set(meta.taskId, Array.from(new Set(blockers)));
+    }
+  }
+
   const nodeByTaskId = new Map<string, TaskGraphNode>();
   for (const meta of metas) {
     const dependsOn = normalizeTaskIdList(meta.dependsOn, meta.taskId);
     const computedBlockedBy = Array.from(new Set([
       ...(dependencyBlockersByTaskId.get(meta.taskId) || []),
+      ...(manualBlockersByTaskId.get(meta.taskId) || []),
       ...(conflictBlockersByTaskId.get(meta.taskId) || []),
+      ...(ownershipBlockersByTaskId.get(meta.taskId) || []),
+      ...(lockBlockersByTaskId.get(meta.taskId) || []),
     ]));
     const blockedBy = isActiveStatus(meta.status) ? computedBlockedBy : [];
     const ready = isReadyQueueStatus(meta.status) && blockedBy.length === 0;
@@ -189,6 +307,8 @@ export function buildProjectGraphSnapshot(metas: TaskMeta[]): ProjectGraphSnapsh
       priority: normalizePriority(meta.priority),
       milestone: normalizeMilestone(meta.milestone),
       parallelizable: normalizeParallelizable(meta.parallelizable),
+      ownershipBoundaries: normalizeOwnershipBoundaries(meta.ownershipBoundaries),
+      mergeStrategy: normalizeMergeStrategy(meta.mergeStrategy),
     });
   }
 
@@ -278,7 +398,8 @@ export function buildProjectGraphSnapshot(metas: TaskMeta[]): ProjectGraphSnapsh
 }
 
 export async function persistProjectGraphState(metas: TaskMeta[]): Promise<PersistProjectGraphResult> {
-  const snapshot = buildProjectGraphSnapshot(metas);
+  const lockMap = await listFileLocks().catch(() => ({ locks: {} }));
+  const snapshot = buildProjectGraphSnapshot(metas, { lockMap });
   const updatedTaskIds: string[] = [];
 
   for (const meta of metas) {
@@ -289,6 +410,20 @@ export async function persistProjectGraphState(metas: TaskMeta[]): Promise<Persi
 
     if (!arraysEqual(currentBlockedBy, desiredBlockedBy)) {
       meta.blockedBy = desiredBlockedBy;
+      changed = true;
+    }
+
+    const desiredOwnershipBoundaries = node?.ownershipBoundaries || [];
+    const currentOwnershipBoundaries = normalizeOwnershipBoundaries(meta.ownershipBoundaries);
+    if (!arraysEqual(currentOwnershipBoundaries, desiredOwnershipBoundaries)) {
+      meta.ownershipBoundaries = desiredOwnershipBoundaries;
+      changed = true;
+    }
+
+    const desiredMergeStrategy = node?.mergeStrategy || "auto-rebase";
+    const currentMergeStrategy = normalizeMergeStrategy(meta.mergeStrategy);
+    if (currentMergeStrategy !== desiredMergeStrategy) {
+      meta.mergeStrategy = desiredMergeStrategy;
       changed = true;
     }
 

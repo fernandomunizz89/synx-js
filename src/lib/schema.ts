@@ -9,6 +9,7 @@ export const taskPrioritySchema = z.union([
   z.literal(4),
   z.literal(5),
 ]);
+export const taskMergeStrategySchema = z.enum(["auto-rebase", "manual-review"]);
 export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio", "google", "anthropic"]);
 export const taskStatusSchema = z.enum([
   "new",
@@ -260,6 +261,8 @@ export const taskMetaSchema = z.object({
   priority: taskPrioritySchema.optional(),
   milestone: z.string().optional(),
   parallelizable: z.boolean().optional(),
+  ownershipBoundaries: z.array(z.string()).optional(),
+  mergeStrategy: taskMergeStrategySchema.optional(),
   history: z.array(taskMetaHistoryItemSchema),
   securityAuditRequired: z.boolean().optional(),
   /** Phase 4.3 — persisted suggested chain from Dispatcher output */

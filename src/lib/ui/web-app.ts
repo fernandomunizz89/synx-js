@@ -1220,7 +1220,8 @@ export function buildWebUiHtml(): string {
   }
   function taskBlockedLabel(task) {
     if (!task || !Array.isArray(task.blockedBy) || !task.blockedBy.length) return '';
-    return 'Blocked by ' + task.blockedBy.join(', ');
+    var strategy = task.mergeStrategy ? (' · ' + String(task.mergeStrategy)) : '';
+    return 'Blocked by ' + task.blockedBy.join(', ') + strategy;
   }
   function taskPlanLabel(task) {
     if (!task) return '';
@@ -1228,6 +1229,8 @@ export function buildWebUiHtml(): string {
     if (typeof task.priority === 'number') bits.push('P' + task.priority);
     if (task.milestone) bits.push('Milestone: ' + task.milestone);
     if (task.parallelizable === false) bits.push('Non-parallel');
+    if (Array.isArray(task.ownershipBoundaries) && task.ownershipBoundaries.length) bits.push('Ownership: ' + task.ownershipBoundaries.length + ' scope' + (task.ownershipBoundaries.length === 1 ? '' : 's'));
+    if (task.mergeStrategy) bits.push('Merge: ' + task.mergeStrategy);
     return bits.join(' · ');
   }
   function taskStatusHtml(task) {
@@ -1587,6 +1590,10 @@ export function buildWebUiHtml(): string {
     if (typeof d.priority === 'number') fields.push(['Priority', esc('P' + d.priority)]);
     if (d.milestone) fields.push(['Milestone', esc(d.milestone)]);
     fields.push(['Parallelizable', d.parallelizable === false ? 'No' : 'Yes']);
+    fields.push(['Merge strategy', esc(d.mergeStrategy || 'auto-rebase')]);
+    if (Array.isArray(d.ownershipBoundaries) && d.ownershipBoundaries.length) {
+      fields.push(['Ownership boundaries', d.ownershipBoundaries.map(function (scope) { return esc(scope); }).join(', ')]);
+    }
     if (Array.isArray(d.dependsOn) && d.dependsOn.length) fields.push(['Depends on', d.dependsOn.map(function (depId) { return esc(depId); }).join(', ')]);
     if (Array.isArray(d.blockedBy) && d.blockedBy.length) fields.push(['Blocked by', d.blockedBy.map(function (depId) { return esc(depId); }).join(', ')]);
     var infoHtml = fields.map(function (f) {

@@ -10,11 +10,13 @@ import { exists, readJson } from "./fs.js";
 import { runtimeDir } from "./paths.js";
 import { nowIso } from "./utils.js";
 
+const SCOPE_PREFIX = "scope:";
+
 export interface FileLockMap {
   version: 1;
-  /** filePath (relative to workspace root) → taskId */
+  /** lock target (relative file path or scope:relative/dir) → taskId */
   locks: Record<string, string>;
-  /** taskId → list of locked filePaths */
+  /** taskId → list of locked targets */
   byTask: Record<string, string[]>;
   updatedAt: string;
 }
@@ -22,11 +24,117 @@ export interface FileLockMap {
 export interface FileConflict {
   file: string;
   heldBy: string;
+  lockTarget?: string;
+  kind?: "file" | "scope";
 }
 
 export interface AcquireFileLocksResult {
   acquired: string[];
   conflicts: FileConflict[];
+}
+
+export interface AcquireFileLocksOptions {
+  allOrNothing?: boolean;
+  includeParentScopes?: boolean;
+  targetScopes?: string[];
+}
+
+function normalizeRelativePath(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/, "");
+  return normalized || undefined;
+}
+
+function normalizeScope(scope: unknown): string | undefined {
+  const normalized = normalizeRelativePath(scope);
+  if (!normalized || normalized === ".") return undefined;
+  return normalized;
+}
+
+function toScopeTarget(scope: string): string {
+  return `${SCOPE_PREFIX}${scope}`;
+}
+
+function parseTarget(target: string): { kind: "file" | "scope"; value: string } {
+  if (target.startsWith(SCOPE_PREFIX)) {
+    return { kind: "scope", value: target.slice(SCOPE_PREFIX.length) };
+  }
+  return { kind: "file", value: target };
+}
+
+function dirnameScope(file: string): string | undefined {
+  const normalized = normalizeRelativePath(file);
+  if (!normalized) return undefined;
+  const dir = path.posix.dirname(normalized);
+  if (!dir || dir === ".") return undefined;
+  return normalizeScope(dir);
+}
+
+function buildRequestedTargets(
+  files: string[],
+  options?: AcquireFileLocksOptions,
+): string[] {
+  const normalizedFiles = files
+    .map((file) => normalizeRelativePath(file))
+    .filter((file): file is string => Boolean(file));
+  const scopeSet = new Set<string>();
+
+  const explicitScopes = (options?.targetScopes || [])
+    .map((scope) => normalizeScope(scope))
+    .filter((scope): scope is string => Boolean(scope));
+  for (const scope of explicitScopes) scopeSet.add(scope);
+
+  if (options?.includeParentScopes) {
+    for (const file of normalizedFiles) {
+      const parentScope = dirnameScope(file);
+      if (parentScope) scopeSet.add(parentScope);
+    }
+  }
+
+  return Array.from(new Set([
+    ...normalizedFiles,
+    ...Array.from(scopeSet).map((scope) => toScopeTarget(scope)),
+  ]));
+}
+
+function overlapsFileWithScope(file: string, scope: string): boolean {
+  return file === scope || file.startsWith(`${scope}/`);
+}
+
+function overlapsScopeWithScope(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+function lockTargetsOverlap(a: string, b: string): boolean {
+  const left = parseTarget(a);
+  const right = parseTarget(b);
+  if (left.kind === "file" && right.kind === "file") {
+    return left.value === right.value;
+  }
+  if (left.kind === "file" && right.kind === "scope") {
+    return overlapsFileWithScope(left.value, right.value);
+  }
+  if (left.kind === "scope" && right.kind === "file") {
+    return overlapsFileWithScope(right.value, left.value);
+  }
+  return overlapsScopeWithScope(left.value, right.value);
+}
+
+function uniqueConflicts(conflicts: FileConflict[]): FileConflict[] {
+  const seen = new Set<string>();
+  const deduped: FileConflict[] = [];
+  for (const conflict of conflicts) {
+    const key = `${conflict.file}::${conflict.heldBy}::${conflict.lockTarget || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(conflict);
+  }
+  return deduped;
 }
 
 function fileLockPath(): string {
@@ -59,31 +167,56 @@ async function saveFileLockMap(map: FileLockMap): Promise<void> {
 export async function acquireFileLocks(
   taskId: string,
   files: string[],
+  options?: AcquireFileLocksOptions,
 ): Promise<AcquireFileLocksResult> {
-  if (files.length === 0) return { acquired: [], conflicts: [] };
+  const requestedTargets = buildRequestedTargets(files, options);
+  if (requestedTargets.length === 0) return { acquired: [], conflicts: [] };
 
   const map = await loadFileLockMap();
   const acquired: string[] = [];
   const conflicts: FileConflict[] = [];
 
-  for (const file of files) {
-    const existing = map.locks[file];
-    if (!existing || existing === taskId) {
-      map.locks[file] = taskId;
-      acquired.push(file);
-    } else {
-      conflicts.push({ file, heldBy: existing });
+  for (const requestedTarget of requestedTargets) {
+    const requested = parseTarget(requestedTarget);
+    const requestedConflicts: FileConflict[] = [];
+
+    for (const [existingTarget, existingOwnerTaskId] of Object.entries(map.locks)) {
+      if (existingOwnerTaskId === taskId) continue;
+      if (!lockTargetsOverlap(requestedTarget, existingTarget)) continue;
+      const existing = parseTarget(existingTarget);
+      requestedConflicts.push({
+        file: requested.value,
+        heldBy: existingOwnerTaskId,
+        lockTarget: existingTarget,
+        kind: existing.kind,
+      });
     }
+
+    if (requestedConflicts.length > 0) {
+      conflicts.push(...requestedConflicts);
+      continue;
+    }
+
+    acquired.push(requestedTarget);
   }
 
-  // Update byTask index
-  map.byTask[taskId] = Array.from(new Set([...(map.byTask[taskId] ?? []), ...acquired]));
+  const dedupedConflicts = uniqueConflicts(conflicts);
+  if (options?.allOrNothing && dedupedConflicts.length > 0) {
+    return {
+      acquired: [],
+      conflicts: dedupedConflicts,
+    };
+  }
 
   if (acquired.length > 0) {
+    for (const target of acquired) {
+      map.locks[target] = taskId;
+    }
+    map.byTask[taskId] = Array.from(new Set([...(map.byTask[taskId] ?? []), ...acquired]));
     await saveFileLockMap(map);
   }
 
-  return { acquired, conflicts };
+  return { acquired, conflicts: dedupedConflicts };
 }
 
 /**
@@ -111,12 +244,28 @@ export async function releaseFileLocks(taskId: string): Promise<string[]> {
 export async function getFileConflicts(
   taskId: string,
   files: string[],
+  options?: AcquireFileLocksOptions,
 ): Promise<FileConflict[]> {
-  if (files.length === 0) return [];
+  const requestedTargets = buildRequestedTargets(files, options);
+  if (requestedTargets.length === 0) return [];
+
   const map = await loadFileLockMap();
-  return files
-    .filter((f) => map.locks[f] && map.locks[f] !== taskId)
-    .map((f) => ({ file: f, heldBy: map.locks[f] }));
+  const conflicts: FileConflict[] = [];
+  for (const requestedTarget of requestedTargets) {
+    const requested = parseTarget(requestedTarget);
+    for (const [existingTarget, existingOwnerTaskId] of Object.entries(map.locks)) {
+      if (existingOwnerTaskId === taskId) continue;
+      if (!lockTargetsOverlap(requestedTarget, existingTarget)) continue;
+      const existing = parseTarget(existingTarget);
+      conflicts.push({
+        file: requested.value,
+        heldBy: existingOwnerTaskId,
+        lockTarget: existingTarget,
+        kind: existing.kind,
+      });
+    }
+  }
+  return uniqueConflicts(conflicts);
 }
 
 /**
