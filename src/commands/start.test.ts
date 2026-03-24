@@ -1,119 +1,74 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const mocks = vi.hoisted(() => ({
-  ensureGlobalInitialized: vi.fn<() => Promise<void>>(),
-  ensureProjectInitialized: vi.fn<() => Promise<void>>(),
-  allTaskIds: vi.fn<() => Promise<string[]>>(),
-  loadTaskMeta: vi.fn(),
-  writeDaemonState: vi.fn<() => Promise<void>>(),
-  logDaemon: vi.fn<() => Promise<void>>(),
-  logPollingCycle: vi.fn<() => Promise<void>>(),
-  clearStaleLocks: vi.fn<() => Promise<unknown[]>>(),
-  recoverInterruptedTasks: vi.fn<() => Promise<unknown[]>>(),
-  recoverWorkingFiles: vi.fn<() => Promise<unknown[]>>(),
-  processIsRunning: vi.fn<(pid: number) => boolean>(),
-  checkProviderHealth: vi.fn(),
-  loadResolvedProjectConfig: vi.fn(),
-  providerHealthToHuman: vi.fn<(value: string) => string>(),
-  collectReadinessReport: vi.fn(),
-  printReadinessReport: vi.fn(),
-  createStartProgressRenderer: vi.fn(),
-  exists: vi.fn<() => Promise<boolean>>(),
-  readJson: vi.fn(),
-  commandExample: vi.fn<(value: string) => string>(),
-}));
-
-vi.mock("../lib/bootstrap.js", () => ({
-  ensureGlobalInitialized: mocks.ensureGlobalInitialized,
-  ensureProjectInitialized: mocks.ensureProjectInitialized,
-}));
-
-vi.mock("../lib/task.js", () => ({
-  allTaskIds: mocks.allTaskIds,
-  loadTaskMeta: mocks.loadTaskMeta,
-}));
-
-vi.mock("../lib/logging.js", () => ({
-  writeDaemonState: mocks.writeDaemonState,
-  logDaemon: mocks.logDaemon,
-  logPollingCycle: mocks.logPollingCycle,
-}));
-
-vi.mock("../lib/runtime.js", () => ({
-  clearStaleLocks: mocks.clearStaleLocks,
-  recoverInterruptedTasks: mocks.recoverInterruptedTasks,
-  recoverWorkingFiles: mocks.recoverWorkingFiles,
-  processIsRunning: mocks.processIsRunning,
-}));
-
-vi.mock("../lib/provider-health.js", () => ({
-  checkProviderHealth: mocks.checkProviderHealth,
-}));
-
-vi.mock("../lib/config.js", () => ({
-  loadResolvedProjectConfig: mocks.loadResolvedProjectConfig,
-  resolveProviderConfigForAgent: vi.fn((cfg: any) => cfg.providers.dispatcher || cfg.providers.planner),
-}));
-
-vi.mock("../lib/human-messages.js", () => ({
-  providerHealthToHuman: mocks.providerHealthToHuman,
-}));
-
-vi.mock("../lib/readiness.js", () => ({
-  collectReadinessReport: mocks.collectReadinessReport,
-  printReadinessReport: mocks.printReadinessReport,
-}));
-
-vi.mock("../lib/start-progress.js", () => ({
-  createStartProgressRenderer: mocks.createStartProgressRenderer,
-}));
-
-vi.mock("../lib/fs.js", () => ({
-  exists: mocks.exists,
-  readJson: mocks.readJson,
-}));
-
-vi.mock("../lib/cli-command.js", () => ({
-  commandExample: mocks.commandExample,
-}));
-
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { startCommand } from "./start.js";
+import * as bootstrap from "../lib/bootstrap.js";
+import * as startupChecks from "../lib/start/startup-checks.js";
+import * as logging from "../lib/logging.js";
+import * as runtime from "../lib/runtime.js";
+import * as task from "../lib/task.js";
+import * as taskManagement from "../lib/start/task-management.js";
 
-describe.sequential("commands/start", () => {
-  const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+vi.mock("../lib/bootstrap.js");
+vi.mock("../lib/start/startup-checks.js");
+vi.mock("../lib/logging.js");
+vi.mock("../lib/runtime.js");
+vi.mock("../lib/task.js");
+vi.mock("../lib/start/task-management.js");
+vi.mock("../lib/utils.js", () => ({
+  sleep: vi.fn(),
+  nowIso: vi.fn(() => "2023-01-01T00:00:00Z")
+}));
 
+describe("commands/start", () => {
   beforeEach(() => {
-    mocks.ensureGlobalInitialized.mockReset().mockResolvedValue(undefined);
-    mocks.ensureProjectInitialized.mockReset().mockResolvedValue(undefined);
-    mocks.collectReadinessReport.mockReset().mockResolvedValue({
-      ok: false,
-      issues: [{ severity: "error", message: "Dispatcher provider unreachable" }],
-    });
-    mocks.printReadinessReport.mockReset();
-    mocks.commandExample.mockReset().mockImplementation((value: string) => `synx ${value}`);
-    mocks.exists.mockReset().mockResolvedValue(false);
-    mocks.readJson.mockReset();
-    mocks.writeDaemonState.mockReset().mockResolvedValue(undefined);
-    mocks.createStartProgressRenderer.mockReset().mockReturnValue({
-      enabled: false,
-      setStaticFrame: vi.fn(),
-      render: vi.fn(),
-      stop: vi.fn(),
-    });
-    consoleSpy.mockClear();
-  });
-
-  afterEach(() => {
     vi.clearAllMocks();
+    // Default mocks to avoid early aborts
+    vi.mocked(startupChecks.checkExistingDaemon).mockResolvedValue({ shouldAbort: false, messages: [] });
+    vi.mocked(startupChecks.performReadinessChecks).mockResolvedValue({ shouldAbort: false, report: { ok: true, issues: [] } as any });
+    vi.mocked(startupChecks.getProviderStatus).mockResolvedValue({ 
+      config: { humanReviewer: "reviewer", providers: { dispatcher: "openai" } }, 
+      health: { message: "reachable" } 
+    } as any);
+    vi.mocked(runtime.clearStaleLocks).mockResolvedValue([]);
+    vi.mocked(runtime.recoverWorkingFiles).mockResolvedValue([]);
+    vi.mocked(runtime.recoverInterruptedTasks).mockResolvedValue([]);
+    vi.mocked(task.allTaskIds).mockResolvedValue([]);
+    vi.mocked(runtime.consumeRuntimeControl).mockResolvedValue(null);
   });
 
-  it("aborts early when readiness has errors and --force is not set", async () => {
-    await startCommand.parseAsync(["node", "synx"]);
+  it("aborts if daemon check fails", async () => {
+    vi.mocked(startupChecks.checkExistingDaemon).mockResolvedValue({ shouldAbort: true, messages: ["Busy"] });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    
+    // We use exitOverride to prevent process.exit if commander uses it
+    startCommand.exitOverride();
+    await startCommand.parseAsync(["node", "start"], { from: "node" });
+    
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("stop the other process"));
+  });
 
-    const output = consoleSpy.mock.calls.flat().join("\n");
-    expect(output).toContain("Start aborted to prevent failed runs in a broken setup.");
-    expect(output).toContain("synx setup");
-    expect(output).toContain("synx start --force");
-    expect(mocks.writeDaemonState).not.toHaveBeenCalled();
+  it("aborts if readiness check fails", async () => {
+    vi.mocked(startupChecks.performReadinessChecks).mockResolvedValue({ shouldAbort: true, report: { ok: false, issues: ["Broken"] } as any });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    
+    startCommand.exitOverride();
+    await startCommand.parseAsync(["node", "start"], { from: "node" });
+    
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Start aborted"));
+  });
+
+  it("runs the loop once and stops", async () => {
+    vi.mocked(runtime.consumeRuntimeControl)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ command: "stop", requestedBy: "test", reason: "done" } as any);
+
+    vi.mocked(task.allTaskIds).mockResolvedValue(["T1"]);
+    vi.mocked(taskManagement.processTasksWithConcurrency).mockResolvedValue([{ taskId: "T1", processedStages: 1 }]);
+    vi.mocked(taskManagement.loadMetasSafe).mockResolvedValue([{ taskId: "T1", status: "success" } as any]);
+
+    startCommand.exitOverride();
+    await startCommand.parseAsync(["node", "start", "--no-progress"], { from: "node" });
+
+    expect(taskManagement.processTasksWithConcurrency).toHaveBeenCalled();
+    expect(logging.logPollingCycle).toHaveBeenCalled();
   });
 });

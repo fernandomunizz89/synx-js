@@ -1,5 +1,31 @@
 # SYNX – Implementation Notes
 
+## Web UI Rewrite (2026-03-23)
+
+### Decision
+
+Replaced the Codex-generated 7,156-line HTML monolith (`web-app.ts`) with a clean, self-contained vanilla JS implementation (~490 lines). The React island build pipeline (`scripts/build-ui-react.mjs`, `dist/ui-assets/`) and the associated modules (`layout.ts`, `theme.ts`, `theme-provider.ts`, `react-task-assistant/`) were removed.
+
+### Why
+
+- The previous UI was generated across 8 incremental phases by an automated agent, accumulating duplicate code, Portuguese strings, two conflicting "simple/advanced" modes, and a legacy fallback layer that was never removed.
+- The React island approach added a mandatory build step and a 205 KB JS bundle for functionality achievable without a framework.
+- The API layer (`server.ts`) was already solid — the problem was only the frontend shell.
+
+### What the new UI provides
+
+- **Tasks tab:** searchable table with inline expand, approve/reprove/cancel per task.
+- **Review tab:** focused queue of `waiting_human` tasks with approve and reprove actions.
+- **Stream tab:** real-time SSE event log.
+- **Header:** engine status dot, active task count, waiting review count.
+- No build step — `npm run build:ts` is sufficient.
+
+### API contract
+
+Unchanged. All existing `/api/*` routes and SSE stream continue to work identically.
+
+---
+
 ## Dream Stack 2026 – Strategic Pivot (2026-03-16)
 
 ### Decision

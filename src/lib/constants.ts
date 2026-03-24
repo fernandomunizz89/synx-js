@@ -13,23 +13,44 @@ export const STALE_LOCK_MINUTES = 10;
 export const DEFAULT_QA_MAX_RETRIES = 3;
 
 export const STAGE_FILE_NAMES = {
+  projectOrchestrator: "00-project-orchestrator.request.json",
   dispatcher: "00-dispatcher.request.json",
   // Dream Stack 2026 – Expert Squad
-  synxFrontExpert: "04-synx-front-expert.request.json",
-  synxMobileExpert: "04-synx-mobile-expert.request.json",
-  synxBackExpert: "04-synx-back-expert.request.json",
-  synxQaEngineer: "06-synx-qa-engineer.request.json",
+  synxFrontExpert:   "04-synx-front-expert.request.json",
+  synxMobileExpert:  "04-synx-mobile-expert.request.json",
+  synxBackExpert:    "04-synx-back-expert.request.json",
+  synxQaEngineer:    "06-synx-qa-engineer.request.json",
   synxSeoSpecialist: "04-synx-seo-specialist.request.json",
+  // Phase 2 – Extended Squad
+  synxCodeReviewer:      "07-synx-code-reviewer.request.json",
+  synxDevopsExpert:      "04-synx-devops-expert.request.json",
+  // Phase 2.3 / 2.4
+  synxSecurityAuditor:   "08-synx-security-auditor.request.json",
+  synxDocsWriter:        "04-synx-docs-writer.request.json",
+  // Phase 2.5
+  synxDbArchitect:       "04-synx-db-architect.request.json",
+  // Phase 2.6
+  synxPerfOptimizer:     "04-synx-performance-optimizer.request.json",
 };
 
 export const DONE_FILE_NAMES = {
   dispatcher: "01-dispatcher.done.json",
   // Dream Stack 2026 – Expert Squad
-  synxFrontExpert: "04-synx-front-expert.done.json",
-  synxMobileExpert: "04-synx-mobile-expert.done.json",
-  synxBackExpert: "04-synx-back-expert.done.json",
-  synxQaEngineer: "06-synx-qa-engineer.done.json",
+  synxFrontExpert:   "04-synx-front-expert.done.json",
+  synxMobileExpert:  "04-synx-mobile-expert.done.json",
+  synxBackExpert:    "04-synx-back-expert.done.json",
+  synxQaEngineer:    "06-synx-qa-engineer.done.json",
   synxSeoSpecialist: "04-synx-seo-specialist.done.json",
+  // Phase 2 – Extended Squad
+  synxCodeReviewer:      "07-synx-code-reviewer.done.json",
+  synxDevopsExpert:      "04-synx-devops-expert.done.json",
+  // Phase 2.3 / 2.4
+  synxSecurityAuditor:   "08-synx-security-auditor.done.json",
+  synxDocsWriter:        "04-synx-docs-writer.done.json",
+  // Phase 2.5
+  synxDbArchitect:       "04-synx-db-architect.done.json",
+  // Phase 2.6
+  synxPerfOptimizer:     "04-synx-performance-optimizer.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [
@@ -42,4 +63,14 @@ export const REQUIRED_PROMPT_FILES = [
   "synx-back-expert.md",
   "synx-qa-engineer.md",
   "synx-seo-specialist.md",
+  // Phase 2 – Extended Squad (optional – built-in defaults are used when absent)
+  "synx-code-reviewer.md",
+  "synx-devops-expert.md",
+  // Phase 2.3 / 2.4 (optional – built-in defaults are used when absent)
+  "synx-security-auditor.md",
+  "synx-docs-writer.md",
+  // Phase 2.5 (optional – built-in default used when absent)
+  "synx-db-architect.md",
+  // Phase 2.6 (optional – built-in default used when absent)
+  "synx-performance-optimizer.md",
 ] as const;

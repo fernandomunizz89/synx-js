@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]);
+export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed", "Project"]);
 export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio", "google", "anthropic"]);
 export const taskStatusSchema = z.enum([
   "new",
@@ -16,12 +16,19 @@ export const agentNameSchema = z.enum([
   // Orchestration layer
   "Dispatcher",
   "Human Review",
+  "Project Orchestrator",
   // Expert Squad
   "Synx Front Expert",
   "Synx Mobile Expert",
   "Synx Back Expert",
   "Synx QA Engineer",
   "Synx SEO Specialist",
+  "Synx Code Reviewer",
+  "Synx DevOps Expert",
+  "Synx Security Auditor",
+  "Synx Documentation Writer",
+  "Synx DB Architect",
+  "Synx Performance Optimizer",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System"), z.string()])
@@ -35,6 +42,15 @@ const taskMetaCurrentAgentSchema = z
 export const e2ePolicySchema = z.enum(["auto", "required", "skip"]);
 export const e2eFrameworkSchema = z.enum(["auto", "playwright", "other"]);
 
+export const fallbackModelSchema = z.object({
+  type: providerTypeSchema,
+  model: z.string(),
+  baseUrlEnv: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKey: z.string().optional(),
+});
+
 export const providerStageConfigSchema = z.object({
   type: providerTypeSchema,
   model: z.string(),
@@ -43,6 +59,7 @@ export const providerStageConfigSchema = z.object({
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   fallbackModel: z.string().optional(),
+  fallbackModels: z.array(fallbackModelSchema).optional(),
   autoDiscoverModel: z.boolean().optional(),
 });
 
@@ -133,10 +150,17 @@ export const localProjectConfigSchema = z.object({
   framework: z.string(),
   humanReviewer: z.string(),
   tasksDir: z.string(),
+  autoApproveThreshold: z.number().min(0).max(1).optional(),
   providerOverrides: z.object({
     dispatcher: providerStageConfigSchema.partial().optional(),
     planner: providerStageConfigSchema.partial().optional(),
     agents: z.record(agentNameSchema, providerStageConfigSchema.partial()).optional(),
+  }).optional(),
+  /** Phase 5 — Webhook delivery configuration */
+  webhooks: z.object({
+    enabled: z.boolean().default(false),
+    url: z.string().url().optional(),
+    events: z.array(z.string()).optional(),
   }).optional(),
 });
 
@@ -202,7 +226,30 @@ export const taskMetaSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   history: z.array(taskMetaHistoryItemSchema),
+  securityAuditRequired: z.boolean().optional(),
+  /** Phase 4.3 — persisted suggested chain from Dispatcher output */
+  suggestedChain: z.array(z.string()).optional(),
 });
+
+// ── Phase 4.1 — Project Memory ────────────────────────────────────────────────
+
+export const projectMemoryEntrySchema = z.object({
+  fact: z.string(),
+  source: z.string(),
+  addedAt: z.string(),
+});
+
+export const projectMemorySchema = z.object({
+  version: z.literal(1),
+  patterns: z.array(projectMemoryEntrySchema).default([]),
+  decisions: z.array(projectMemoryEntrySchema).default([]),
+  knownIssues: z.array(projectMemoryEntrySchema).default([]),
+  updatedAt: z.string(),
+});
+
+export type ProjectMemoryType = z.infer<typeof projectMemorySchema>;
+
+// ── Phase 4.3 — Enhanced Dispatcher Chain ─────────────────────────────────────
 
 export const dispatcherOutputSchema = z.object({
   type: taskTypeSchema,
@@ -223,6 +270,13 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx Back Expert"),
     z.literal("Synx SEO Specialist"),
   ]).optional(),
+  securityAuditRequired: z.boolean().optional(),
+  /**
+   * Phase 4.3 — Suggested ordered agent chain for this task.
+   * Example: ["Synx Back Expert", "Synx Code Reviewer", "Synx QA Engineer"]
+   * Injected into every expert's context so they know what comes next.
+   */
+  suggestedChain: z.array(z.string()).optional(),
   nextAgent: z.union([
     // Dream Stack 2026 – Expert Squad routing
     z.literal("Synx Front Expert"),
@@ -230,6 +284,10 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx Back Expert"),
     z.literal("Synx QA Engineer"),
     z.literal("Synx SEO Specialist"),
+    z.literal("Synx DevOps Expert"),
+    z.literal("Synx Documentation Writer"),
+    z.literal("Synx DB Architect"),
+    z.literal("Synx Performance Optimizer"),
   ]),
 });
 
@@ -424,6 +482,9 @@ export const qaReturnHistoryEntrySchema = z.object({
   summary: z.string(),
   failures: z.array(z.string()).optional().default([]),
   findings: z.array(qaReturnContextItemSchema).optional().default([]),
+  // Phase 4.4 — Smart QA Retry
+  retryStrategy: z.enum(["local_patch", "expanded_context", "strategy_shift"]).optional(),
+  retryCategory: z.string().optional(),
 });
 
 export const qaCumulativeFindingSchema = qaReturnContextItemSchema.extend({
@@ -447,6 +508,10 @@ export const qaHandoffContextSchema = z.object({
   latestFindings: z.array(qaReturnContextItemSchema).optional().default([]),
   cumulativeFindings: z.array(qaCumulativeFindingSchema).optional().default([]),
   history: z.array(qaReturnHistoryEntrySchema).optional().default([]),
+  // Phase 4.4 — Smart QA Retry
+  retryStrategy: z.enum(["local_patch", "expanded_context", "strategy_shift"]).optional(),
+  retryInstructions: z.string().optional(),
+  noProgressAbort: z.boolean().optional(),
 });
 
 export const qaOutputSchema = z.object({
@@ -482,5 +547,43 @@ export const qaOutputSchema = z.object({
     z.literal("Synx SEO Specialist"),
   ]),
 });
+
+export const codeReviewIssueSchema = z.object({
+  file: z.string(),
+  line: z.number().int().nonnegative().optional(),
+  severity: z.enum(["critical", "high", "medium", "low"]),
+  rule: z.string().optional(),
+  message: z.string(),
+  suggestion: z.string().optional(),
+});
+
+export const codeReviewOutputSchema = z.object({
+  reviewPassed: z.boolean(),
+  issues: z.array(codeReviewIssueSchema).default([]),
+  summary: z.string(),
+  blockedReason: z.string().optional(),
+});
+
+export type CodeReviewOutput = z.infer<typeof codeReviewOutputSchema>;
+
+export const securityAuditVulnerabilitySchema = z.object({
+  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  cve: z.string().optional(),
+  category: z.string().optional(),
+  description: z.string(),
+  file: z.string().optional(),
+  line: z.number().int().nonnegative().optional(),
+  fix: z.string(),
+});
+
+export const securityAuditOutputSchema = z.object({
+  auditPassed: z.boolean(),
+  vulnerabilities: z.array(securityAuditVulnerabilitySchema).default([]),
+  summary: z.string(),
+  blockedReason: z.string().optional(),
+  owaspCategories: z.array(z.string()).default([]),
+});
+
+export type SecurityAuditOutput = z.infer<typeof securityAuditOutputSchema>;
 
 // Legacy agent output schemas were removed.

@@ -42,6 +42,15 @@ describe.sequential("lib/pipeline-registry", () => {
       expect(result).toEqual([]);
     });
 
+    it("returns empty array when readdir fails", async () => {
+      await fs.mkdir(pipelinesDirPath, { recursive: true });
+      // Mock readdir to throw
+      const spy = vi.spyOn(fs, "readdir").mockRejectedValue(new Error("Permission denied"));
+      const result = await loadPipelineDefinitions();
+      expect(result).toEqual([]);
+      spy.mockRestore();
+    });
+
     it("returns an empty array when pipelines dir exists but is empty", async () => {
       await fs.mkdir(pipelinesDirPath, { recursive: true });
       const result = await loadPipelineDefinitions();

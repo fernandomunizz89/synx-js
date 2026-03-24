@@ -1,20 +1,21 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { cancelCommand } from "./cancel.js";
 import { allTaskIds, loadTaskMeta } from "../lib/task.js";
-import { requestTaskCancel } from "../lib/task-cancel.js";
+import { cancelTaskService } from "../lib/services/task-services.js";
 
 vi.mock("../lib/task.js", () => ({
   allTaskIds: vi.fn(),
   loadTaskMeta: vi.fn(),
 }));
 
-vi.mock("../lib/task-cancel.js", () => ({
-  requestTaskCancel: vi.fn(),
+vi.mock("../lib/services/task-services.js", () => ({
+  cancelTaskService: vi.fn(),
 }));
 
 describe("cancel command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cancelTaskService).mockResolvedValue(undefined);
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
@@ -32,7 +33,7 @@ describe("cancel command", () => {
 
     await cancelCommand.parseAsync(["node", "cancel"]);
     
-    expect(requestTaskCancel).toHaveBeenCalledWith(expect.objectContaining({
+    expect(cancelTaskService).toHaveBeenCalledWith(expect.objectContaining({
         taskId: "task-new"
     }));
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Cancellation requested for task-new"));
@@ -43,7 +44,7 @@ describe("cancel command", () => {
     
     await cancelCommand.parseAsync(["node", "cancel", "task-spec"]);
     
-    expect(requestTaskCancel).toHaveBeenCalledWith(expect.objectContaining({
+    expect(cancelTaskService).toHaveBeenCalledWith(expect.objectContaining({
         taskId: "task-spec"
     }));
   });

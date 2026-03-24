@@ -9,6 +9,7 @@ export const ARTIFACT_FILES = {
   symbolContract: "symbol-contract.json",
   researchLog: "research-log.json",
   researchContext: "research-context.json",
+  agentConsultationLog: "agent-consultation-log.json",
 } as const;
 
 function artifactPath(taskId: string, fileName: string): string {

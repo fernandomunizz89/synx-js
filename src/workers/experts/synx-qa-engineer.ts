@@ -1,10 +1,12 @@
 import path from "node:path";
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../../lib/constants.js";
+import { extractAndPersistMemoryFacts } from "../../lib/memory-extractor.js";
 import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../../lib/config.js";
 import { buildAgentRoleContract } from "../../lib/agent-role-contract.js";
 import { ensureCodeQualityBootstrap } from "../../lib/code-quality-bootstrap.js";
 import { exists, readJson, writeJson } from "../../lib/fs.js";
 import { taskDir } from "../../lib/paths.js";
+
 import { qaOutputSchema } from "../../lib/schema.js";
 import { loadTaskMeta } from "../../lib/task.js";
 import type { AgentName, StageEnvelope } from "../../lib/types.js";
@@ -20,6 +22,14 @@ import {
   type QaReturnContextItem,
   type QaReturnHistoryEntry,
 } from "../../lib/qa-context.js";
+import {
+  decideAdaptiveRetry,
+  buildRetryStrategyInstructions,
+  buildFailureSignature,
+  resolveQualityRepairMaxAttempts,
+  type RetryDecisionInput,
+  type RetryStrategy,
+} from "../../lib/quality-retry-policy.js";
 import { resolveTaskQaPreferences } from "../../lib/qa-preferences.js";
 import { deriveQaRootCauseFocus } from "../../lib/root-cause-intelligence.js";
 import { createProvider } from "../../providers/factory.js";
@@ -198,28 +208,92 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       },
     ]);
 
+    const maxRetries = resolveQualityRepairMaxAttempts();
+    const currentAttempt = returnHistory.length + 1;
+
+    // Smart retry: compute adaptive strategy using failure signatures
+    let retryDecision = null;
+    let noProgressAbort = false;
+
+    if (verdict !== "pass" && isExpertAgent(String(previousExpert))) {
+      const currentSignature = buildFailureSignature(output.failures);
+
+      // Compute noProgressStreak from consecutive entries without improvement
+      const noProgressStreak = (() => {
+        if (returnHistory.length < 2) return 0;
+        let streak = 0;
+        for (let i = returnHistory.length - 1; i >= 1; i--) {
+          const curr = returnHistory[i].failures?.length ?? 0;
+          const prev = returnHistory[i - 1].failures?.length ?? 0;
+          if (curr >= prev) streak++;
+          else break;
+        }
+        return streak;
+      })();
+
+      const previousEntry = returnHistory.length > 0 ? returnHistory[returnHistory.length - 1] : null;
+      const previousSignature = previousEntry ? buildFailureSignature(previousEntry.failures ?? []) : "";
+
+      const retryInput: RetryDecisionInput = {
+        attempt: currentAttempt,
+        maxAttempts: maxRetries,
+        blockingFailures: output.failures.slice(0, 10),
+        blockingCount: output.failures.length,
+        signature: currentSignature,
+        signatureAttempts: returnHistory.filter((e) => buildFailureSignature(e.failures ?? []) === currentSignature).length + 1,
+        noProgressStreak,
+        previousAttempt: previousEntry
+          ? {
+              strategy: ((previousEntry as QaReturnHistoryEntry & { retryStrategy?: RetryStrategy }).retryStrategy ?? "local_patch") as RetryStrategy,
+              signature: previousSignature,
+              blockingCount: previousEntry.failures?.length ?? 0,
+              category: (previousEntry as QaReturnHistoryEntry & { retryCategory?: string }).retryCategory ?? "unknown",
+            }
+          : undefined,
+      };
+
+      retryDecision = decideAdaptiveRetry(retryInput);
+
+      if (!retryDecision.shouldContinue || currentAttempt >= maxRetries) {
+        noProgressAbort = true;
+      }
+    }
+
     const qaHandoffContext: QaHandoffContext = {
-      attempt: returnHistory.length + 1,
-      maxRetries: 3,
-      returnedTo: verdict === "pass"
+      attempt: currentAttempt,
+      maxRetries,
+      returnedTo: (noProgressAbort || verdict === "pass")
         ? "Human Review"
         : (isExpertAgent(String(previousExpert)) ? (previousExpert as QaRemediationAgent) : "Human Review"),
       summary: output.failures.slice(0, 2).join("; ") || (verdict === "pass" ? "All checks passed." : "[no summary]"),
       latestFindings: mergedReturnContext,
       cumulativeFindings: cumulativeFindings.slice(0, 8),
       history: returnHistory,
+      retryStrategy: retryDecision?.strategy,
+      retryInstructions: retryDecision
+        ? buildRetryStrategyInstructions({
+            strategy: retryDecision.strategy,
+            attempt: currentAttempt,
+            maxAttempts: maxRetries,
+            blockingFailures: output.failures.slice(0, 10),
+            changedFromPrevious: retryDecision.changedFromPrevious,
+          })
+        : undefined,
+      noProgressAbort,
     };
 
     // Persist history for next QA iteration
     if (verdict !== "pass" && isExpertAgent(String(previousExpert))) {
-      const newEntry: QaReturnHistoryEntry = {
+      const newEntry = {
         attempt: qaHandoffContext.attempt,
         returnedAt: nowIso(),
         returnedTo: previousExpert as QaRemediationAgent,
         summary: qaHandoffContext.summary,
         failures: output.failures,
         findings: mergedReturnContext,
-      };
+        retryStrategy: retryDecision?.strategy ?? "local_patch",
+        retryCategory: retryDecision?.category ?? "unknown",
+      } as QaReturnHistoryEntry;
       await saveSynxQaReturnHistory(taskId, [...returnHistory, newEntry]);
     }
 
@@ -239,15 +313,44 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       .map((f, i) => `${i + 1}. ${f.issue}\n   Expected: ${f.expectedResult}\n   Received: ${f.receivedResult}\n   Action: ${f.recommendedAction}`)
       .join("\n") || "- [none]";
 
-    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${verdict === "pass" ? "Human Review" : String(previousExpert)}\n`;
+    // Check if security audit is required (set by Dispatcher)
+    let needsSecurityAudit = false;
+    try {
+      const dispatcherDonePath = path.join(taskDir(taskId), "done", DONE_FILE_NAMES.dispatcher);
+      if (await exists(dispatcherDonePath)) {
+        const dispatcherDone = await readJson<{ output?: { securityAuditRequired?: boolean } }>(dispatcherDonePath);
+        needsSecurityAudit = dispatcherDone.output?.securityAuditRequired === true;
+      }
+    } catch { /* ignore */ }
 
     const effectiveNextAgent: AgentName = verdict === "pass"
-      ? "Human Review"
-      : (isExpertAgent(String(previousExpert)) ? (previousExpert as AgentName) : "Human Review");
+      ? (needsSecurityAudit ? "Synx Security Auditor" : "Human Review")
+      : noProgressAbort
+        ? "Human Review"  // Early abort: no-progress detected
+        : (isExpertAgent(String(previousExpert)) ? (previousExpert as AgentName) : "Human Review");
 
+    // Phase 4.1 — persist memory facts from this successful pipeline run
+    if (verdict === "pass" && !needsSecurityAudit) {
+      await extractAndPersistMemoryFacts({
+        taskId,
+        taskTitle: baseInput.task.title,
+        taskType: baseInput.task.typeHint ?? "feature",
+        agentChain: baseInput.suggestedChain,
+      }).catch(() => { /* best-effort: never fail the QA stage */ });
+    }
 
+    const retrySection = retryDecision
+      ? `\n## Retry Strategy\n${retryDecision.strategy} (attempt ${currentAttempt}/${maxRetries})\n${retryDecision.reason}`
+      : "";
 
-    const nextMapping = effectiveNextAgent === "Human Review" ? null : expertStageMap[effectiveNextAgent];
+    const view = `# HANDOFF\n\n## Agent\nSynx QA Engineer\n\n## Verdict\n${verdict.toUpperCase()}\n\n## Summary\n${qaHandoffContext.summary}${retrySection}\n\n## Failures\n${output.failures.map((f) => `- ${f}`).join("\n") || "- [none]"}\n\n## Findings\n${findingsView}\n\n## Root Cause Focus\n${rootCauseFocus.sourceHints.length ? rootCauseFocus.sourceHints.map((h) => `- ${h}`).join("\n") : "- [none]"}\n\n## Next\n${effectiveNextAgent}\n`;
+
+    const securityAuditorStageEntry = { stage: "synx-security-auditor", fileName: STAGE_FILE_NAMES.synxSecurityAuditor };
+    const nextMapping = effectiveNextAgent === "Human Review"
+      ? null
+      : effectiveNextAgent === "Synx Security Auditor"
+        ? securityAuditorStageEntry
+        : expertStageMap[effectiveNextAgent];
 
     await this.finishStage({
       taskId,
@@ -264,7 +367,7 @@ SYNX QA ENGINEER – EXECUTION CONTRACT:
       nextStage: nextMapping?.stage || undefined,
       nextRequestFileName: nextMapping?.fileName || undefined,
       nextInputRef: `done/${DONE_FILE_NAMES.synxQaEngineer}`,
-      humanApprovalRequired: effectiveNextAgent === "Human Review",
+      humanApprovalRequired: effectiveNextAgent === "Human Review" && !needsSecurityAudit,
       startedAt,
       provider: result.provider,
       model: result.model,

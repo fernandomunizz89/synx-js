@@ -31,6 +31,7 @@ It:
 - supports LM Studio auto model detection (`model: auto`) based on the currently loaded local model
 - supports OpenAI-compatible cloud presets (OpenAI, OpenRouter, custom endpoint)
 - validates provider and model before finishing
+- **optionally** lets you configure a different provider for each expert individually (Front, Mobile, Back, QA, SEO) — skip to use the Dispatcher provider as default for all experts
 
 ### 2. `start`
 Starts the engine.
@@ -134,6 +135,8 @@ QA failure behavior:
 
 If you omit fields, the CLI uses interactive menus (arrow keys + Enter).
 
+> **Note:** `Research` and `Documentation` tasks skip the E2E policy and framework questions automatically — E2E is set to `skip` since these task types do not produce testable code changes.
+
 ### 4. `status`
 Shows what is happening in simple terms.
 
@@ -148,6 +151,37 @@ To list all tasks/history:
 ```bash
 synx status --all
 ```
+
+## Web observability UI (`synx ui`)
+
+Use this command when you want a browser-based operational view with review actions:
+
+```bash
+synx ui
+```
+
+Useful options:
+
+```bash
+synx ui --read-only         # disables approve/reprove/cancel
+synx ui --host 127.0.0.1    # default bind host
+synx ui --port 4317         # default port
+```
+
+Three tabs:
+
+- **Tasks** — searchable task table. Click any row to expand details with Approve / Reprove / Cancel actions inline.
+- **Review** — focused list of `waiting_human` tasks. Approve or open the Reprove modal directly from here.
+- **Stream** — real-time event log via SSE. Auto-refreshes Tasks and Review on relevant events.
+
+The header always shows engine status, active task count, and waiting-for-review count.
+
+Reprove modal: requires a reason; optional checkbox to roll back file changes for that task.
+
+Operational notes:
+- binds locally by default (`127.0.0.1:4317`)
+- API and SSE run in the same process as the command
+- use `--read-only` for passive monitoring (all mutating actions return HTTP 405)
 
 ## Final human step
 When a task reaches `waiting_human`, you can either approve or reprove it.

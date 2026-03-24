@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   agentNameSchema,
+  fallbackModelSchema,
+  localProjectConfigSchema,
+  providerStageConfigSchema,
   qaOutputSchema,
   taskMetaSchema,
   taskTypeSchema,
@@ -12,6 +15,7 @@ describe("schema", () => {
     expect(taskTypeSchema.parse("Bug")).toBe("Bug");
     expect(agentNameSchema.parse("Synx QA Engineer")).toBe("Synx QA Engineer");
     expect(agentNameSchema.parse("Human Review")).toBe("Human Review");
+    expect(agentNameSchema.parse("Project Orchestrator")).toBe("Project Orchestrator");
   });
 
   it("rejects invalid task enum value", () => {
@@ -52,6 +56,56 @@ describe("schema", () => {
       currentAgent: "Dispatcher",
     });
     expect(parsedNormal.currentAgent).toBe("Dispatcher");
+  });
+
+  it("parses fallbackModelSchema", () => {
+    const valid = fallbackModelSchema.parse({ type: "anthropic", model: "claude-3-5-sonnet" });
+    expect(valid.type).toBe("anthropic");
+    expect(valid.model).toBe("claude-3-5-sonnet");
+
+    const withExtras = fallbackModelSchema.parse({
+      type: "openai-compatible",
+      model: "gpt-4o",
+      baseUrlEnv: "MY_BASE_URL",
+      apiKeyEnv: "MY_API_KEY",
+      baseUrl: "http://localhost:8080",
+      apiKey: "sk-test",
+    });
+    expect(withExtras.baseUrl).toBe("http://localhost:8080");
+
+    expect(() => fallbackModelSchema.parse({ type: "unsupported-type", model: "m" })).toThrow();
+  });
+
+  it("parses providerStageConfigSchema with fallbackModels", () => {
+    const config = providerStageConfigSchema.parse({
+      type: "mock",
+      model: "primary",
+      fallbackModels: [
+        { type: "anthropic", model: "claude-3-5-sonnet" },
+        { type: "openai-compatible", model: "gpt-4o", baseUrl: "http://localhost" },
+      ],
+    });
+    expect(config.fallbackModels).toHaveLength(2);
+    expect(config.fallbackModels?.[0]?.type).toBe("anthropic");
+  });
+
+  it("parses localProjectConfigSchema with autoApproveThreshold", () => {
+    const base = {
+      projectName: "test",
+      language: "TypeScript",
+      framework: "Next.js",
+      humanReviewer: "Alice",
+      tasksDir: ".tasks",
+    };
+
+    const withThreshold = localProjectConfigSchema.parse({ ...base, autoApproveThreshold: 0.9 });
+    expect(withThreshold.autoApproveThreshold).toBe(0.9);
+
+    const withoutThreshold = localProjectConfigSchema.parse(base);
+    expect(withoutThreshold.autoApproveThreshold).toBeUndefined();
+
+    expect(() => localProjectConfigSchema.parse({ ...base, autoApproveThreshold: 1.5 })).toThrow();
+    expect(() => localProjectConfigSchema.parse({ ...base, autoApproveThreshold: -0.1 })).toThrow();
   });
 
   it("parses QA output with defaults and optional handoff context", () => {

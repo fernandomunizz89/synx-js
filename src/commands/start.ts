@@ -2,10 +2,10 @@ import { Command } from "commander";
 import readline from "node:readline";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { allTaskIds, loadTaskMeta } from "../lib/task.js";
-import { writeDaemonState, logDaemon, logPollingCycle } from "../lib/logging.js";
+import { writeDaemonState, logDaemon, logPollingCycle, logRuntimeEvent } from "../lib/logging.js";
 import { workerList as workers } from "../workers/index.js";
 import { sleep, nowIso } from "../lib/utils.js";
-import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles } from "../lib/runtime.js";
+import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles, consumeRuntimeControl } from "../lib/runtime.js";
 import { commandExample } from "../lib/cli-command.js";
 import { createStartProgressRenderer } from "../lib/start-progress.js";
 import {
@@ -92,6 +92,14 @@ export const startCommand = new Command("start")
     else { console.log(renderSynxLogo()); headerContextLines.forEach(l => console.log(l)); console.log(renderSynxPanel({ title: "SYNX CONTROL PANEL", lines: fixedControlPanelLines, borderColor: "cyan" })); console.log(renderSynxPanel({ title: "ENGINE", lines: enginePanelLines, borderColor: "magenta" })); }
 
     await logDaemon("SYNX engine started.");
+    await logRuntimeEvent({
+      event: "engine.started",
+      source: "start-command",
+      payload: {
+        pid: process.pid,
+        pollIntervalMs: resolvePollIntervalMs(),
+      },
+    });
     await writeDaemonState({ pid: process.pid, lastHeartbeatAt: nowIso(), loop: 0, taskCount: 0, workerCount: workers.length });
 
     const pollIntervalMs = resolvePollIntervalMs();
@@ -115,7 +123,21 @@ export const startCommand = new Command("start")
     const pushEvent = (message: string, level: "info" | "critical" = "info"): void => { appendEvent(uiState.eventLogLines, message); appendConsole(uiState.consoleLogLines, message, level); if (level === "critical") uiState.enginePanelHasCritical = true; };
     const renderUI = (): void => progress.render({ ...uiState, loop, engineStartedAtMs });
     const refreshMetas = async (): Promise<void> => { const ids = await allTaskIds(); uiState.metas = await loadMetasSafe(ids); };
-    const requestStop = (signal: NodeJS.Signals): void => { if (stopRequested) return; stopRequested = true; stopSignal = signal; pushEvent(`${signal} received. Waiting current cycle...`); renderUI(); };
+    const requestStop = (signal: NodeJS.Signals, source = "signal", reason = ""): void => {
+      if (stopRequested) return;
+      stopRequested = true;
+      stopSignal = signal;
+      pushEvent(`${signal} received. Waiting current cycle...`);
+      void logRuntimeEvent({
+        event: "engine.stop_requested",
+        source,
+        payload: {
+          signal,
+          reason,
+        },
+      });
+      renderUI();
+    };
 
     let commandExecution = Promise.resolve();
     const queueCommand = (cmd: any): void => { commandExecution = commandExecution.then(() => runInlineCommand(cmd, { pushEvent, requestStop })).then(refreshMetas).catch(e => pushEvent(`Command error: ${e.message}`, "critical")).finally(renderUI); };
@@ -123,7 +145,22 @@ export const startCommand = new Command("start")
     if (progressEnabled && process.stdin.isTTY) {
       readline.emitKeypressEvents(process.stdin);
       process.stdin.setRawMode(true);
-      process.stdin.on("keypress", setupKeypressHandler({ state: uiState, queueCommand, requestStop, pushEvent, render: renderUI }));
+      process.stdin.on("keypress", setupKeypressHandler({
+        state: uiState,
+        queueCommand,
+        requestStop,
+        pushEvent,
+        render: renderUI,
+        onPauseToggle: (paused) => {
+          void logRuntimeEvent({
+            event: paused ? "engine.paused" : "engine.resumed",
+            source: "tui",
+            payload: {
+              loop,
+            },
+          });
+        },
+      }));
       process.stdin.resume();
       pushEvent("Inline command mode active. Use ? or F1 for help. Press F4 to switch Console/Event Stream.");
       renderUI();
@@ -133,6 +170,42 @@ export const startCommand = new Command("start")
       while (!stopRequested) {
         const loopStartedAtMs = Date.now();
         loop += 1;
+
+        const runtimeControl = await consumeRuntimeControl();
+        if (runtimeControl) {
+          if (runtimeControl.command === "pause") {
+            if (!uiState.paused) {
+              uiState.paused = true;
+              pushEvent("Engine paused by external command.");
+            }
+            await logRuntimeEvent({
+              event: "engine.paused",
+              source: "runtime-control",
+              payload: {
+                requestedBy: runtimeControl.requestedBy,
+                reason: runtimeControl.reason,
+              },
+            });
+          }
+          if (runtimeControl.command === "resume") {
+            if (uiState.paused) {
+              uiState.paused = false;
+              pushEvent("Engine resumed by external command.");
+            }
+            await logRuntimeEvent({
+              event: "engine.resumed",
+              source: "runtime-control",
+              payload: {
+                requestedBy: runtimeControl.requestedBy,
+                reason: runtimeControl.reason,
+              },
+            });
+          }
+          if (runtimeControl.command === "stop") {
+            requestStop("SIGTERM", "runtime-control", runtimeControl.reason);
+          }
+        }
+
         const taskIds = await allTaskIds();
         const outcomes = uiState.paused ? [] : await processTasksWithConcurrency(taskIds, taskConcurrency);
         let processedStages = outcomes.reduce((sum, o) => sum + o.processedStages, 0);
@@ -165,6 +238,14 @@ export const startCommand = new Command("start")
     } finally {
       if (process.stdin.isTTY) { process.stdin.setRawMode(false); process.stdin.pause(); }
       await logDaemon(`SYNX engine stopped${stopSignal ? ` via ${stopSignal}` : ""}.`);
+      await logRuntimeEvent({
+        event: "engine.stopped",
+        source: "start-command",
+        payload: {
+          signal: stopSignal,
+          loop,
+        },
+      });
       await writeDaemonState({ pid: process.pid, lastHeartbeatAt: nowIso(), loop, taskCount: 0, workerCount: workers.length, activeTaskCount: lastActiveTaskCount, totalProcessedStages, totalProcessedTasks, immediateCycleStreak, immediateCyclesTotal, sleepsAvoidedTotal, sleepsTotal, loopAction: "stopped", loopActionReason: stopSignal ? `graceful shutdown after ${stopSignal}` : "terminated", loopDurationMs: 0, pollIntervalMs, maxImmediateCycles, taskConcurrency });
       progress.stop(); console.log(formatSynxStreamLog("Engine stopped."));
     }

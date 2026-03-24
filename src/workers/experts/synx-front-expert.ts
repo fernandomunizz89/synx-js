@@ -1,6 +1,7 @@
 import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../../lib/constants.js";
 import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../../lib/config.js";
 import { buildAgentRoleContract } from "../../lib/agent-role-contract.js";
+import { formatProjectMemoryForContext } from "../../lib/project-memory.js";
 import { ensureCodeQualityBootstrap } from "../../lib/code-quality-bootstrap.js";
 import { extractQaHandoffContext } from "../../lib/qa-context.js";
 import { deriveQaFileHints, synthesizeQaSelectorHotfixEdits } from "../../lib/qa-remediation.js";
@@ -123,6 +124,10 @@ SYNX FRONT EXPERT – EXECUTION CONTRACT:
       stage: "synx-front-expert",
       taskTypeHint: baseInput.task.typeHint,
       qaAttempt: qaHandoffContext?.attempt ?? 0,
+      suggestedChain: baseInput.suggestedChain,
+      projectMemoryContext: baseInput.projectMemory
+        ? formatProjectMemoryForContext(baseInput.projectMemory)
+        : undefined,
     });
 
     const modelInput = {

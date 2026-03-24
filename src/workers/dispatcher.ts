@@ -4,10 +4,12 @@ import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { loadResolvedProjectConfig, loadPromptFile, resolveProviderConfigForAgent } from "../lib/config.js";
 import { taskDir } from "../lib/paths.js";
 import { collectProjectProfile, projectProfileFactLines } from "../lib/project-handoff.js";
+import { loadProjectMemory, projectMemoryFactLines, formatProjectMemoryForContext } from "../lib/project-memory.js";
 import { buildAgentRoleContract } from "../lib/agent-role-contract.js";
 import { ARTIFACT_FILES, saveTaskArtifact } from "../lib/task-artifacts.js";
 import { createProvider } from "../providers/factory.js";
 import type { NewTaskInput, StageEnvelope } from "../lib/types.js";
+import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
 import { nowIso } from "../lib/utils.js";
 import { unique } from "../lib/text-utils.js";
 import { WorkerBase } from "./base.js";
@@ -24,17 +26,21 @@ export class DispatcherWorker extends WorkerBase {
     const prompt = await loadPromptFile("dispatcher.md");
     const provider = createProvider(resolveProviderConfigForAgent(config, this.agent));
     const input = await readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
-    const projectProfile = await collectProjectProfile({
-      workspaceRoot: process.cwd(),
-      taskTitle: input.title,
-      taskType: input.typeHint,
-      config,
-    });
+    const [projectProfile, projectMemory] = await Promise.all([
+      collectProjectProfile({
+        workspaceRoot: process.cwd(),
+        taskTitle: input.title,
+        taskType: input.typeHint,
+        config,
+      }),
+      loadProjectMemory(),
+    ]);
     await saveTaskArtifact(taskId, ARTIFACT_FILES.projectProfile, projectProfile);
 
     const modelInput = {
       ...input,
       projectProfile,
+      ...(projectMemory ? { projectMemory } : {}),
     };
     const roleContract = buildAgentRoleContract("Dispatcher", {
       stage: "dispatcher",
@@ -49,24 +55,46 @@ export class DispatcherWorker extends WorkerBase {
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist", "targetExpert": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist" }',
+        '{ "type": "...", "goal": "string", "context": "string", "knownFacts": ["string"], "unknowns": ["string"], "assumptions": ["string"], "constraints": ["string"], "confidenceScore": 0.0, "requiresHumanInput": false, "securityAuditRequired": false, "suggestedChain": ["Synx Back Expert", "Synx Code Reviewer", "Synx QA Engineer"], "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer", "targetExpert": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx SEO Specialist | Synx DevOps Expert" }',
     });
 
     const output = dispatcherOutputSchema.parse(result.parsed);
-    output.knownFacts = unique([...output.knownFacts, ...projectProfileFactLines(projectProfile)]);
+    // Merge known facts from project profile and project memory (deduped)
+    const memoryFacts = projectMemory ? projectMemoryFactLines(projectMemory) : [];
+    output.knownFacts = unique([...output.knownFacts, ...projectProfileFactLines(projectProfile), ...memoryFacts]);
     const nextAgent = output.nextAgent;
+
+    // Phase 4.3 — persist suggested chain to TaskMeta so all agents can reference it
+    if (output.suggestedChain && output.suggestedChain.length > 0) {
+      const meta = await loadTaskMeta(taskId);
+      meta.suggestedChain = output.suggestedChain;
+      await saveTaskMeta(taskId, meta);
+    }
 
     // Dream Stack 2026 routing
     const stageMap: Record<string, { stage: string; fileName: string }> = {
-      "Synx Front Expert": { stage: "synx-front-expert",  fileName: STAGE_FILE_NAMES.synxFrontExpert },
-      "Synx Mobile Expert":{ stage: "synx-mobile-expert", fileName: STAGE_FILE_NAMES.synxMobileExpert },
-      "Synx Back Expert":  { stage: "synx-back-expert",   fileName: STAGE_FILE_NAMES.synxBackExpert },
-      "Synx QA Engineer":  { stage: "synx-qa-engineer",   fileName: STAGE_FILE_NAMES.synxQaEngineer },
+      "Synx Front Expert":   { stage: "synx-front-expert",   fileName: STAGE_FILE_NAMES.synxFrontExpert },
+      "Synx Mobile Expert":  { stage: "synx-mobile-expert",  fileName: STAGE_FILE_NAMES.synxMobileExpert },
+      "Synx Back Expert":    { stage: "synx-back-expert",    fileName: STAGE_FILE_NAMES.synxBackExpert },
+      "Synx QA Engineer":    { stage: "synx-qa-engineer",    fileName: STAGE_FILE_NAMES.synxQaEngineer },
       "Synx SEO Specialist": { stage: "synx-seo-specialist", fileName: STAGE_FILE_NAMES.synxSeoSpecialist },
+      // Phase 2 – Extended Squad
+      "Synx DevOps Expert":        { stage: "synx-devops-expert",  fileName: STAGE_FILE_NAMES.synxDevopsExpert },
+      // Phase 2.4
+      "Synx Documentation Writer": { stage: "synx-docs-writer",    fileName: STAGE_FILE_NAMES.synxDocsWriter },
+      // Phase 2.5
+      "Synx DB Architect":         { stage: "synx-db-architect",   fileName: STAGE_FILE_NAMES.synxDbArchitect },
+      // Phase 2.6
+      "Synx Performance Optimizer": { stage: "synx-performance-optimizer", fileName: STAGE_FILE_NAMES.synxPerfOptimizer },
     };
     const routing = stageMap[nextAgent] ?? { stage: "synx-front-expert", fileName: STAGE_FILE_NAMES.synxFrontExpert };
     const nextStage = routing.stage;
     const nextFileName = routing.fileName;
+
+    const memorySection = projectMemory ? formatProjectMemoryForContext(projectMemory) : "";
+    const chainSection = output.suggestedChain && output.suggestedChain.length > 0
+      ? `## Suggested Agent Chain\n${output.suggestedChain.map((a, i) => `${i + 1}. ${a}`).join("\n")}`
+      : "";
 
     const view = `# HANDOFF
 
@@ -99,7 +127,8 @@ ${typeof output.confidenceScore === "number" ? output.confidenceScore.toFixed(2)
 
 ## Project Profile Snapshot
 ${projectProfileFactLines(projectProfile).map((x) => `- ${x}`).join("\n")}
-
+${memorySection ? `\n${memorySection}\n` : ""}
+${chainSection ? `\n${chainSection}\n` : ""}
 ## Requires Human Input
 ${output.requiresHumanInput ? "Yes" : "No"}
 

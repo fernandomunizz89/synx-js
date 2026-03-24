@@ -1,7 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { exists, moveFile, readJsonValidated, writeJson, writeText } from "../lib/fs.js";
-import { logAgentAudit, logDaemon, logQueueLatency, logTaskEvent, logTiming } from "../lib/logging.js";
+import { logAgentAudit, logDaemon, logQueueLatency, logRuntimeEvent, logTaskEvent, logTiming } from "../lib/logging.js";
 import { taskDir } from "../lib/paths.js";
 import { acquireLock, releaseLock } from "../lib/runtime.js";
 import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
@@ -12,6 +12,10 @@ import { nowIso, sleep } from "../lib/utils.js";
 import { newTaskInputSchema, stageEnvelopeSchema } from "../lib/schema.js";
 import { clearTaskCancelRequest, isTaskCancelRequested, loadTaskCancelRequest } from "../lib/task-cancel.js";
 import { formatSynxStreamLog } from "../lib/synx-ui.js";
+import { loadLocalProjectConfig } from "../lib/config.js";
+import { approveTaskService } from "../lib/services/task-services.js";
+import { loadProjectMemory, type ProjectMemory } from "../lib/project-memory.js";
+import { requestAgentConsultation, type ConsultationRequest, type ConsultationDecision } from "../lib/agent-consultation.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -66,6 +70,18 @@ export abstract class WorkerBase {
       meta.currentAgent = this.agent;
       meta.currentStage = request.stage;
       await saveTaskMeta(taskId, meta);
+      await logRuntimeEvent({
+        event: "task.updated",
+        source: "worker-base",
+        taskId,
+        stage: request.stage,
+        agent: String(this.agent),
+        payload: {
+          status: meta.status,
+          currentStage: meta.currentStage,
+          currentAgent: String(meta.currentAgent || ""),
+        },
+      });
 
       await logDaemon(`${this.agent} started ${request.stage} for ${taskId}`);
       await logTaskEvent(
@@ -150,6 +166,19 @@ export abstract class WorkerBase {
       const humanMessage = cancellationRequested
         ? `Task cancelled by user${cancelRequest?.reason ? `: ${cancelRequest.reason}` : "."}`
         : providerErrorToHuman(error instanceof Error ? error.message : String(error));
+      await logRuntimeEvent({
+        event: cancellationRequested ? "task.cancelled" : "task.updated",
+        source: "worker-base",
+        taskId,
+        stage: String(meta.currentStage || ""),
+        agent: String(this.agent),
+        payload: {
+          status: meta.status,
+          currentStage: meta.currentStage,
+          currentAgent: String(meta.currentAgent || ""),
+          reason: humanMessage,
+        },
+      });
       if (parseRetries > 0) {
         await logTaskEvent(
           taskPath,
@@ -265,6 +294,48 @@ export abstract class WorkerBase {
     meta.status = args.humanApprovalRequired ? "waiting_human" : args.nextAgent ? "waiting_agent" : "in_progress";
     await saveTaskMeta(args.taskId, meta);
 
+    // Auto-approve: if threshold is configured and dispatcher confidence is sufficient,
+    // approve automatically instead of waiting for human review.
+    if (meta.humanApprovalRequired && meta.status === "waiting_human") {
+      try {
+        const localConfig = await loadLocalProjectConfig().catch(() => null);
+        const threshold = localConfig?.autoApproveThreshold;
+        if (typeof threshold === "number") {
+          const dispatcherDoneFile = path.join(taskDir(args.taskId), "done", "00-dispatcher.done.json");
+          const dispatcherDone = await fs.readFile(dispatcherDoneFile, "utf8")
+            .then((text) => JSON.parse(text) as { output?: { confidenceScore?: unknown } })
+            .catch(() => null);
+          const confidenceScore = typeof dispatcherDone?.output?.confidenceScore === "number"
+            ? dispatcherDone.output.confidenceScore
+            : undefined;
+          if (typeof confidenceScore === "number" && confidenceScore >= threshold) {
+            await logTaskEvent(
+              taskDir(args.taskId),
+              `Auto-approved: confidenceScore ${confidenceScore} >= threshold ${threshold}`,
+            );
+            await logDaemon(`Auto-approve triggered for ${args.taskId}: score=${confidenceScore} threshold=${threshold}`);
+            await approveTaskService(args.taskId);
+            return;
+          }
+        }
+      } catch {
+        // Auto-approve failure should not block the stage completion
+      }
+    }
+    await logRuntimeEvent({
+      event: meta.status === "waiting_human" ? "task.review_required" : "task.updated",
+      source: "worker-base",
+      taskId: args.taskId,
+      stage: args.stage,
+      agent: String(this.agent),
+      payload: {
+        status: meta.status,
+        currentStage: meta.currentStage,
+        currentAgent: String(meta.currentAgent || ""),
+        nextAgent: String(meta.nextAgent || ""),
+      },
+    });
+
     await logTiming(taskPath, {
       taskId: args.taskId,
       stage: args.stage,
@@ -371,16 +442,51 @@ export abstract class WorkerBase {
     task: NewTaskInput;
     request: StageEnvelope;
     previousStage: unknown | null;
+    /** Phase 4.3 — ordered agent pipeline suggested by the Dispatcher */
+    suggestedChain: string[] | undefined;
+    /** Phase 4.1 — project memory loaded for injection into expert prompts */
+    projectMemory: ProjectMemory | null;
   }> {
-    const [task, previousStage] = await Promise.all([
+    const [task, previousStage, meta, projectMemory] = await Promise.all([
       this.loadTaskInput(taskId),
       this.loadReferencedInput(taskId, request),
+      loadTaskMeta(taskId),
+      loadProjectMemory(),
     ]);
 
     return {
       task,
       request,
       previousStage,
+      suggestedChain: meta.suggestedChain,
+      projectMemory,
     };
+  }
+
+  /**
+   * Phase 4.2 — Consult a specialist agent in-process.
+   * Answers are cached per (stage, consultant, question) — best-effort, never throws.
+   */
+  protected async consultAgent(
+    taskId: string,
+    stage: string,
+    specialistAgent: AgentName,
+    question: string,
+    context: string,
+    providerFactory: (agent: AgentName) => ReturnType<typeof import("../providers/factory.js").createProvider>,
+  ): Promise<ConsultationDecision | null> {
+    try {
+      const req: ConsultationRequest = {
+        taskId,
+        stage,
+        requesterAgent: String(this.agent),
+        consultantAgent: specialistAgent,
+        question,
+        context,
+      };
+      return await requestAgentConsultation(req, providerFactory as any);
+    } catch {
+      return null;
+    }
   }
 }

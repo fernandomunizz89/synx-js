@@ -27,6 +27,11 @@ import {
   compactQaReturnContextItems,
   buildFallbackQaReturnContextItems
 } from "../lib/qa-logic.js";
+
+export {
+  compactQaReturnContextItems,
+  buildFallbackQaReturnContextItems
+};
 import { matchesE2EFrameworkCommand, resolveTaskQaPreferences } from "../lib/qa-preferences.js";
 import { deriveQaRootCauseFocus } from "../lib/root-cause-intelligence.js";
 import { createProvider } from "../providers/factory.js";
@@ -40,7 +45,7 @@ interface QaRetryConfig {
   diverseIssueMaxRetries: number;
 }
 
-function resolveQaRetryConfig(): QaRetryConfig {
+export function resolveQaRetryConfig(): QaRetryConfig {
   const rawSame = Number(process.env.AI_AGENTS_QA_MAX_RETRIES || "");
   const sameIssueMaxRetries = Number.isFinite(rawSame) && rawSame >= 1
     ? Math.floor(rawSame)
@@ -57,7 +62,7 @@ function resolveQaRetryConfig(): QaRetryConfig {
   };
 }
 
-function normalizeQaIssueKey(value: string): string {
+export function normalizeQaIssueKey(value: string): string {
   return value
     .toLowerCase()
     .replace(/[a-z]:\\[^\s]+/g, "<path>")
@@ -80,7 +85,7 @@ function issueTokenSet(value: string): Set<string> {
   return new Set(tokens);
 }
 
-function issuesLookEquivalent(a: string, b: string): boolean {
+export function issuesLookEquivalent(a: string, b: string): boolean {
   const aa = normalizeQaIssueKey(a);
   const bb = normalizeQaIssueKey(b);
   if (!aa || !bb) return false;
@@ -98,17 +103,18 @@ function issuesLookEquivalent(a: string, b: string): boolean {
   return jaccard >= 0.5;
 }
 
-function extractIssueCandidatesFromHistory(history: QaReturnHistoryEntry[]): string[] {
-  return unique(history.flatMap((entry) => [
+export function extractIssueCandidatesFromHistory(history: QaReturnHistoryEntry[], options: { unique?: boolean } = { unique: true }): string[] {
+  const all = history.flatMap((entry) => [
     entry.summary,
     ...entry.failures,
     ...entry.findings.map((finding) => finding.issue),
-  ]));
+  ]);
+  return options.unique ? unique(all) : all;
 }
 
-function inferPreModelRetryLimit(history: QaReturnHistoryEntry[], config: QaRetryConfig): number {
+export function inferPreModelRetryLimit(history: QaReturnHistoryEntry[], config: QaRetryConfig): number {
   if (history.length < 2) return config.diverseIssueMaxRetries;
-  const issueCandidates = extractIssueCandidatesFromHistory(history);
+  const issueCandidates = extractIssueCandidatesFromHistory(history, { unique: false });
   let hasRepeatedIssue = false;
   for (let i = 0; i < issueCandidates.length; i += 1) {
     for (let j = i + 1; j < issueCandidates.length; j += 1) {
@@ -122,7 +128,7 @@ function inferPreModelRetryLimit(history: QaReturnHistoryEntry[], config: QaRetr
   return hasRepeatedIssue ? config.sameIssueMaxRetries : config.diverseIssueMaxRetries;
 }
 
-function resolveDynamicRetryLimit(args: {
+export function resolveDynamicRetryLimit(args: {
   history: QaReturnHistoryEntry[];
   currentIssues: string[];
   config: QaRetryConfig;
@@ -176,7 +182,7 @@ async function saveQaReturnHistory(taskId: string, entries: QaReturnHistoryEntry
 // No-op - removed local duplicated functions
 
 
-function compactChecksForModel(
+export function compactChecksForModel(
   checks: Array<{
     command: string;
     status: "passed" | "failed" | "skipped";
@@ -218,7 +224,7 @@ interface QaTestCaseLike extends QaTestCase {
   evidence: string[];
 }
 
-function compactQaTestCases(testCases: QaTestCaseLike[]): QaTestCaseLike[] {
+export function compactQaTestCases(testCases: QaTestCaseLike[]): QaTestCaseLike[] {
   const normalized = testCases
     .map((x, index) => ({
       id: x.id || `TC-${index + 1}`,
@@ -236,7 +242,7 @@ function compactQaTestCases(testCases: QaTestCaseLike[]): QaTestCaseLike[] {
   return normalized.slice(0, 6);
 }
 
-function buildFallbackQaTestCases(args: {
+export function buildFallbackQaTestCases(args: {
   failures: string[];
   returnContext: Array<QaReturnContextItem>;
   executedChecks: Array<{
@@ -306,11 +312,11 @@ function buildFallbackQaTestCases(args: {
 // Deleted duplicate formatTestCasesForView
 
 
-function isE2eCheckCommand(command: string): boolean {
+export function isE2eCheckCommand(command: string): boolean {
   return /\be2e\b|playwright|e2e/i.test(command);
 }
 
-function extractSourceLocations(lines: string[]): string[] {
+export function extractSourceLocations(lines: string[]): string[] {
   const out: string[] = [];
   const locationPattern = /([A-Za-z0-9_./-]+\.[cm]?[jt]sx?:\d+:\d+)/g;
 
@@ -324,7 +330,7 @@ function extractSourceLocations(lines: string[]): string[] {
   return unique(out).slice(0, 3);
 }
 
-function buildCheckDrivenReturnContext(args: {
+export function buildCheckDrivenReturnContext(args: {
   executedChecks: Array<{
     command: string;
     status: "passed" | "failed" | "skipped";
@@ -418,7 +424,7 @@ function buildCheckDrivenReturnContext(args: {
   return items;
 }
 
-function hasStaticValueMismatchSignal(value: string): boolean {
+export function hasStaticValueMismatchSignal(value: string): boolean {
   const repeatedExpectationPattern = /expected ['"]([^'"]+)['"] to not equal ['"]\1['"]/i;
   return repeatedExpectationPattern.test(value);
 }
@@ -432,7 +438,7 @@ function buildSelectorPreflightDiagnostics(
   });
 }
 
-function defaultSelectorTargetHint(selector: string): string {
+export function defaultSelectorTargetHint(selector: string): string {
   const lower = selector.toLowerCase();
   if (/(app|layout|container|root|shell|page)/.test(lower)) {
     return "the top-level application container element";
@@ -452,7 +458,7 @@ function defaultSelectorTargetHint(selector: string): string {
   return "the source component that renders this element in the browser DOM";
 }
 
-function buildSelectorPreflightReturnContext(
+export function buildSelectorPreflightReturnContext(
   missingSelectors: Array<{ selector: string; specPaths: string[] }>,
 ): Array<{
   issue: string;
@@ -475,12 +481,12 @@ function buildSelectorPreflightReturnContext(
   });
 }
 
-function isMissingE2eSpecText(value: string): boolean {
+export function isMissingE2eSpecText(value: string): boolean {
   const lower = value.toLowerCase();
   return /no spec files were found|can'?t run because no spec files were found|did not find e2e spec files/.test(lower);
 }
 
-function hasMissingE2eSpecSignal(checks: Array<{
+export function hasMissingE2eSpecSignal(checks: Array<{
   command: string;
   stdoutPreview: string;
   stderrPreview: string;
@@ -493,7 +499,7 @@ function hasMissingE2eSpecSignal(checks: Array<{
   return isMissingE2eSpecText(corpus);
 }
 
-function buildMissingE2eSpecReturnContext(checks: Array<{
+export function buildMissingE2eSpecReturnContext(checks: Array<{
   command: string;
   status: "passed" | "failed" | "skipped";
   exitCode: number | null;
@@ -534,7 +540,7 @@ function buildMissingE2eSpecReturnContext(checks: Array<{
   return output;
 }
 
-function hasConfigFailureSignal(checks: Array<{
+export function hasConfigFailureSignal(checks: Array<{
   command: string;
   stdoutPreview: string;
   stderrPreview: string;
@@ -548,7 +554,7 @@ function hasConfigFailureSignal(checks: Array<{
   return /configfile is invalid|your configfile is invalid|invalid e2e config|e2e configuration.+invalid|missing.+baseurl|missing.+specpattern|cannot find.+e2e\.config/.test(corpus);
 }
 
-function isConfigRelatedText(value: string): boolean {
+export function isConfigRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
   return /configfile is invalid|your configfile is invalid|invalid e2e config|e2e configuration.+invalid|failed to load e2e config|cannot find.+e2e\.config|missing.+baseurl|missing.+specpattern|baseurl.+(missing|invalid)|specpattern.+(missing|invalid)|config mismatch/.test(lower);
 }
@@ -566,7 +572,7 @@ function filterUnsupportedConfigFailures(
   return failures.filter((item) => !isConfigRelatedText(item));
 }
 
-function filterUnsupportedConfigReturnContext(
+export function filterUnsupportedConfigReturnContext(
   items: Array<{
     issue: string;
     expectedResult: string;
@@ -598,7 +604,7 @@ function filterUnsupportedConfigReturnContext(
   });
 }
 
-function hasSelectorFailureSignal(args: {
+export function hasSelectorFailureSignal(args: {
   checks: Array<{
     command: string;
     stdoutPreview: string;
@@ -617,7 +623,7 @@ function hasSelectorFailureSignal(args: {
   return /\bdata-cy\b|missing selector hook|timed out retrying.+data-cy|to exist.+data-cy|could not find.+data-cy/.test(corpus);
 }
 
-function isSelectorRelatedText(value: string): boolean {
+export function isSelectorRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
   return /\bdata-cy\b|selector hook|missing selector|data-testid|testid/.test(lower);
 }
@@ -636,7 +642,7 @@ function filterUnsupportedSelectorFailures(
   return failures.filter((item) => !isSelectorRelatedText(item));
 }
 
-function filterUnsupportedSelectorReturnContext(
+export function filterUnsupportedSelectorReturnContext(
   items: Array<{
     issue: string;
     expectedResult: string;
@@ -669,7 +675,7 @@ function filterUnsupportedSelectorReturnContext(
   });
 }
 
-function hasImportExportFailureSignal(checks: Array<{
+export function hasImportExportFailureSignal(checks: Array<{
   command: string;
   stdoutPreview: string;
   stderrPreview: string;
@@ -683,7 +689,7 @@ function hasImportExportFailureSignal(checks: Array<{
   return /does not provide an export named|import\/export mismatch|export\/import mismatch|cannot find module|requested module .* does not provide an export named|missing export\b/.test(corpus);
 }
 
-function isImportExportRelatedText(value: string): boolean {
+export function isImportExportRelatedText(value: string): boolean {
   const lower = value.toLowerCase();
   return /does not provide an export named|import\/export mismatch|export\/import mismatch|requested module .* does not provide an export named|cannot find module|incorrect import|import statement|default import|named import|missing export\b|export not confirmed|export .* not confirmed|still attempts to import|does not export that symbol|export.*mismatch/.test(lower);
 }
@@ -701,7 +707,7 @@ function filterUnsupportedImportExportFailures(
   return failures.filter((item) => !isImportExportRelatedText(item));
 }
 
-function filterUnsupportedImportExportReturnContext(
+export function filterUnsupportedImportExportReturnContext(
   items: Array<{
     issue: string;
     expectedResult: string;
@@ -745,13 +751,13 @@ function filterUnsupportedEvidenceGapFailures(
   });
 }
 
-function isLowSignalQaText(value: string): boolean {
+export function isLowSignalQaText(value: string): boolean {
   const lower = value.toLowerCase().trim();
   if (!lower) return true;
   return /acceptance criteria and validation checks should pass|address this blocker directly and verify with relevant checks|qa validation failed|no detailed assertion context|no concrete evidence provided|missing actual content|no verification provided/.test(lower);
 }
 
-function hasOnlyRootCauseHintEvidence(evidence: string[]): boolean {
+export function hasOnlyRootCauseHintEvidence(evidence: string[]): boolean {
   const cleaned = evidence
     .map((entry) => entry.trim())
     .filter((entry) => entry && !/\[none\]/i.test(entry));
@@ -759,7 +765,7 @@ function hasOnlyRootCauseHintEvidence(evidence: string[]): boolean {
   return cleaned.every((entry) => /^likely source root-cause paths:/i.test(entry));
 }
 
-function pickBestFailedCheckForContextItem(args: {
+export function pickBestFailedCheckForContextItem(args: {
   item: {
     issue: string;
     expectedResult: string;
@@ -797,7 +803,7 @@ function pickBestFailedCheckForContextItem(args: {
   return scored[0]?.check || null;
 }
 
-function enrichSparseReturnContextWithCheckEvidence(args: {
+export function enrichSparseReturnContextWithCheckEvidence(args: {
   items: Array<{
     issue: string;
     expectedResult: string;
@@ -871,7 +877,7 @@ function enrichSparseReturnContextWithCheckEvidence(args: {
   });
 }
 
-function pruneLowSignalReturnContextItems(items: Array<{
+export function pruneLowSignalReturnContextItems(items: Array<{
   issue: string;
   expectedResult: string;
   receivedResult: string;
@@ -905,20 +911,24 @@ function pruneLowSignalReturnContextItems(items: Array<{
   return filtered.length ? filtered : items;
 }
 
-function enrichReturnContextWithRootCauseHints(items: Array<{
+export function enrichReturnContextWithRootCauseHints(items: Array<{
   issue: string;
   expectedResult: string;
   receivedResult: string;
   evidence: string[];
   recommendedAction: string;
-}>, failures: string[]): Array<{
+}>, args: {
+  sourceRootCausePaths?: string[];
+  qaFailures: string[];
+  findings: any[];
+}): Array<{
   issue: string;
   expectedResult: string;
   receivedResult: string;
   evidence: string[];
   recommendedAction: string;
 }> {
-  const focus = deriveQaRootCauseFocus({ qaFailures: failures, findings: items });
+  const focus = deriveQaRootCauseFocus({ qaFailures: args.qaFailures, findings: args.findings });
   if (!focus.mustPrioritizeSourceFix || !focus.sourceHints.length) return items;
 
   const hintLine = `Likely source root-cause paths: ${focus.sourceHints.slice(0, 5).join(", ")}`;
@@ -1008,7 +1018,7 @@ function normalizeWorkspacePathLabel(workspaceRoot: string, filePath: string): s
   return next;
 }
 
-function collapseWorkspacePathLabels(args: {
+export function collapseWorkspacePathLabels(args: {
   workspaceRoot: string;
   candidates: string[];
   preferredPaths: string[];
@@ -1344,7 +1354,10 @@ MANDATORY VALIDATION CONTRACT:
         existing: sanitizedReturnContext,
       }),
     ]);
-    output.returnContext = enrichReturnContextWithRootCauseHints(output.returnContext, output.failures);
+    output.returnContext = enrichReturnContextWithRootCauseHints(output.returnContext, {
+      qaFailures: output.failures,
+      findings: output.executedChecks, // These serve as findings/evidence
+    });
     output.returnContext = pruneLowSignalReturnContextItems(output.returnContext);
     output.filesReviewed = unique([
       ...output.filesReviewed,
@@ -1568,3 +1581,5 @@ ${escalatedToHuman ? "Human Review" : output.nextAgent}
     });
   }
 }
+
+export const qaWorker = new QaWorker();

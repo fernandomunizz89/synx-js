@@ -91,20 +91,42 @@ Follow the interactive prompts to configure your provider, model, and human revi
 
 ## 🕹️ Usage
 
-### Start the engine
+### Typical workflow
 
 ```bash
+# 1. Configure (once per machine / repo)
+synx setup
+
+# 2. Start the engine (leave this running)
 synx start
+
+# 3. Open the web UI in your browser
+synx ui
 ```
 
-In interactive TTY mode, `start` shows a live progress panel with per-task status, quick hotkeys (`?`, `F1`–`F4`, `F10`), and an inline `HUMAN INPUT` panel for approve/reprove without opening a second terminal.
+In the web UI, type what you want to build in the prompt bar and hit **Send**. The Project Orchestrator decomposes your request into independent subtasks and the agent squad picks them up in parallel — exactly like a dev team.
+
+---
+
+### Web UI
 
 ```bash
-synx start --dry-run    # simulate edits without writing files
-synx start --no-progress  # quiet stdout mode
+synx ui
+synx ui --read-only          # disable mutations (safe for sharing)
+synx ui --port 4317
 ```
 
-### Create a task
+Three tabs:
+
+- **Tasks** — searchable table with per-task Approve / Reprove / Cancel.
+- **Review** — focused queue of tasks waiting for your decision.
+- **Stream** — real-time SSE event log.
+
+The **prompt bar** at the top lets you describe a feature or project in plain text. SYNX creates all necessary subtasks automatically and runs them in parallel.
+
+---
+
+### CLI: Create a single task
 
 ```bash
 synx new "Add dark mode toggle" --type Feature
@@ -114,6 +136,32 @@ synx new  # interactive menus
 
 **Task types:** `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`
 
+> **Tip:** For Research and Documentation tasks, E2E questions are skipped automatically.
+
+---
+
+### Engine
+
+```bash
+synx start
+synx start --dry-run        # simulate edits without writing files
+synx start --no-progress    # quiet stdout mode
+```
+
+In interactive TTY mode, `start` shows a live progress panel with quick hotkeys (`?`, `F1`–`F4`, `F10`) and an inline `HUMAN INPUT` panel for approve/reprove.
+
+---
+
+### Review
+
+```bash
+synx approve
+synx reprove --reason "Main flow still fails after QA"
+synx reprove --rollback task  # restore tracked files for this task
+```
+
+---
+
 ### Check progress
 
 ```bash
@@ -121,13 +169,7 @@ synx status        # focused view: current or latest task
 synx status --all  # full history
 ```
 
-### Approve / Reprove
-
-```bash
-synx approve
-synx reprove --reason "Main flow still fails after QA"
-synx reprove --rollback task  # restore tracked files for this task
-```
+---
 
 ### Advanced operations
 
@@ -145,13 +187,16 @@ synx metrics --since 2026-03-16T00:00:00Z
 
 ## 🧠 Architecture — Dream Stack 2026
 
-SYNX uses a direct triage model: the Dispatcher decides in real time which expert should handle the task.
+SYNX uses a two-layer model: the Project Orchestrator breaks high-level requests into subtasks, then the Dispatcher routes each subtask to the right expert.
 
 ### Routing
 
 ```
-Triage and Execution:
-  Dispatcher ──────────────────────────────► Expert ──► QA Engineer ──► Human Review
+Project prompt (web UI / API):
+  Project Orchestrator ──► creates N independent subtasks ──► run in parallel
+
+Each subtask:
+  Dispatcher ──► Expert ──► QA Engineer ──► Human Review
 ```
 
 ### Expert Squad
@@ -188,7 +233,27 @@ npm run test:coverage # generate coverage report
 npm run check         # TypeScript type check
 ```
 
-**Current status:** 41 test files · 164 tests · 100% pass
+**Current status:** 112 test files · 731 tests · 100% pass
+
+---
+
+## 🧩 Web UI
+
+`synx ui` starts a local web interface with three tabs:
+
+- **Tasks** — searchable table, click to expand with inline Approve / Reprove / Cancel.
+- **Review** — focused queue of `waiting_human` tasks.
+- **Stream** — real-time SSE event log.
+
+No build step required for the UI — `npm run build` compiles TypeScript only.
+
+```bash
+npm run build
+npm run check
+npm test
+```
+
+See [docs/WEB-UI.md](docs/WEB-UI.md) for full usage and API reference.
 
 ---
 
@@ -198,4 +263,5 @@ npm run check         # TypeScript type check
 |---|---|
 | [FEATURES.md](docs/FEATURES.md) | Full capability list |
 | [MANUAL.md](docs/MANUAL.md) | Day-to-day operation, recovery flows, environment variables |
+| [WEB-UI.md](docs/WEB-UI.md) | Local web UI operation guide (`synx ui`) |
 | [IMPLEMENTATION-NOTES.md](docs/IMPLEMENTATION-NOTES.md) | Architecture decisions and iteration history |

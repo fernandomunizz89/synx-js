@@ -1,4 +1,4 @@
-export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed";
+export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed" | "Project";
 export type TaskStatus =
   | "new"
   | "in_progress"
@@ -13,14 +13,30 @@ export type AgentName =
   // Orchestration layer
   | "Dispatcher"
   | "Human Review"
+  | "Project Orchestrator"
   // Expert Squad
   | "Synx Front Expert"
   | "Synx Mobile Expert"
   | "Synx Back Expert"
   | "Synx QA Engineer"
-  | "Synx SEO Specialist";
+  | "Synx SEO Specialist"
+  | "Synx Code Reviewer"
+  | "Synx DevOps Expert"
+  | "Synx Security Auditor"
+  | "Synx Documentation Writer"
+  | "Synx DB Architect"
+  | "Synx Performance Optimizer";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
+
+export interface FallbackModel {
+  type: ProviderType;
+  model: string;
+  baseUrlEnv?: string;
+  apiKeyEnv?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
 export type E2EPolicy = "auto" | "required" | "skip";
 export type E2EFramework = "auto" | "playwright" | "other";
 
@@ -60,6 +76,23 @@ export interface PipelineStepResult {
 }
 
 export type LearningOutcome = "approved" | "reproved";
+
+// ── Phase 4.1 — Project Memory ────────────────────────────────────────────────
+
+export interface ProjectMemoryEntry {
+  fact: string;
+  /** "manual" or the taskId that produced this fact */
+  source: string;
+  addedAt: string;
+}
+
+export interface ProjectMemory {
+  version: 1;
+  patterns: ProjectMemoryEntry[];
+  decisions: ProjectMemoryEntry[];
+  knownIssues: ProjectMemoryEntry[];
+  updatedAt: string;
+}
 
 /**
  * A single recorded outcome for one agent step.
@@ -110,7 +143,9 @@ export interface ProviderStageConfig {
   apiKeyEnv?: string;
   baseUrl?: string;
   apiKey?: string;
+  /** @deprecated Use fallbackModels instead */
   fallbackModel?: string;
+  fallbackModels?: FallbackModel[];
   autoDiscoverModel?: boolean;
 }
 
@@ -131,11 +166,19 @@ export interface LocalProjectConfig {
   framework: string;
   humanReviewer: string;
   tasksDir: string;
+  autoApproveThreshold?: number;
   providerOverrides?: Partial<{
     dispatcher: Partial<ProviderStageConfig>;
     planner: Partial<ProviderStageConfig>;
     agents: Partial<Record<AgentName, Partial<ProviderStageConfig>>>;
   }>;
+  /** Phase 5 — Webhook delivery configuration */
+  webhooks?: {
+    enabled: boolean;
+    url?: string;
+    /** If set, only these event types are delivered */
+    events?: string[];
+  };
 }
 
 export interface ResolvedProjectConfig {
@@ -213,6 +256,9 @@ export interface TaskMeta {
   createdAt: string;
   updatedAt: string;
   history: TaskMetaHistoryItem[];
+  securityAuditRequired?: boolean;
+  /** Phase 4.3 — ordered list of agents the Dispatcher suggests for this task */
+  suggestedChain?: string[];
 }
 
 export interface TimingEntry {

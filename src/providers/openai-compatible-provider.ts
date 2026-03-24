@@ -61,12 +61,23 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   // Orchestration layer
   "Dispatcher": 0.1,
   "Human Review": 0.1,
+  "Project Orchestrator": 0.1,
   // Expert Squad
   "Synx Front Expert": 0.05,
   "Synx Mobile Expert": 0.05,
   "Synx Back Expert": 0.05,
   "Synx QA Engineer": 0.05,
   "Synx SEO Specialist": 0.1,
+  // Phase 2 – Extended Squad
+  "Synx Code Reviewer": 0.05,
+  "Synx DevOps Expert": 0.05,
+  // Phase 2.3 / 2.4
+  "Synx Security Auditor": 0.05,
+  "Synx Documentation Writer": 0.3,
+  // Phase 2.5
+  "Synx DB Architect": 0.1,
+  // Phase 2.6
+  "Synx Performance Optimizer": 0.15,
 };
 
 const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {
@@ -76,6 +87,7 @@ const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {
   "Research": 0.2,
   "Documentation": 0.3,
   "Mixed": 0.1,
+  "Project": 0.2,
 };
 
 const transientStatusCodes = new Set([408, 425, 429, 500, 502, 503, 504]);

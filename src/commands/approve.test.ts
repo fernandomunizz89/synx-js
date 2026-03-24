@@ -1,12 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { approveCommand } from "./approve.js";
-import { allTaskIds, loadTaskMeta, saveTaskMeta } from "../lib/task.js";
+import { allTaskIds, loadTaskMeta } from "../lib/task.js";
 import { collectReadinessReport } from "../lib/readiness.js";
+import { approveTaskService } from "../lib/services/task-services.js";
 
 vi.mock("../lib/task.js", () => ({
   allTaskIds: vi.fn(),
   loadTaskMeta: vi.fn(),
-  saveTaskMeta: vi.fn(),
 }));
 
 vi.mock("../lib/interactive.js", () => ({
@@ -32,10 +32,15 @@ vi.mock("../lib/paths.js", () => ({
   taskDir: vi.fn().mockReturnValue("/tmp/task"),
 }));
 
+vi.mock("../lib/services/task-services.js", () => ({
+  approveTaskService: vi.fn(),
+}));
+
 describe("approve command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(collectReadinessReport).mockResolvedValue({} as any);
+    vi.mocked(approveTaskService).mockResolvedValue(undefined);
     // Suppress console.log during tests
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -76,10 +81,7 @@ describe("approve command", () => {
     
     await runCommand(["--task-id", "task-1", "--yes"]);
     
-    expect(saveTaskMeta).toHaveBeenCalledWith("task-1", expect.objectContaining({
-        status: "done",
-        humanApprovalRequired: false
-    }));
+    expect(approveTaskService).toHaveBeenCalledWith("task-1");
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining("Task approved: task-1"));
   });
 

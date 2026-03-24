@@ -134,7 +134,10 @@ export async function buildCollaborationMetricsReport(timeWindow: MetricsWindow)
     const qaReturns = audits.filter(
       (row) => row.event === "handoff_queued"
         && normalizeStage(row.stage || "") === "qa"
-        && ["feature builder", "bug fixer"].includes((row.nextAgent || "").toLowerCase()),
+        && [
+          "feature builder", "bug fixer",
+          "synx front expert", "synx mobile expert", "synx back expert", "synx seo specialist"
+        ].includes((row.nextAgent || "").toLowerCase()),
     ).length;
     const qualityRepairAttempts = audits.filter(
       (row) => row.event === "stage_note" && (row.note || "") === "quality_repair_attempt_started",

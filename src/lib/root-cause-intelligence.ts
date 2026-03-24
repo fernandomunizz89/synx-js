@@ -24,14 +24,19 @@ function normalizePath(filePath: string): string {
   return filePath.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/^\.\//, "");
 }
 
-function findingBlob(finding: QaFindingLike): string {
-  return [
-    finding.issue,
-    finding.expectedResult,
-    finding.receivedResult,
-    finding.recommendedAction,
-    ...finding.evidence,
-  ].join("\n");
+function findingBlob(finding: any): string {
+  const parts = [
+    finding.issue || finding.command || "",
+    finding.expectedResult || "",
+    finding.receivedResult || finding.status || "",
+    finding.recommendedAction || "",
+  ];
+  if (Array.isArray(finding.evidence)) {
+    parts.push(...finding.evidence);
+  } else if (Array.isArray(finding.diagnostics)) {
+    parts.push(...finding.diagnostics);
+  }
+  return parts.join("\n");
 }
 
 function extractSourcePaths(text: string): string[] {

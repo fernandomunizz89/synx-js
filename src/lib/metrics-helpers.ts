@@ -163,9 +163,8 @@ export function normalizeStage(value: string): string {
   if (normalized.includes("dispatcher")) return "dispatcher";
   if (normalized === "qa" || normalized.includes("qa")) return "qa";
   return normalized
-    .replace(/^0+\w?-/, "")
-    .replace(/^0+\w?/, "")
-    .replace(/^\d+[a-z]?[-_]?/, "")
+    .replace(/^(\d+[a-z]?|[a-z])[-_]/, "")
+    .replace(/^\d+[a-z]?/, "")
     .trim();
 }
 
@@ -194,7 +193,7 @@ export function classifyFailure(message: string): string {
   if (lower.includes("could not extract json") || lower.includes("json parsing failed")) return "provider_json_format";
   if (lower.includes("quality gate")) return "quality_gate";
   if (lower.includes("lint") || lower.includes("no-unused-vars")) return "lint";
-  if (lower.includes("typescript") || lower.includes("ts")) return "typecheck";
+  if (lower.includes("typescript") || lower.includes("tsc")) return "typecheck"; // Use 'tsc' instead of 'ts' to avoid matching 'tests'
   if (lower.includes("e2e") || lower.includes("playwright")) return "e2e";
   if (lower.includes("test") || lower.includes("tests")) return "tests";
   return "other";

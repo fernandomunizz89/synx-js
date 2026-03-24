@@ -237,9 +237,9 @@ describe("workers/experts/synx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const historyPath = path.join(task.taskPath, "artifacts", "qa-return-history.json");
+    const historyPath = path.join(task.taskPath, "artifacts", "synx-qa-return-context-history.json");
     await fs.mkdir(path.dirname(historyPath), { recursive: true });
-    await writeJson(historyPath, [{ attempt: 1, returnedTo: "Synx Back Expert" }]);
+    await writeJson(historyPath, { entries: [{ attempt: 1, returnedTo: "Synx Back Expert" }] });
 
     const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
     await writeJson(inboxPath, {
@@ -265,7 +265,7 @@ describe("workers/experts/synx-qa-engineer", () => {
       extraContext: { relatedFiles: [], logs: [], notes: [] },
     });
 
-    const historyPath = path.join(task.taskPath, "artifacts", "qa-return-history.json");
+    const historyPath = path.join(task.taskPath, "artifacts", "synx-qa-return-context-history.json");
     await fs.mkdir(path.dirname(historyPath), { recursive: true });
     await fs.writeFile(historyPath, "invalid json");
 
@@ -294,6 +294,8 @@ describe("workers/experts/synx-qa-engineer", () => {
         stdoutPreview: "Unused variable 'x'",
         stderrPreview: "",
         diagnostics: ["Unused variable 'x'"],
+        qaConfigNotes: ["Check your lint rules"],
+        artifacts: ["lint-report.txt"],
         durationMs: 50,
         timedOut: false,
       },
@@ -442,5 +444,167 @@ describe("workers/experts/synx-qa-engineer", () => {
 
     const meta = await loadTaskMeta(task.taskId);
     expect(meta.status).toBe("waiting_human");
+  });
+
+  it("uses local_patch strategy on first fail attempt with previous expert", async () => {
+    const { createProvider } = await import("../../providers/factory.js");
+    vi.mocked(createProvider).mockReturnValueOnce({
+      generateStructured: vi.fn().mockResolvedValue({
+        parsed: {
+          verdict: "fail",
+          failures: ["TS2322: type mismatch in Toggle.tsx"],
+          nextAgent: "Synx Back Expert",
+          mainScenarios: ["Test typing"],
+          acceptanceChecklist: ["Types pass"],
+          returnContext: [{
+            issue: "Type mismatch",
+            expectedResult: "Type should be string",
+            receivedResult: "Got number",
+            evidence: ["TS2322"],
+            recommendedAction: "Fix the type",
+          }],
+        },
+      }),
+    } as any);
+
+    const task = await createTask({
+      title: "Type mismatch test",
+      typeHint: "Bug",
+      project: "test-app",
+      rawRequest: "Fix typing error",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const metaBefore = await loadTaskMeta(task.taskId);
+    metaBefore.history.push({
+      stage: "synx-back-expert",
+      agent: "Synx Back Expert",
+      status: "done",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 100,
+    });
+    const { saveTaskMeta } = await import("../../lib/task.js");
+    await saveTaskMeta(task.taskId, metaBefore);
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-qa-engineer",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx QA Engineer",
+    });
+
+    const qa = new SynxQAEngineer();
+    const processed = await qa.tryProcess(task.taskId);
+    expect(processed).toBe(true);
+
+    const donePath = path.join(task.taskPath, "done", DONE_FILE_NAMES.synxQaEngineer);
+    const done = JSON.parse(await (await import("node:fs")).promises.readFile(donePath, "utf8"));
+    // First attempt: should use local_patch strategy
+    expect(done.output.qaHandoffContext.retryStrategy).toBe("local_patch");
+    expect(done.output.qaHandoffContext.noProgressAbort).toBe(false);
+  });
+
+  it("aborts to Human Review when no-progress detected after stalled retries", async () => {
+    const { createProvider } = await import("../../providers/factory.js");
+    vi.mocked(createProvider).mockReturnValueOnce({
+      generateStructured: vi.fn().mockResolvedValue({
+        parsed: {
+          verdict: "fail",
+          failures: ["TS2322: type mismatch", "ESLint: no-unused-vars"],
+          nextAgent: "Synx Back Expert",
+          mainScenarios: ["Stalled retry"],
+          acceptanceChecklist: ["Retry aborted"],
+          returnContext: [],
+        },
+      }),
+    } as any);
+
+    const task = await createTask({
+      title: "No progress abort test",
+      typeHint: "Bug",
+      project: "test-app",
+      rawRequest: "Stalled retry scenario",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const metaBefore = await loadTaskMeta(task.taskId);
+    metaBefore.history.push({
+      stage: "synx-back-expert",
+      agent: "Synx Back Expert",
+      status: "done",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 100,
+    });
+    const { saveTaskMeta } = await import("../../lib/task.js");
+    await saveTaskMeta(task.taskId, metaBefore);
+
+    // Pre-populate return history with 3 entries showing no progress (same count or growing)
+    const historyPath = path.join(task.taskPath, "artifacts", "synx-qa-return-context-history.json");
+    await (await import("node:fs")).promises.mkdir(path.dirname(historyPath), { recursive: true });
+    await writeJson(historyPath, {
+      entries: [
+        { attempt: 1, returnedAt: new Date().toISOString(), returnedTo: "Synx Back Expert", summary: "fail1", failures: ["err1", "err2"], findings: [] },
+        { attempt: 2, returnedAt: new Date().toISOString(), returnedTo: "Synx Back Expert", summary: "fail2", failures: ["err1", "err2", "err3"], findings: [] },
+        { attempt: 3, returnedAt: new Date().toISOString(), returnedTo: "Synx Back Expert", summary: "fail3", failures: ["err1", "err2", "err3", "err4"], findings: [] },
+      ],
+    });
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-qa-engineer",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx QA Engineer",
+    });
+
+    const qa = new SynxQAEngineer();
+    const processed = await qa.tryProcess(task.taskId);
+    expect(processed).toBe(true);
+
+    // With noProgressAbort=true OR currentAttempt >= maxRetries, routes to Human Review
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.status).toBe("waiting_human");
+    expect(meta.nextAgent).toBe("Human Review");
+  });
+
+  it("covers line 129 by having non-empty history with no experts", async () => {
+    const task = await createTask({
+      title: "No expert in history test",
+      typeHint: "Feature",
+      project: "test-app",
+      rawRequest: "Check history with non-experts",
+      extraContext: { relatedFiles: [], logs: [], notes: [] },
+    });
+
+    const meta = await loadTaskMeta(task.taskId);
+    meta.history.push({
+      agent: "Dispatcher" as any,
+      stage: "dispatcher",
+      status: "done",
+      startedAt: new Date().toISOString(),
+      endedAt: new Date().toISOString(),
+      durationMs: 10,
+    });
+    const { saveTaskMeta } = await import("../../lib/task.js");
+    await saveTaskMeta(task.taskId, meta);
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxQaEngineer);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-qa-engineer",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx QA Engineer",
+    });
+
+    const qa = new SynxQAEngineer();
+    await qa.tryProcess(task.taskId);
+    const metaAfter = await loadTaskMeta(task.taskId);
+    expect(metaAfter.nextAgent).toBe("Human Review");
   });
 });
