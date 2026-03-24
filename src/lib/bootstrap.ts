@@ -1,8 +1,10 @@
 import path from "node:path";
-import { promises as fs } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { AI_ROOT } from "./constants.js";
-import { appendText, ensureDir, exists, writeJson, writeText } from "./fs.js";
-import { configDir, globalAiRoot, globalConfigPath, logsDir, promptsDir, runtimeDir, tasksDir } from "./paths.js";
+import { appendText, ensureDir, exists, readText, writeJson, writeText } from "./fs.js";
+import { configDir, globalAiRoot, globalConfigPath, logsDir, promptsDir, repoRoot, runtimeDir, tasksDir } from "./paths.js";
+
+const SYNX_PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 export async function ensureGlobalInitialized(): Promise<void> {
   await ensureDir(globalAiRoot());
@@ -72,19 +74,22 @@ export async function ensureProjectInitialized(): Promise<void> {
     }
   }
 
-  await ensureGitignoreEntry(".ai-agents/");
+  await ensureGitignoreEntry(repoRoot(), ".ai-agents/");
 }
 
-async function ensureGitignoreEntry(entry: string): Promise<void> {
-  const filePath = path.join(process.cwd(), ".gitignore");
+async function ensureGitignoreEntry(targetRoot: string, entry: string): Promise<void> {
+  if (path.resolve(targetRoot) === SYNX_PACKAGE_ROOT) return;
+
+  const filePath = path.join(targetRoot, ".gitignore");
   if (!(await exists(filePath))) {
-    await fs.writeFile(filePath, `${entry}\n`, "utf8");
+    await writeText(filePath, `${entry}\n`);
     return;
   }
 
-  const current = await fs.readFile(filePath, "utf8");
+  const current = await readText(filePath);
   if (!current.split(/\r?\n/).includes(entry)) {
-    await appendText(filePath, `\n${entry}\n`);
+    const needsLeadingLineBreak = current.length > 0 && !current.endsWith("\n");
+    await appendText(filePath, `${needsLeadingLineBreak ? "\n" : ""}${entry}\n`);
   }
 }
 

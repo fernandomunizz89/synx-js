@@ -23,7 +23,8 @@ It:
 - creates global config if needed
 - creates local `.ai-agents/`
 - creates prompts
-- updates `.gitignore`
+- updates `.gitignore` in the target project (adds `.ai-agents/`)
+- never updates `.gitignore` in the `synx` repository itself
 - asks for human reviewer name explicitly (required)
 - lets you choose provider in an interactive menu
 - saves LM Studio connection in global config by default (so you do not need manual exports each terminal)
