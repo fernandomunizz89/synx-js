@@ -112,24 +112,29 @@ describe.sequential("runtime", () => {
     const failedDir = path.join(task.taskPath, "failed");
 
     await fs.writeFile(path.join(workingDir, "06-synx-qa-engineer.working.json"), "{\"ok\":true}", "utf8");
+    await fs.writeFile(path.join(workingDir, "00-project-orchestrator.working.json"), "{\"ok\":true}", "utf8");
     await fs.writeFile(path.join(workingDir, "mystery.working.json"), "{\"ok\":false}", "utf8");
     await fs.unlink(path.join(inboxDir, STAGE_FILE_NAMES.synxQaEngineer)).catch(() => undefined);
+    await fs.unlink(path.join(inboxDir, STAGE_FILE_NAMES.projectOrchestrator)).catch(() => undefined);
 
     const findings = await detectWorkingOrphans();
     expect(findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ taskId: task.taskId, file: "06-synx-qa-engineer.working.json", action: "requeued" }),
+      expect.objectContaining({ taskId: task.taskId, file: "00-project-orchestrator.working.json", action: "requeued" }),
       expect.objectContaining({ taskId: task.taskId, file: "mystery.working.json", action: "moved_to_failed" }),
     ]));
 
     const recovered = await recoverWorkingFiles();
     expect(recovered).toEqual(expect.arrayContaining([
       expect.objectContaining({ taskId: task.taskId, file: "06-synx-qa-engineer.working.json", action: "requeued" }),
+      expect.objectContaining({ taskId: task.taskId, file: "00-project-orchestrator.working.json", action: "requeued" }),
       expect.objectContaining({ taskId: task.taskId, file: "mystery.working.json", action: "moved_to_failed" }),
     ]));
 
     const inboxFiles = await listFiles(inboxDir);
     const failedFiles = await listFiles(failedDir);
     expect(inboxFiles).toContain(STAGE_FILE_NAMES.synxQaEngineer);
+    expect(inboxFiles).toContain(STAGE_FILE_NAMES.projectOrchestrator);
     expect(failedFiles.some((name) => name.startsWith("mystery.working.json.orphaned-"))).toBe(true);
   });
 
@@ -166,6 +171,42 @@ describe.sequential("runtime", () => {
     const updatedMeta = await loadTaskMeta(task.taskId);
     expect(updatedMeta.status).toBe("waiting_agent");
     expect(updatedMeta.nextAgent).toBe("Dispatcher");
+
+    const projectTask = await createTask({
+      ...baseTaskInput("Project interrupted"),
+      typeHint: "Project",
+    });
+    const projectInbox = path.join(projectTask.taskPath, "inbox", STAGE_FILE_NAMES.projectOrchestrator);
+    await fs.unlink(projectInbox);
+
+    const projectDetected = await detectInterruptedTasks();
+    expect(projectDetected).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        taskId: projectTask.taskId,
+        action: "requeued",
+        requestFile: STAGE_FILE_NAMES.projectOrchestrator,
+      }),
+    ]));
+
+    const projectRecovered = await recoverInterruptedTasks();
+    expect(projectRecovered).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        taskId: projectTask.taskId,
+        action: "requeued",
+        requestFile: STAGE_FILE_NAMES.projectOrchestrator,
+      }),
+    ]));
+    const recreatedProjectRequest = await readJson(path.join(projectTask.taskPath, "inbox", STAGE_FILE_NAMES.projectOrchestrator));
+    expect(recreatedProjectRequest).toMatchObject({
+      taskId: projectTask.taskId,
+      stage: "project-orchestrator",
+      status: "request",
+      agent: "Project Orchestrator",
+      inputRef: "input/new-task.json",
+    });
+    const updatedProjectMeta = await loadTaskMeta(projectTask.taskId);
+    expect(updatedProjectMeta.status).toBe("waiting_agent");
+    expect(updatedProjectMeta.nextAgent).toBe("Project Orchestrator");
 
     const skippedTask = await createTask(baseTaskInput("Skip interrupted"));
     const skippedInbox = path.join(skippedTask.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher);

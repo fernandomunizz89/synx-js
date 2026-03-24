@@ -56,7 +56,7 @@ synx ui
 
 Open `http://localhost:4316` in your browser. Type what you want to build in the **prompt bar** at the top and hit **Send**.
 
-The **Project Orchestrator** reads your prompt, breaks it into independent subtasks, and the agent squad picks them up in parallel — exactly like a dev team.
+SYNX creates a **Project Intake** task, then the **Project Orchestrator** breaks your prompt into independent subtasks and the agent squad picks them up in parallel.
 
 ### Option B — CLI (single task)
 
@@ -84,6 +84,15 @@ synx new "Fix login redirect" --type Bug \
   --e2e-framework playwright \
   --qa-objective "Verify redirect goes to /dashboard after login"
 ```
+
+### Vocabulary (official)
+
+- `project`: high-level prompt sent through `/api/project` (via prompt bar).
+- `task`: one executable unit tracked in `.ai-agents/tasks/<task-id>/`.
+- `subtask`: a task created by Project Orchestrator during project intake.
+- `stage`: one step in the task lifecycle, owned by one agent.
+- `agent`: a worker (Dispatcher, Project Orchestrator, experts, QA, Human Review).
+- `capability`: skill profile used for routing decisions.
 
 ---
 

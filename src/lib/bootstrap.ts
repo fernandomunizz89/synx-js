@@ -107,12 +107,23 @@ Return exactly:
   "unknowns": ["string"],
   "assumptions": ["string"],
   "constraints": ["string"],
+  "confidenceScore": number,
   "requiresHumanInput": boolean,
-  "nextAgent": "Spec Planner"
+  "securityAuditRequired": boolean,
+  "suggestedChain": ["string"],
+  "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx QA Engineer | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer | Synx DB Architect | Synx Performance Optimizer"
 }
 
 Routing:
-- anything else -> Spec Planner
+- frontend / web UI / React / Next.js -> Synx Front Expert
+- mobile / React Native / Expo -> Synx Mobile Expert
+- backend / API / services -> Synx Back Expert
+- SEO / metadata / Core Web Vitals -> Synx SEO Specialist
+- infrastructure / CI / deployment -> Synx DevOps Expert
+- documentation / migration guides / release notes -> Synx Documentation Writer
+- database schema / migrations / query modeling -> Synx DB Architect
+- performance profiling / optimization -> Synx Performance Optimizer
+- if ambiguous, default to Synx Front Expert
 
 Input JSON:
 {{INPUT_JSON}}
@@ -334,4 +345,3 @@ Output a JSON object following the builder schema. Set \`nextAgent\` to \`"Synx 
 {{INPUT_JSON}}
 \`\`\`
 `;
-

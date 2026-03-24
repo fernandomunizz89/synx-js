@@ -49,7 +49,7 @@ describe.sequential("task", () => {
     await fs.rm(fixture.root, { recursive: true, force: true });
   });
 
-  it("creates task structure, metadata and first dispatcher request", async () => {
+  it("creates task structure, metadata and first dispatcher request for non-project tasks", async () => {
     const created = await createTask(baseTaskInput("Increase title font size"));
     const meta = await loadTaskMeta(created.taskId);
     const dispatcherRequest = await readJson(path.join(created.taskPath, "inbox", STAGE_FILE_NAMES.dispatcher));
@@ -70,6 +70,24 @@ describe.sequential("task", () => {
       const dirPath = path.join(created.taskPath, dir);
       expect((await fs.stat(dirPath)).isDirectory()).toBe(true);
     }
+  });
+
+  it("routes project tasks to project orchestrator as the first stage", async () => {
+    const created = await createTask({
+      ...baseTaskInput("Build MVP from brief"),
+      typeHint: "Project",
+    });
+    const meta = await loadTaskMeta(created.taskId);
+    const orchestratorRequest = await readJson(path.join(created.taskPath, "inbox", STAGE_FILE_NAMES.projectOrchestrator));
+
+    expect(meta.nextAgent).toBe("Project Orchestrator");
+    expect(orchestratorRequest).toMatchObject({
+      taskId: created.taskId,
+      stage: "project-orchestrator",
+      status: "request",
+      agent: "Project Orchestrator",
+      inputRef: "input/new-task.json",
+    });
   });
 
   it("normalizes legacy/system agent names when loading task metadata", async () => {

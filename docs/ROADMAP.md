@@ -1,5 +1,5 @@
 # SYNX — Roadmap Técnico Detalhado
-> Gerado em: 2026-03-23 · Fechado em: 2026-03-24
+> Gerado em: 2026-03-23 · Fechado em: 2026-03-24 · Atualizado (alinhamento): 2026-03-24
 > Objetivo: Fábrica de software automatizada — enviar uma tarefa, agentes especializados identificarem o tipo, e o ciclo de desenvolvimento correr automaticamente de agente para agente sem intervenção humana exceto na revisão final.
 
 ---
@@ -11,7 +11,7 @@
 | 1.1 | FallbackModel list + cross-provider fallback | ✅ Concluído |
 | 1.2 | Project Orchestrator no AgentName | ✅ Concluído |
 | 1.3 | Auto-approve threshold | ✅ Concluído |
-| 1.4 | File conflict detection (parallel tasks) | 🔜 Pendente (issue separada) |
+| 1.4 | File conflict detection (parallel tasks) | ⚠️ Parcial (advisory; enforcement pendente) |
 | 2.1 | Synx Code Reviewer (Stage 07) | ✅ Concluído |
 | 2.2 | Synx DevOps Expert (Stage 04) | ✅ Concluído |
 | 2.3 | Synx Security Auditor (Stage 08) | ✅ Concluído |
@@ -33,7 +33,19 @@
 | 5.3 | Export — `GET /api/tasks/:id/export` audit trail completo | ✅ Concluído |
 | 5.4 | Diagnostic improvements — `synx doctor` real + "Test Provider" na UI | 🔜 Pendente (issue separada) |
 
-**Resultado: 22 de 24 itens concluídos. 815 testes passando. 0 erros TypeScript.**
+**Resultado: 22 de 24 itens concluídos (com 1 item parcial). Verificação local em 2026-03-24: suíte de testes e TypeScript passando.**
+
+---
+
+## Vocabulário Oficial
+
+- `project`: prompt de alto nível enviado pelo Web UI (`/api/project`), usado para intake/decomposição.
+- `epic`: agrupador temático de subtarefas (convenção atual; sem grafo formal ainda).
+- `task`: unidade executável com pasta própria em `.ai-agents/tasks/<task-id>/`.
+- `subtask`: task criada pelo `Project Orchestrator` durante o intake de projeto.
+- `stage`: passo do ciclo de execução de uma task (dispatcher, expert, qa, etc.).
+- `agent`: worker responsável por um stage.
+- `capability`: perfil de especialização usado para decidir roteamento.
 
 ---
 
@@ -55,7 +67,7 @@
 | **Fallback models** | `fallbackModel?: string` é só 1 modelo | ✅ `FallbackModel[]` com cross-provider |
 | **Agentes ausentes** | Falta DevOps, Security, Docs Writer, Code Reviewer, DB Architect, Perf Optimizer | ✅ Todos implementados |
 | **Ciclo automático** | Tasks sempre param em `waiting_human` sem modo auto-approve | ✅ `autoApproveThreshold` configurável |
-| **Conflito de arquivos** | Nenhuma detecção quando 2 tasks tocam o mesmo arquivo | 🔜 Pendente |
+| **Conflito de arquivos** | Nenhuma detecção quando 2 tasks tocam o mesmo arquivo | ⚠️ Parcial: detecção advisory em runtime; enforcement ainda pendente |
 | **UI: Settings** | Não tem página para configurar providers/modelos por agente | ✅ Tab Settings implementada |
 | **UI: Task creation** | Só tem prompt de projeto — falta form de tarefa individual | ✅ Modal "New Task" |
 | **UI: Task detail** | Não exibe artifacts, timeline, histórico de reproves | ✅ Task Detail Drawer |
@@ -80,8 +92,8 @@
 ### ✅ Gap 3: Agent Collaboration — RESOLVIDO
 `requestAgentConsultation()` com caching por `(stage, consultant, question)`, budget limit de 3/par, deduplicação case-insensitive. `WorkerBase.consultAgent()` disponível para todos os experts.
 
-### 🔜 Gap 4: File Conflict Detection — PENDENTE
-2 tasks rodando em paralelo podem editar o mesmo arquivo. Será implementado como issue separada: `file-locks.json` em `.ai-agents/runtime/` com reserva de arquivos por task.
+### ⚠️ Gap 4: File Conflict Detection — PARCIAL
+Já existe detecção advisory em `src/lib/file-locks.ts` e integração no fluxo de edição. Ainda falta enforcement de agendamento para bloquear colisões automaticamente.
 
 ### ✅ Gap 5: "Project Orchestrator" como AgentName — RESOLVIDO
 Adicionado ao union `AgentName`. `agentProviders` no GlobalConfig consegue configurar o modelo dele separadamente.
@@ -90,30 +102,32 @@ Adicionado ao union `AgentName`. `agentProviders` no GlobalConfig consegue confi
 
 ## 3. Agentes Implementados
 
-### Cadeia de Agentes Completa por Tipo de Task
+### Cadeia de Agentes (estado atual do runtime)
 
 ```
 Feature (Frontend):
-  Dispatcher → Front Expert → Code Reviewer → QA Engineer → [Security Auditor?] → Human Review
+  Dispatcher → Front Expert → QA Engineer → [Security Auditor?] → Human Review
 
 Feature (Backend):
-  Dispatcher → Back Expert → [DB Architect?] → Code Reviewer → QA Engineer → Security Auditor → Human Review
+  Dispatcher → Back Expert → QA Engineer → [Security Auditor?] → Human Review
 
 Feature (Mobile):
-  Dispatcher → Mobile Expert → Code Reviewer → QA Engineer → Human Review
+  Dispatcher → Mobile Expert → QA Engineer → Human Review
 
 Infrastructure/Deploy:
-  Dispatcher → DevOps Engineer → Code Reviewer → Human Review
+  Dispatcher → DevOps Engineer → Human Review
 
 Documentation:
   Dispatcher → Docs Writer → Human Review
 
 Performance:
-  Dispatcher → Performance Optimizer → Code Reviewer → Human Review
+  Dispatcher → Performance Optimizer → Human Review
 
 Bug (Critical):
-  Dispatcher → Expert → Code Reviewer → QA Engineer → Human Review (priority queue)
+  Dispatcher → Expert → QA Engineer → Human Review (priority queue)
 ```
+
+`Synx Code Reviewer` existe e pode entrar em fluxos customizados/pipelines, mas não é etapa obrigatória no caminho padrão de todas as tasks.
 
 ---
 
@@ -170,11 +184,11 @@ Todos os incrementos implementados como vanilla JS SPA aditiva:
 ## 9. Métricas de Sucesso (Final)
 
 - ✅ **Fase 1:** `synx setup` deixa configurar lista de fallbacks e auto-approve threshold
-- ✅ **Fase 2:** Task de feature completa o ciclo `Dispatcher → Expert → Code Reviewer → QA → Security → waiting_human` sem intervenção
+- ✅ **Fase 2:** Task de feature completa o ciclo `Dispatcher → Expert → QA → [Security opcional] → waiting_human` sem intervenção
 - ✅ **Fase 3:** Tudo que se faz na CLI consegue ser feito na UI sem abrir terminal
 - ✅ **Fase 4:** Task marcada como `done` automaticamente quando threshold met
 - ✅ **Fase 5:** `synx ci` funciona em pipeline de GitHub Actions (exit codes padronizados)
 
 ---
 
-*Roadmap fechado em 2026-03-24. 22/24 itens implementados. 815 testes. 0 erros TS.*
+*Roadmap fechado em 2026-03-24 e alinhado em 2026-03-24. 22/24 itens implementados (com 1 item parcial).*
