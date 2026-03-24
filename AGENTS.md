@@ -10,6 +10,8 @@ Expand it as project conventions evolve.
 - Preserve existing architecture, naming, and folder structure.
 - Avoid touching unrelated code unless it is necessary for the requested change.
 
+**File Management:** Never remove existing entries from the `.gitignore` file; only add new rules when necessary.
+
 ## Workflow
 
 - Read the nearby code and documentation before editing.
