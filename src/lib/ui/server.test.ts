@@ -6,6 +6,7 @@ import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import type { NewTaskInput } from "../types.js";
 import { startUiServer } from "./server.js";
 import { writeJson } from "../fs.js";
+import { globalConfigPath } from "../paths.js";
 
 const originalCwd = process.cwd();
 
@@ -255,15 +256,19 @@ describe.sequential("lib/ui/server", () => {
   });
 
   it("POST /api/provider-health returns provider health data", async () => {
-    // Write a minimal config with a mock provider so the endpoint has something to check
+    // loadGlobalConfig() reads from ~/.ai-agents/config.json (not the fixture dir).
+    // Back up the real file, write a valid test fixture, and restore afterward.
+    const realGlobalPath = globalConfigPath();
+    let priorGlobalConfig: string | null = null;
+    try { priorGlobalConfig = await fs.readFile(realGlobalPath, "utf8"); } catch { /* didn't exist on this machine */ }
+    await fs.mkdir(path.dirname(realGlobalPath), { recursive: true });
+    await writeJson(realGlobalPath, {
+      providers: { dispatcher: { type: "mock", model: "mock-dispatcher-v1" } },
+      defaults: { humanReviewer: "test" },
+    });
+
     const configPath = path.join(fixture.repoRoot, ".ai-agents", "config");
     await fs.mkdir(configPath, { recursive: true });
-    await writeJson(path.join(configPath, "global.json"), {
-      humanReviewer: "test",
-      providers: {
-        dispatcher: { type: "mock", model: "mock-model" },
-      },
-    });
     await writeJson(path.join(configPath, "project.json"), {
       projectName: "test-project",
       language: "TypeScript",
@@ -291,6 +296,12 @@ describe.sequential("lib/ui/server", () => {
       expect(typeof payload.data.dispatcher?.latencyMs).toBe("number");
     } finally {
       await server.close();
+      // Restore the real global config to the state it was in before this test
+      if (priorGlobalConfig !== null) {
+        await fs.writeFile(realGlobalPath, priorGlobalConfig, "utf8");
+      } else {
+        await fs.unlink(realGlobalPath).catch(() => {});
+      }
     }
   });
 });
