@@ -318,6 +318,11 @@ export interface TaskMeta {
   parallelizable?: boolean;
   ownershipBoundaries?: string[];
   mergeStrategy?: TaskMergeStrategy;
+  dispatchLockReservation?: {
+    reservedAt: string;
+    reservedFiles: string[];
+    stage: string;
+  };
   history: TaskMetaHistoryItem[];
   securityAuditRequired?: boolean;
   /** Phase 4.3 — ordered list of agents the Dispatcher suggests for this task */

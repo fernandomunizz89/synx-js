@@ -220,6 +220,20 @@ export async function acquireFileLocks(
 }
 
 /**
+ * Reserve file/scope locks before dispatching an LLM-backed worker stage.
+ * Uses all-or-nothing semantics to avoid partial reservations.
+ */
+export async function reserveDispatchLocks(
+  taskId: string,
+  ownershipBoundaries: string[],
+): Promise<AcquireFileLocksResult> {
+  return acquireFileLocks(taskId, [], {
+    allOrNothing: true,
+    targetScopes: ownershipBoundaries,
+  });
+}
+
+/**
  * Release all file locks held by taskId.
  */
 export async function releaseFileLocks(taskId: string): Promise<string[]> {

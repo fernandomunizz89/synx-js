@@ -16,8 +16,8 @@ import { loadLocalProjectConfig } from "../lib/config.js";
 import { approveTaskService } from "../lib/services/task-services.js";
 import { loadProjectMemory, type ProjectMemory } from "../lib/project-memory.js";
 import { requestAgentConsultation, type ConsultationRequest, type ConsultationDecision } from "../lib/agent-consultation.js";
-import { releaseFileLocks } from "../lib/file-locks.js";
-import { isWorkspaceEditConflictError } from "../lib/workspace-editor.js";
+import { releaseFileLocks, reserveDispatchLocks } from "../lib/file-locks.js";
+import { WorkspaceEditConflictError, isWorkspaceEditConflictError } from "../lib/workspace-editor.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -42,6 +42,7 @@ export abstract class WorkerBase {
   abstract readonly agent: AgentName | string;
   abstract readonly requestFileName: string;
   abstract readonly workingFileName: string;
+  protected readonly requiresFileReservation: boolean = false;
   protected abstract processTask(taskId: string, request: StageEnvelope): Promise<void>;
 
   async tryProcess(taskId: string): Promise<boolean> {
@@ -90,6 +91,23 @@ export abstract class WorkerBase {
           currentAgent: String(meta.currentAgent || ""),
         },
       });
+
+      if (this.requiresFileReservation && meta.ownershipBoundaries?.length) {
+        const reservation = await reserveDispatchLocks(taskId, meta.ownershipBoundaries);
+        if (reservation.conflicts.length > 0) {
+          throw new WorkspaceEditConflictError({
+            taskId,
+            mergeStrategy: meta.mergeStrategy || "auto-rebase",
+            conflicts: reservation.conflicts,
+          });
+        }
+        meta.dispatchLockReservation = {
+          reservedAt: nowIso(),
+          reservedFiles: reservation.acquired.map((target) => target.startsWith("scope:") ? target.slice("scope:".length) : target),
+          stage: request.stage,
+        };
+        await saveTaskMeta(taskId, meta);
+      }
 
       await logDaemon(`${this.agent} started ${request.stage} for ${taskId}`);
       await logTaskEvent(

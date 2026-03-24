@@ -43,6 +43,11 @@ export interface TaskSummaryDto {
   parallelizable: boolean;
   ownershipBoundaries: string[];
   mergeStrategy: "auto-rebase" | "manual-review";
+  dispatchLockReservation?: {
+    reservedAt: string;
+    reservedFiles: string[];
+    stage: string;
+  };
   ready: boolean;
   childTaskIds: string[];
   projectProgress?: ProjectProgressSummary | null;

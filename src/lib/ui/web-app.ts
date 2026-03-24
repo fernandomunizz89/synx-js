@@ -1233,6 +1233,9 @@ export function buildWebUiHtml(): string {
     if (task.parallelizable === false) bits.push('Non-parallel');
     if (Array.isArray(task.ownershipBoundaries) && task.ownershipBoundaries.length) bits.push('Ownership: ' + task.ownershipBoundaries.length + ' scope' + (task.ownershipBoundaries.length === 1 ? '' : 's'));
     if (task.mergeStrategy) bits.push('Merge: ' + task.mergeStrategy);
+    if (task.dispatchLockReservation && Array.isArray(task.dispatchLockReservation.reservedFiles)) {
+      bits.push('Dispatch lock: ' + task.dispatchLockReservation.reservedFiles.length + ' file' + (task.dispatchLockReservation.reservedFiles.length === 1 ? '' : 's'));
+    }
     return bits.join(' · ');
   }
   function taskStatusHtml(task) {
@@ -1602,6 +1605,10 @@ export function buildWebUiHtml(): string {
     fields.push(['Merge strategy', esc(d.mergeStrategy || 'auto-rebase')]);
     if (Array.isArray(d.ownershipBoundaries) && d.ownershipBoundaries.length) {
       fields.push(['Ownership boundaries', d.ownershipBoundaries.map(function (scope) { return esc(scope); }).join(', ')]);
+    }
+    if (d.dispatchLockReservation && Array.isArray(d.dispatchLockReservation.reservedFiles) && d.dispatchLockReservation.reservedFiles.length) {
+      fields.push(['Dispatch lock reservation', esc(d.dispatchLockReservation.stage || '—') + ' · ' + esc(ago(d.dispatchLockReservation.reservedAt))]);
+      fields.push(['Reserved files', d.dispatchLockReservation.reservedFiles.map(function (scope) { return esc(scope); }).join(', ')]);
     }
     if (Array.isArray(d.dependsOn) && d.dependsOn.length) fields.push(['Depends on', d.dependsOn.map(function (depId) { return esc(depId); }).join(', ')]);
     if (Array.isArray(d.blockedBy) && d.blockedBy.length) fields.push(['Blocked by', d.blockedBy.map(function (depId) { return esc(depId); }).join(', ')]);

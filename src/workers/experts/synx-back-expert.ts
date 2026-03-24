@@ -30,6 +30,7 @@ export class SynxBackExpert extends WorkerBase {
   readonly agent = "Synx Back Expert" as const;
   readonly requestFileName = STAGE_FILE_NAMES.synxBackExpert;
   readonly workingFileName = "04-synx-back-expert.working.json";
+  protected readonly requiresFileReservation = true;
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();

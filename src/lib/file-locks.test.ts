@@ -103,6 +103,19 @@ describe("lib/file-locks", () => {
     expect(lockMap.locks["src/free.ts"]).toBeUndefined();
   });
 
+  it("reserveDispatchLocks uses all-or-nothing semantics for ownership scopes", async () => {
+    const { listFileLocks, reserveDispatchLocks } = await import("./file-locks.js");
+
+    await reserveDispatchLocks("task-owner", ["src/features/auth"]);
+    const result = await reserveDispatchLocks("task-other", ["src/features/auth", "src/features/payments"]);
+
+    expect(result.conflicts.length).toBeGreaterThan(0);
+    expect(result.acquired).toEqual([]);
+
+    const lockMap = await listFileLocks();
+    expect(lockMap.locks["scope:src/features/payments"]).toBeUndefined();
+  });
+
   it("detects scope conflicts when another task owns the same directory", async () => {
     const { acquireFileLocks } = await import("./file-locks.js");
 

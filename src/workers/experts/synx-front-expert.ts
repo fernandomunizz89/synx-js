@@ -31,6 +31,7 @@ export class SynxFrontExpert extends WorkerBase {
   readonly agent = "Synx Front Expert" as const;
   readonly requestFileName = STAGE_FILE_NAMES.synxFrontExpert;
   readonly workingFileName = "04-synx-front-expert.working.json";
+  protected readonly requiresFileReservation = true;
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();

@@ -274,6 +274,11 @@ export const taskMetaSchema = z.object({
   parallelizable: z.boolean().optional(),
   ownershipBoundaries: z.array(z.string()).optional(),
   mergeStrategy: taskMergeStrategySchema.optional(),
+  dispatchLockReservation: z.object({
+    reservedAt: z.string(),
+    reservedFiles: z.array(z.string()),
+    stage: z.string(),
+  }).optional(),
   history: z.array(taskMetaHistoryItemSchema),
   securityAuditRequired: z.boolean().optional(),
   /** Phase 4.3 — persisted suggested chain from Dispatcher output */

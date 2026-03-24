@@ -70,6 +70,7 @@ function mapTaskSummary(args: {
     parallelizable: meta.parallelizable !== false,
     ownershipBoundaries: args.ownershipBoundaries || (meta.ownershipBoundaries || []),
     mergeStrategy: args.mergeStrategy || meta.mergeStrategy || "auto-rebase",
+    dispatchLockReservation: meta.dispatchLockReservation,
     ready,
     childTaskIds,
     projectProgress: args.projectProgress || null,
