@@ -18,6 +18,7 @@ vi.mock("./fs.js", () => ({
 vi.mock("./paths.js", () => ({
   logsDir: vi.fn(() => "/mock/logs"),
   tasksDir: vi.fn(() => "/mock/tasks"),
+  learningsDir: vi.fn(() => "/mock/learnings"),
 }));
 
 vi.mock("./metrics-loader.js", () => ({
@@ -103,4 +104,3 @@ describe("collaboration-metrics", () => {
     });
   });
 });
-

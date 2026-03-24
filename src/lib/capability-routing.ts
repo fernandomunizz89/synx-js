@@ -5,7 +5,7 @@ import { loadAgentDefinitions } from "./agent-registry.js";
 import { exists } from "./fs.js";
 import { loadRecentLearnings } from "./learnings.js";
 import { logsDir } from "./paths.js";
-import type { AgentCapabilities, NewTaskInput, TaskType } from "./types.js";
+import type { AgentCapabilities, LearningEntry, NewTaskInput, TaskType } from "./types.js";
 import type { ProjectProfile } from "./project-detector.js";
 
 type RoutingSource = "built-in" | "custom";
@@ -24,6 +24,7 @@ export interface CapabilityRoutingScore {
   projectStackMatch: number;
   taskTypeMatch: number;
   approvalRate: number;
+  capabilityApprovalRate: number;
   recentFailurePattern: number;
   modelHintBoost: number;
   total: number;
@@ -352,15 +353,21 @@ function taskTypeMatchScore(taskType: TaskType, supportedTaskTypes: TaskType[]):
   return 0;
 }
 
-async function loadApprovalRate(agentName: string, agentId: string): Promise<number> {
-  const [nameEntries, idEntries] = await Promise.all([
-    loadRecentLearnings(agentName, 30),
-    agentId !== agentName ? loadRecentLearnings(agentId, 30) : Promise.resolve([]),
-  ]);
-  const entries = nameEntries.length >= idEntries.length ? nameEntries : idEntries;
-  if (!entries.length) return 0.5;
-  const approved = entries.filter((entry) => entry.outcome === "approved").length;
-  return approved / entries.length;
+function capabilityApprovalRate(entries: LearningEntry[], domains: string[], fallback: number): number {
+  const wanted = new Set(domains.map((value) => normalizeValue(value)).filter(Boolean));
+  if (!wanted.size) return fallback;
+
+  const tagged = entries.filter((entry) => Array.isArray(entry.capabilities) && entry.capabilities.length > 0);
+  const relevant = tagged.filter((entry) => {
+    const entryTags = new Set((entry.capabilities || []).map((tag) => normalizeValue(String(tag || ""))).filter(Boolean));
+    for (const tag of entryTags) {
+      if (wanted.has(tag)) return true;
+    }
+    return false;
+  });
+  if (!relevant.length) return fallback;
+  const approved = relevant.filter((entry) => entry.outcome === "approved").length;
+  return approved / relevant.length;
 }
 
 function slugify(value: string): string {
@@ -463,10 +470,16 @@ export async function routeByCapabilities(args: {
 
   const scoredCandidates: CapabilityRoutingCandidate[] = await Promise.all(
     candidates.map(async (candidate) => {
-      const [approvalRate, recentFailurePattern] = await Promise.all([
-        loadApprovalRate(candidate.agentName, candidate.agentId),
+      const [nameEntries, idEntries, recentFailurePattern] = await Promise.all([
+        loadRecentLearnings(candidate.agentName, 30),
+        candidate.agentId !== candidate.agentName ? loadRecentLearnings(candidate.agentId, 30) : Promise.resolve([]),
         loadRecentFailurePatternScore(candidate.agentName),
       ]);
+      const entries = nameEntries.length >= idEntries.length ? nameEntries : idEntries;
+      const approvalRate = entries.length
+        ? entries.filter((entry) => entry.outcome === "approved").length / entries.length
+        : 0.5;
+      const capApprovalRate = capabilityApprovalRate(entries, candidate.capabilities.domain, approvalRate);
       const capabilityMatch = domainMatchScore(candidate.capabilities.domain, taskTokens, taskText);
       const frameworkScore = overlapScore(candidate.capabilities.frameworks, projectFrameworks);
       const languageScore = overlapScore(candidate.capabilities.languages, projectLanguages);
@@ -478,10 +491,11 @@ export async function routeByCapabilities(args: {
       const taskTypeMatch = taskTypeMatchScore(args.task.typeHint, candidate.capabilities.taskTypes);
       const hintBoost = modelHintBoost(args.modelSuggestedAgent, candidate);
       const total =
-        (capabilityMatch * 0.32) +
-        (projectStackMatch * 0.20) +
-        (taskTypeMatch * 0.16) +
-        (approvalRate * 0.20) +
+        (capabilityMatch * 0.28) +
+        (projectStackMatch * 0.18) +
+        (taskTypeMatch * 0.14) +
+        (approvalRate * 0.16) +
+        (capApprovalRate * 0.12) +
         (recentFailurePattern * 0.12) +
         hintBoost;
 
@@ -492,6 +506,7 @@ export async function routeByCapabilities(args: {
           projectStackMatch,
           taskTypeMatch,
           approvalRate,
+          capabilityApprovalRate: capApprovalRate,
           recentFailurePattern,
           modelHintBoost: hintBoost,
           total,
@@ -508,6 +523,7 @@ export async function routeByCapabilities(args: {
       projectStackMatch: 0,
       taskTypeMatch: 0,
       approvalRate: 0.5,
+      capabilityApprovalRate: 0.5,
       recentFailurePattern: 0.75,
       modelHintBoost: 0,
       total: 0,

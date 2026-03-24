@@ -7,6 +7,7 @@ import { createProvider } from "../providers/factory.js";
 import { createTaskService } from "../lib/services/task-services.js";
 import { logDaemon, logTaskEvent } from "../lib/logging.js";
 import { ARTIFACT_FILES, saveTaskArtifact } from "../lib/task-artifacts.js";
+import { buildLearningsPromptSection, inferCapabilityTagsForAgent, loadRecentLearnings, recordLearning } from "../lib/learnings.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 import type { NewTaskInput, StageEnvelope, TaskType } from "../lib/types.js";
@@ -103,7 +104,7 @@ function extractOwnershipBoundaries(rawRequest: string): string[] {
   return Array.from(new Set(normalized)).slice(0, 12);
 }
 
-function buildPlanningSystemPrompt(input: NewTaskInput): string {
+function buildPlanningSystemPrompt(input: NewTaskInput, learningsSection: string): string {
   return `You are the pre-build planning squad for SYNX.
 
 You must collaborate as these roles before implementation starts:
@@ -130,6 +131,8 @@ Rules:
 Project request:
 Title: ${input.title}
 Description: ${input.rawRequest}
+
+${learningsSection ? `Recent learning feedback for planning quality:\n${learningsSection}\n` : ""}
 
 Respond with a JSON object matching this schema exactly:
 {
@@ -158,7 +161,7 @@ Respond with a JSON object matching this schema exactly:
 }`;
 }
 
-function buildDecompositionSystemPrompt(input: NewTaskInput, planning: PrebuildPlanning): string {
+function buildDecompositionSystemPrompt(input: NewTaskInput, planning: PrebuildPlanning, learningsSection: string): string {
   return `You are the Project Orchestrator for SYNX, a multi-agent software development system.
 
 Your job is to receive a high-level project or feature request and decompose it into a concrete execution plan of subtasks for specialized agents.
@@ -199,6 +202,8 @@ Clarification request:
 Required: ${planning.clarification.required ? "yes" : "no"}
 ${planning.clarification.rationale ? `Rationale: ${planning.clarification.rationale}\n` : ""}${planning.clarification.questions.length ? `Questions:\n${planning.clarification.questions.map((q, index) => `${index + 1}. ${q}`).join("\n")}` : "Questions: none"}
 
+${learningsSection ? `Recent learning feedback for decomposition quality:\n${learningsSection}\n` : ""}
+
 Respond with a JSON object matching this schema exactly:
 {
   "projectSummary": "Brief one-sentence summary of the project",
@@ -236,7 +241,9 @@ export class ProjectOrchestrator extends WorkerBase {
     await logTaskEvent(taskDir(taskId), `Project Orchestrator: analysing request "${input.title}"...`);
     await logDaemon(`ProjectOrchestrator: decomposing task ${taskId}`);
 
-    const planningPrompt = buildPlanningSystemPrompt(input);
+    const recentLearnings = await loadRecentLearnings(ORCHESTRATOR_AGENT).catch(() => []);
+    const learningsSection = buildLearningsPromptSection(recentLearnings);
+    const planningPrompt = buildPlanningSystemPrompt(input, learningsSection);
     const planningResult = await provider.generateStructured({
       agent: ORCHESTRATOR_AGENT,
       taskId,
@@ -279,7 +286,7 @@ export class ProjectOrchestrator extends WorkerBase {
       await logTaskEvent(taskDir(taskId), "Project Orchestrator: clarification questions were generated for this project.");
     }
 
-    const systemPrompt = buildDecompositionSystemPrompt(input, planning);
+    const systemPrompt = buildDecompositionSystemPrompt(input, planning, learningsSection);
 
     const result = await provider.generateStructured({
       agent: ORCHESTRATOR_AGENT,
@@ -466,6 +473,24 @@ export class ProjectOrchestrator extends WorkerBase {
       estimatedOutputTokens: result.estimatedOutputTokens,
       estimatedTotalTokens: result.estimatedTotalTokens,
       estimatedCostUsd: result.estimatedCostUsd,
+    });
+
+    await recordLearning({
+      timestamp: nowIso(),
+      taskId,
+      agentId: ORCHESTRATOR_AGENT,
+      summary: `Project decomposition completed with ${createdIds.length} subtask(s).`,
+      outcome: "approved",
+      workflow: "project-intake",
+      taskType: input.typeHint,
+      sourceKind: parentMeta.sourceKind,
+      project: input.project,
+      rootProjectId,
+      parentTaskId: parentMeta.parentTaskId,
+      stage: request.stage,
+      capabilities: inferCapabilityTagsForAgent(ORCHESTRATOR_AGENT),
+      provider: result.provider,
+      model: result.model,
     });
 
     await logTaskEvent(taskDir(taskId), `Project Orchestrator: decomposition complete. ${createdIds.length} subtask(s) are now queued.`);

@@ -6,8 +6,12 @@ const mocks = vi.hoisted(() => ({
   loadTaskMeta: vi.fn<(taskId: string) => Promise<any>>(),
   saveTaskMeta: vi.fn<(taskId: string, meta: unknown) => Promise<void>>(),
   writeJson: vi.fn<(filePath: string, value: unknown) => Promise<void>>(),
+  exists: vi.fn<(targetPath: string) => Promise<boolean>>(),
+  listFiles: vi.fn<(targetPath: string) => Promise<string[]>>(),
+  readJson: vi.fn<(filePath: string) => Promise<any>>(),
   recordPipelineApproval: vi.fn<(taskId: string, pipelineId: string, completedSteps: unknown[]) => Promise<void>>(),
   recordPipelineReproval: vi.fn<(taskId: string, pipelineId: string, completedSteps: unknown[], reason: string) => Promise<void>>(),
+  recordTaskOutcomeLearning: vi.fn<(input: unknown) => Promise<void>>(),
   logTaskEvent: vi.fn<(taskDir: string, message: string) => Promise<void>>(),
   logRuntimeEvent: vi.fn<(entry: unknown) => Promise<void>>(),
   taskDir: vi.fn<(taskId: string) => string>(),
@@ -28,12 +32,16 @@ vi.mock("../task.js", () => ({
 }));
 
 vi.mock("../fs.js", () => ({
+  exists: mocks.exists,
+  listFiles: mocks.listFiles,
+  readJson: mocks.readJson,
   writeJson: mocks.writeJson,
 }));
 
 vi.mock("../learnings.js", () => ({
   recordPipelineApproval: mocks.recordPipelineApproval,
   recordPipelineReproval: mocks.recordPipelineReproval,
+  recordTaskOutcomeLearning: mocks.recordTaskOutcomeLearning,
 }));
 
 vi.mock("../logging.js", () => ({
@@ -79,11 +87,19 @@ describe("lib/services/task-services", () => {
       currentAgent: "Human Review",
       nextAgent: "",
       humanApprovalRequired: true,
+      sourceKind: "standalone",
+      project: "resolved-project",
+      rootProjectId: "task-1",
+      history: [{ stage: "synx-front-expert", agent: "Synx Front Expert", endedAt: "2026-03-22T09:58:00.000Z", durationMs: 1000 }],
     });
     mocks.saveTaskMeta.mockResolvedValue(undefined);
+    mocks.exists.mockResolvedValue(false);
+    mocks.listFiles.mockResolvedValue([]);
+    mocks.readJson.mockResolvedValue({});
     mocks.writeJson.mockResolvedValue(undefined);
     mocks.recordPipelineApproval.mockResolvedValue(undefined);
     mocks.recordPipelineReproval.mockResolvedValue(undefined);
+    mocks.recordTaskOutcomeLearning.mockResolvedValue(undefined);
     mocks.logTaskEvent.mockResolvedValue(undefined);
     mocks.logRuntimeEvent.mockResolvedValue(undefined);
     mocks.taskDir.mockImplementation((taskId: string) => `/tmp/${taskId}`);
@@ -182,6 +198,7 @@ describe("lib/services/task-services", () => {
       }),
     );
     expect(mocks.recordPipelineApproval).toHaveBeenCalledWith("task-1", "pipe-1", expect.any(Array));
+    expect(mocks.recordTaskOutcomeLearning).not.toHaveBeenCalled();
   });
 
   it("records reproved artifact and routes task back to remediation stage", async () => {
@@ -223,6 +240,19 @@ describe("lib/services/task-services", () => {
       }),
     );
     expect(mocks.recordPipelineReproval).toHaveBeenCalledWith("task-1", "pipe-1", expect.any(Array), "Needs fixes");
+    expect(mocks.recordTaskOutcomeLearning).not.toHaveBeenCalled();
+  });
+
+  it("records standard-task learnings when pipeline state is unavailable", async () => {
+    mocks.loadPipelineState.mockRejectedValueOnce(new Error("not pipeline"));
+    await approveTaskService("task-1");
+    expect(mocks.recordPipelineApproval).not.toHaveBeenCalled();
+    expect(mocks.recordTaskOutcomeLearning).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: "task-1",
+      outcome: "approved",
+      sourceKind: "standalone",
+      project: "resolved-project",
+    }));
   });
 
   it("delegates cancellation request as human action", async () => {

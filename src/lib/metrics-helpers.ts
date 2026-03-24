@@ -36,6 +36,13 @@ export interface ProviderThrottleEntry {
   event?: string;
 }
 
+export interface RuntimeEventEntry {
+  at?: string;
+  event?: string;
+  taskId?: string;
+  payload?: Record<string, unknown>;
+}
+
 export interface JsonlLoadResult<T> {
   rows: T[];
   lineCount: number;
@@ -74,6 +81,41 @@ export interface CollaborationMetricsReport {
   };
   stageSummary: StageSummaryRow[];
   failuresByCategory: Array<{ category: string; count: number }>;
+  learningQuality: {
+    agents: Array<{
+      agent: string;
+      total: number;
+      approved: number;
+      reproved: number;
+      approvalRate: number;
+    }>;
+    capabilities: Array<{
+      capability: string;
+      total: number;
+      approved: number;
+      reproved: number;
+      approvalRate: number;
+    }>;
+  };
+  projectQuality: {
+    overall: {
+      projects: number;
+      avgDecompositionQuality: number;
+      avgReworkRate: number;
+      avgQaReturnRate: number;
+      avgHumanInterventionRate: number;
+      avgDeliveryLeadTimeMs: number;
+    };
+    projects: Array<{
+      project: string;
+      taskCount: number;
+      decompositionQuality: number;
+      reworkRate: number;
+      qaReturnRate: number;
+      humanInterventionRate: number;
+      deliveryLeadTimeMs: number;
+    }>;
+  };
   collaboration: {
     logsUseful: number;
     logsInformative: number;

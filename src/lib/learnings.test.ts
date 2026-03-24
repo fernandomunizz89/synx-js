@@ -13,6 +13,8 @@ import {
   recordPipelineApproval,
   recordPipelineReproval,
   listAgentsWithLearnings,
+  inferCapabilityTagsForAgent,
+  recordTaskOutcomeLearning,
 } from "./learnings.js";
 import type { LearningEntry, PipelineStepContext } from "./types.js";
 
@@ -148,7 +150,12 @@ describe("lib/learnings", () => {
     const analystEntries = await loadAllLearnings("analyst");
     const builderEntries = await loadAllLearnings("builder");
     expect(analystEntries).toHaveLength(1);
-    expect(analystEntries[0]).toMatchObject({ outcome: "approved", pipelineId: "my-pipeline", stepIndex: 0 });
+    expect(analystEntries[0]).toMatchObject({
+      outcome: "approved",
+      workflow: "pipeline",
+      pipelineId: "my-pipeline",
+      stepIndex: 0,
+    });
     expect(builderEntries).toHaveLength(1);
     expect(builderEntries[0]).toMatchObject({ outcome: "approved", stepIndex: 1 });
   });
@@ -165,6 +172,7 @@ describe("lib/learnings", () => {
     expect(builderEntries).toHaveLength(1);
     expect(builderEntries[0]).toMatchObject({
       outcome: "reproved",
+      workflow: "pipeline",
       reproveReason: "Missing edge case tests",
       stepIndex: 1,
     });
@@ -267,6 +275,96 @@ describe("lib/learnings", () => {
       const stats = computeLearningStats("my-analyst", entries);
       expect(stats.mostRecentOutcome).toBe("reproved");
       expect(stats.lastTimestamp).toBe("2026-03-20T10:00:00.000Z");
+    });
+  });
+
+  describe("recordTaskOutcomeLearning", () => {
+    it("records one entry per stage for approved standalone tasks", async () => {
+      await recordTaskOutcomeLearning({
+        taskId: "task-standard",
+        taskType: "Feature",
+        sourceKind: "standalone",
+        project: "proj-a",
+        history: [
+          {
+            stage: "synx-front-expert",
+            agent: "Synx Front Expert",
+            startedAt: "2026-03-20T10:00:00.000Z",
+            endedAt: "2026-03-20T10:01:00.000Z",
+            durationMs: 60_000,
+            status: "done",
+          },
+          {
+            stage: "synx-qa-engineer",
+            agent: "Synx QA Engineer",
+            startedAt: "2026-03-20T10:01:00.000Z",
+            endedAt: "2026-03-20T10:02:00.000Z",
+            durationMs: 60_000,
+            status: "done",
+          },
+        ],
+        outcome: "approved",
+        decidedAt: "2026-03-20T10:10:00.000Z",
+      });
+
+      const front = await loadAllLearnings("Synx Front Expert");
+      const qa = await loadAllLearnings("Synx QA Engineer");
+      expect(front).toHaveLength(1);
+      expect(qa).toHaveLength(1);
+      expect(front[0]).toMatchObject({
+        workflow: "standalone",
+        sourceKind: "standalone",
+        taskType: "Feature",
+        project: "proj-a",
+        outcome: "approved",
+      });
+      expect(front[0].capabilities).toContain("frontend");
+    });
+
+    it("records only the last stage for reproved subtasks", async () => {
+      await recordTaskOutcomeLearning({
+        taskId: "task-sub",
+        taskType: "Feature",
+        sourceKind: "project-subtask",
+        project: "proj-a",
+        history: [
+          {
+            stage: "synx-back-expert",
+            agent: "Synx Back Expert",
+            startedAt: "2026-03-20T10:00:00.000Z",
+            endedAt: "2026-03-20T10:01:00.000Z",
+            durationMs: 60_000,
+            status: "done",
+          },
+          {
+            stage: "synx-qa-engineer",
+            agent: "Synx QA Engineer",
+            startedAt: "2026-03-20T10:01:00.000Z",
+            endedAt: "2026-03-20T10:02:00.000Z",
+            durationMs: 60_000,
+            status: "done",
+          },
+        ],
+        outcome: "reproved",
+        reproveReason: "Missing tests",
+      });
+
+      const back = await loadAllLearnings("Synx Back Expert");
+      const qa = await loadAllLearnings("Synx QA Engineer");
+      expect(back).toHaveLength(0);
+      expect(qa).toHaveLength(1);
+      expect(qa[0]).toMatchObject({
+        workflow: "project-subtask",
+        outcome: "reproved",
+        reproveReason: "Missing tests",
+      });
+    });
+  });
+
+  describe("inferCapabilityTagsForAgent", () => {
+    it("maps built-in agents to capability tags", () => {
+      expect(inferCapabilityTagsForAgent("Synx Back Expert")).toContain("backend");
+      expect(inferCapabilityTagsForAgent("unknown-agent")).toEqual([]);
     });
   });
 });

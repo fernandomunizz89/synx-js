@@ -1,6 +1,7 @@
 import path from "node:path";
 import { logsDir } from "./paths.js";
-import type { TimingEntry } from "./types.js";
+import type { LearningEntry, TaskMeta, TimingEntry } from "./types.js";
+import { listAgentsWithLearnings, loadAllLearnings } from "./learnings.js";
 import {
   asNumber,
   avg,
@@ -15,6 +16,7 @@ import {
   type PollingEntry,
   type ProviderThrottleEntry,
   type QueueLatencyEntry,
+  type RuntimeEventEntry,
   type StageSummaryRow,
   type TaskComputedMetrics,
 } from "./metrics-helpers.js";
@@ -22,19 +24,221 @@ import { loadAgentAudit, loadJsonlByPath, loadTaskMetaMap } from "./metrics-load
 
 export { type CollaborationMetricsReport, type MetricsWindow, parseMetricsTimestamp } from "./metrics-helpers.js";
 
+function inWindowByMs(ms: number | null, timeWindow: MetricsWindow): boolean {
+  if (ms === null) return false;
+  if (typeof timeWindow.sinceMs === "number" && ms < timeWindow.sinceMs) return false;
+  if (typeof timeWindow.untilMs === "number" && ms > timeWindow.untilMs) return false;
+  return true;
+}
+
+function hasQaStage(meta: TaskMeta): boolean {
+  const history = Array.isArray(meta.history) ? meta.history : [];
+  return history.some((item) => normalizeStage(String(item.stage || "")) === "qa");
+}
+
+function fallbackQaReturns(meta: TaskMeta): number {
+  const history = Array.isArray(meta.history) ? meta.history : [];
+  const qaVisits = history.filter((item) => normalizeStage(String(item.stage || "")) === "qa").length;
+  return Math.max(0, qaVisits - 1);
+}
+
+async function buildLearningQuality(args: {
+  timeWindow: MetricsWindow;
+}): Promise<CollaborationMetricsReport["learningQuality"]> {
+  const { timeWindow } = args;
+  const agents = await listAgentsWithLearnings();
+  const agentMap = new Map<string, { total: number; approved: number; reproved: number }>();
+  const capabilityMap = new Map<string, { total: number; approved: number; reproved: number }>();
+
+  for (const fileAgentId of agents) {
+    let entries: LearningEntry[] = [];
+    try {
+      entries = await loadAllLearnings(fileAgentId);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!inWindowByMs(toMs(entry.timestamp), timeWindow)) continue;
+      const agent = String(entry.agentId || fileAgentId || "Unknown");
+      const currentAgent = agentMap.get(agent) || { total: 0, approved: 0, reproved: 0 };
+      currentAgent.total += 1;
+      if (entry.outcome === "approved") currentAgent.approved += 1;
+      else currentAgent.reproved += 1;
+      agentMap.set(agent, currentAgent);
+
+      for (const capability of entry.capabilities || []) {
+        const key = String(capability || "").trim().toLowerCase();
+        if (!key) continue;
+        const currentCapability = capabilityMap.get(key) || { total: 0, approved: 0, reproved: 0 };
+        currentCapability.total += 1;
+        if (entry.outcome === "approved") currentCapability.approved += 1;
+        else currentCapability.reproved += 1;
+        capabilityMap.set(key, currentCapability);
+      }
+    }
+  }
+
+  return {
+    agents: [...agentMap.entries()]
+      .map(([agent, value]) => ({
+        agent,
+        total: value.total,
+        approved: value.approved,
+        reproved: value.reproved,
+        approvalRate: value.total ? Number((value.approved / value.total).toFixed(3)) : 0,
+      }))
+      .sort((a, b) => b.total - a.total || b.approvalRate - a.approvalRate),
+    capabilities: [...capabilityMap.entries()]
+      .map(([capability, value]) => ({
+        capability,
+        total: value.total,
+        approved: value.approved,
+        reproved: value.reproved,
+        approvalRate: value.total ? Number((value.approved / value.total).toFixed(3)) : 0,
+      }))
+      .sort((a, b) => b.total - a.total || b.approvalRate - a.approvalRate),
+  };
+}
+
+function buildProjectQuality(args: {
+  taskMetaMap: Map<string, TaskMeta>;
+  taskMetrics: TaskComputedMetrics[];
+  runtimeEvents: RuntimeEventEntry[];
+}): CollaborationMetricsReport["projectQuality"] {
+  const { taskMetaMap, taskMetrics, runtimeEvents } = args;
+  const metas = [...taskMetaMap.values()];
+  const metricByTaskId = new Map(taskMetrics.map((metric) => [metric.taskId, metric]));
+  const decisionByTaskId = new Map<string, { decisions: number; reproved: number }>();
+  for (const row of runtimeEvents) {
+    if (row.event !== "task.decision_recorded") continue;
+    const taskId = String(row.taskId || "").trim();
+    if (!taskId) continue;
+    const payload = row.payload || {};
+    const decision = String(payload.decision || "").trim().toLowerCase();
+    const current = decisionByTaskId.get(taskId) || { decisions: 0, reproved: 0 };
+    current.decisions += 1;
+    if (decision === "reproved") current.reproved += 1;
+    decisionByTaskId.set(taskId, current);
+  }
+
+  const childByParent = new Map<string, string[]>();
+  for (const meta of metas) {
+    const parent = String(meta.parentTaskId || "").trim();
+    if (!parent) continue;
+    const list = childByParent.get(parent) || [];
+    list.push(meta.taskId);
+    childByParent.set(parent, list);
+  }
+
+  const terminalStatuses = new Set(["done", "failed", "blocked", "archived"]);
+  const metasByProject = new Map<string, TaskMeta[]>();
+  for (const meta of metas) {
+    const project = String(meta.project || "").trim() || "[unassigned]";
+    const list = metasByProject.get(project) || [];
+    list.push(meta);
+    metasByProject.set(project, list);
+  }
+
+  const projectRows = [...metasByProject.entries()].map(([project, projectMetas]) => {
+    let terminalCount = 0;
+    let reworkCount = 0;
+    let qaReachedCount = 0;
+    let qaReturnedCount = 0;
+    let humanInterventionCount = 0;
+    const leadTimes: number[] = [];
+
+    const taskHasRework = new Map<string, boolean>();
+
+    for (const meta of projectMetas) {
+      const metric = metricByTaskId.get(meta.taskId);
+      const qaReturns = metric?.qaReturns ?? fallbackQaReturns(meta);
+      const qualityRepairRetries = metric?.qualityRepairRetries || 0;
+      const decisions = decisionByTaskId.get(meta.taskId) || { decisions: 0, reproved: 0 };
+      const hasRework = qaReturns > 0 || qualityRepairRetries > 0 || decisions.reproved > 0;
+      taskHasRework.set(meta.taskId, hasRework);
+
+      if (terminalStatuses.has(meta.status)) terminalCount += 1;
+      if (hasRework) reworkCount += 1;
+
+      const reachedQa = metric ? true : hasQaStage(meta);
+      if (reachedQa) qaReachedCount += 1;
+      if (qaReturns > 0) qaReturnedCount += 1;
+      if (decisions.reproved > 0) humanInterventionCount += 1;
+
+      const createdAtMs = toMs(meta.createdAt);
+      const history = Array.isArray(meta.history) ? meta.history : [];
+      const historyEndMs = history
+        .map((item) => toMs(item.endedAt))
+        .filter((value): value is number => value !== null);
+      const lastHistoryEndMs = historyEndMs.length ? Math.max(...historyEndMs) : null;
+      const terminalMs = lastHistoryEndMs ?? toMs(meta.updatedAt);
+      if (
+        terminalStatuses.has(meta.status)
+        && createdAtMs !== null
+        && terminalMs !== null
+        && terminalMs >= createdAtMs
+      ) {
+        leadTimes.push(terminalMs - createdAtMs);
+      }
+    }
+
+    const parentProjects = projectMetas.filter((meta) => meta.sourceKind === "project-intake");
+    const decompositionScores: number[] = [];
+    for (const parent of parentProjects) {
+      const childIds = childByParent.get(parent.taskId) || [];
+      if (!childIds.length) {
+        decompositionScores.push(0);
+        continue;
+      }
+      const highQualityChildren = childIds.filter((childId) => {
+        const child = taskMetaMap.get(childId);
+        if (!child) return false;
+        const hasRework = taskHasRework.get(childId) || false;
+        return child.status === "done" && !hasRework;
+      }).length;
+      decompositionScores.push(highQualityChildren / childIds.length);
+    }
+
+    return {
+      project,
+      taskCount: projectMetas.length,
+      decompositionQuality: decompositionScores.length ? Number((avg(decompositionScores.map((score) => score * 100)) / 100).toFixed(3)) : 0,
+      reworkRate: terminalCount ? Number((reworkCount / terminalCount).toFixed(3)) : 0,
+      qaReturnRate: qaReachedCount ? Number((qaReturnedCount / qaReachedCount).toFixed(3)) : 0,
+      humanInterventionRate: terminalCount ? Number((humanInterventionCount / terminalCount).toFixed(3)) : 0,
+      deliveryLeadTimeMs: avg(leadTimes),
+    };
+  }).sort((a, b) => b.reworkRate - a.reworkRate || b.taskCount - a.taskCount);
+
+  return {
+    overall: {
+      projects: projectRows.length,
+      avgDecompositionQuality: Number((avg(projectRows.map((item) => item.decompositionQuality * 100)) / 100).toFixed(3)),
+      avgReworkRate: Number((avg(projectRows.map((item) => item.reworkRate * 100)) / 100).toFixed(3)),
+      avgQaReturnRate: Number((avg(projectRows.map((item) => item.qaReturnRate * 100)) / 100).toFixed(3)),
+      avgHumanInterventionRate: Number((avg(projectRows.map((item) => item.humanInterventionRate * 100)) / 100).toFixed(3)),
+      avgDeliveryLeadTimeMs: avg(projectRows.map((item) => item.deliveryLeadTimeMs)),
+    },
+    projects: projectRows,
+  };
+}
+
 export async function buildCollaborationMetricsReport(timeWindow: MetricsWindow): Promise<CollaborationMetricsReport> {
   const stageMetricsFile = path.join(logsDir(), "stage-metrics.jsonl");
   const queueLatencyFile = path.join(logsDir(), "queue-latency.jsonl");
   const pollingFile = path.join(logsDir(), "polling-metrics.jsonl");
   const providerThrottleFile = path.join(logsDir(), "provider-throttle.jsonl");
+  const runtimeEventsFile = path.join(logsDir(), "runtime-events.jsonl");
 
-  const [stageRowsLoaded, auditLoaded, queueLoaded, pollingLoaded, throttleLoaded, taskMetaMap] = await Promise.all([
+  const [stageRowsLoaded, auditLoaded, queueLoaded, pollingLoaded, throttleLoaded, runtimeEventsLoaded, taskMetaMap, learningQuality] = await Promise.all([
     loadJsonlByPath<TimingEntry>(stageMetricsFile, timeWindow, (row) => toMs(row.startedAt)),
     loadAgentAudit(timeWindow),
     loadJsonlByPath<QueueLatencyEntry>(queueLatencyFile, timeWindow, (row) => toMs(row.at)),
     loadJsonlByPath<PollingEntry>(pollingFile, timeWindow, (row) => toMs(row.at)),
     loadJsonlByPath<ProviderThrottleEntry>(providerThrottleFile, timeWindow, (row) => toMs(row.at)),
+    loadJsonlByPath<RuntimeEventEntry>(runtimeEventsFile, timeWindow, (row) => toMs(row.at)),
     loadTaskMetaMap(),
+    buildLearningQuality({ timeWindow }),
   ]);
 
   const stageRows = stageRowsLoaded.rows;
@@ -42,6 +246,7 @@ export async function buildCollaborationMetricsReport(timeWindow: MetricsWindow)
   const queueRows = queueLoaded.rows;
   const pollingRows = pollingLoaded.rows;
   const throttleRows = throttleLoaded.rows;
+  const runtimeEvents = runtimeEventsLoaded.rows;
 
   const stageSummaryMap = new Map<string, StageSummaryRow>();
   for (const row of stageRows) {
@@ -268,12 +473,19 @@ export async function buildCollaborationMetricsReport(timeWindow: MetricsWindow)
     + auditLoaded.lineCount
     + queueLoaded.lineCount
     + pollingLoaded.lineCount
-    + throttleLoaded.lineCount;
+    + throttleLoaded.lineCount
+    + runtimeEventsLoaded.lineCount;
   const logBytes = stageRowsLoaded.byteCount
     + auditLoaded.byteCount
     + queueLoaded.byteCount
     + pollingLoaded.byteCount
-    + throttleLoaded.byteCount;
+    + throttleLoaded.byteCount
+    + runtimeEventsLoaded.byteCount;
+  const projectQuality = buildProjectQuality({
+    taskMetaMap,
+    taskMetrics,
+    runtimeEvents,
+  });
 
   return {
     window: {
@@ -311,6 +523,8 @@ export async function buildCollaborationMetricsReport(timeWindow: MetricsWindow)
     },
     stageSummary,
     failuresByCategory,
+    learningQuality,
+    projectQuality,
     collaboration: {
       logsUseful,
       logsInformative,

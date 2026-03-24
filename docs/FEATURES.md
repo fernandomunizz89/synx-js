@@ -103,8 +103,8 @@
 
 ## Learning Loop
 
-- **Automatic outcome recording** — `synx approve` writes one `LearningEntry` per completed pipeline step; `synx reprove` writes one entry for the last step including the human's feedback reason.
-- **Prompt injection** — before each pipeline step the executor loads the agent's 5 most recent entries and appends a *"Your recent performance"* section to the system prompt.
+- **Automatic outcome recording** — `synx approve`/`synx reprove` record learning outcomes for pipeline, standard, project-intake, and project-subtask workflows (pipeline keeps per-step semantics).
+- **Prompt injection** — pipeline executor injects recent learnings before each step, and Project Orchestrator injects recent learnings before planning/decomposition.
 - **Append-only JSONL storage** — one file per agent at `.ai-agents/learnings/<agent-id>.jsonl`; no data is ever overwritten or deleted.
 - **`synx learn [agent-id]`** — CLI command showing approval rate, counts, and recent entry history for all agents or a specific one.
 - **Stats API** — `computeLearningStats()` returns `total`, `approved`, `reproved`, `approvalRate`, `mostRecentOutcome`, and `lastTimestamp`.
