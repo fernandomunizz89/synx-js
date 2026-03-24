@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("./task.js", () => ({
   loadTaskMeta: vi.fn(),
+  allTaskIds: vi.fn(),
+  saveTaskMeta: vi.fn(),
 }));
 
 vi.mock("./fs.js", () => ({
@@ -21,6 +23,12 @@ const mockMeta = {
   status: "done",
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-02T00:00:00.000Z",
+  rootProjectId: "task-001",
+  sourceKind: "standalone",
+  dependsOn: [],
+  blockedBy: [],
+  priority: 3,
+  parallelizable: true,
   suggestedChain: ["Synx Back Expert", "Synx Code Reviewer"],
   history: [
     {
@@ -54,8 +62,9 @@ const mockMeta = {
 
 describe("exportTask", () => {
   it("returns task export with stages from meta history", async () => {
-    const { loadTaskMeta } = await import("./task.js");
+    const { loadTaskMeta, allTaskIds } = await import("./task.js");
     vi.mocked(loadTaskMeta).mockResolvedValue(mockMeta as any);
+    vi.mocked(allTaskIds).mockResolvedValue(["task-001"]);
 
     const { exportTask } = await import("./export.js");
     const result = await exportTask("task-001");
@@ -69,8 +78,9 @@ describe("exportTask", () => {
   });
 
   it("sums totalCostUsd and totalTokens across stages", async () => {
-    const { loadTaskMeta } = await import("./task.js");
+    const { loadTaskMeta, allTaskIds } = await import("./task.js");
     vi.mocked(loadTaskMeta).mockResolvedValue(mockMeta as any);
+    vi.mocked(allTaskIds).mockResolvedValue(["task-001"]);
 
     const { exportTask } = await import("./export.js");
     const result = await exportTask("task-001");
@@ -80,9 +90,10 @@ describe("exportTask", () => {
   });
 
   it("includes dispatcherOutput when done file exists", async () => {
-    const { loadTaskMeta } = await import("./task.js");
+    const { loadTaskMeta, allTaskIds } = await import("./task.js");
     const { exists, readJson } = await import("./fs.js");
     vi.mocked(loadTaskMeta).mockResolvedValue(mockMeta as any);
+    vi.mocked(allTaskIds).mockResolvedValue(["task-001"]);
     vi.mocked(exists).mockResolvedValue(true);
     vi.mocked(readJson).mockResolvedValue({ output: { type: "Feature", goal: "Add user auth" } });
 

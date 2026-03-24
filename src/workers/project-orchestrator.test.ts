@@ -143,11 +143,15 @@ describe.sequential("workers/project-orchestrator", () => {
       sourceKind: "project-subtask",
       parentTaskId: parent.taskId,
       rootProjectId: parent.taskId,
+      priority: 3,
+      parallelizable: true,
     });
     expect(secondInput.metadata).toMatchObject({
       sourceKind: "project-subtask",
       parentTaskId: parent.taskId,
       rootProjectId: parent.taskId,
+      priority: 3,
+      parallelizable: true,
     });
 
     expect(mocks.saveTaskArtifact).toHaveBeenCalledWith(

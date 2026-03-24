@@ -1218,6 +1218,27 @@ export function buildWebUiHtml(): string {
     }
     return '';
   }
+  function taskBlockedLabel(task) {
+    if (!task || !Array.isArray(task.blockedBy) || !task.blockedBy.length) return '';
+    return 'Blocked by ' + task.blockedBy.join(', ');
+  }
+  function taskPlanLabel(task) {
+    if (!task) return '';
+    var bits = [];
+    if (typeof task.priority === 'number') bits.push('P' + task.priority);
+    if (task.milestone) bits.push('Milestone: ' + task.milestone);
+    if (task.parallelizable === false) bits.push('Non-parallel');
+    return bits.join(' · ');
+  }
+  function taskStatusHtml(task) {
+    var html = badge(task.status);
+    if (Array.isArray(task.blockedBy) && task.blockedBy.length) {
+      html += ' <span class="badge bb">Blocked ' + task.blockedBy.length + '</span>';
+    } else if (task.ready === true && (task.status === 'new' || task.status === 'waiting_agent')) {
+      html += ' <span class="badge bwa">Ready</span>';
+    }
+    return html;
+  }
 
   /* ── overview ── */
   function refreshOverview() {
@@ -1260,10 +1281,11 @@ export function buildWebUiHtml(): string {
       if (!recent.length) { el.innerHTML = '<div class="empty">No tasks yet</div>'; return; }
       el.innerHTML = recent.map(function (t) {
         var relation = taskRelationLabel(t);
+        var blocked = taskBlockedLabel(t);
         return '<div class="task-row-d" onclick="go(\\'tasks\\')">' +
           '<span class="tdot" style="' + dotColor(t.status) + '"></span>' +
           '<div class="tinfo"><div class="ttitle">' + esc(t.title) + '</div>' +
-          '<div class="tsub">' + esc(t.status) + (taskType(t) ? ' · ' + esc(taskType(t)) : '') + (relation ? ' · ' + esc(relation) : '') + '</div></div>' +
+          '<div class="tsub">' + esc(t.status) + (taskType(t) ? ' · ' + esc(taskType(t)) : '') + (relation ? ' · ' + esc(relation) : '') + (blocked ? ' · ' + esc(blocked) : '') + '</div></div>' +
           '<span class="ttime">' + ago(t.createdAt) + '</span></div>';
       }).join('');
     }).catch(function(){});
@@ -1321,14 +1343,22 @@ export function buildWebUiHtml(): string {
         ? '<button class="btn btn-cancel" onclick="event.stopPropagation();cancelTask(\\'' + id + '\\')">Cancel</button>' : '';
       var detailBtn = '<button class="btn" style="font-size:11px;padding:4px 8px" onclick="event.stopPropagation();openDrawer(\\'' + id + '\\')">Details</button>';
       var relation = taskRelationLabel(t);
+      var blocked = taskBlockedLabel(t);
+      var plan = taskPlanLabel(t);
       var relationHtml = relation
         ? '<div style="font-size:11px;color:var(--muted)">' + esc(relation) + '</div>'
         : '';
+      var blockedHtml = blocked
+        ? '<div style="font-size:11px;color:var(--yellow)">' + esc(blocked) + '</div>'
+        : '';
+      var planHtml = plan
+        ? '<div style="font-size:11px;color:var(--muted)">' + esc(plan) + '</div>'
+        : '';
       return '<tr class="trow" onclick="toggleExpand(\\'' + id + '\\')">' +
         '<td><div style="font-weight:500">' + esc(t.title) + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + id + '</div>' + relationHtml + '</td>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + id + '</div>' + relationHtml + planHtml + blockedHtml + '</td>' +
         '<td style="color:var(--muted)">' + esc(taskType(t) || '—') + '</td>' +
-        '<td>' + badge(t.status) + '</td>' +
+        '<td>' + taskStatusHtml(t) + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + esc(taskStage(t) || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + ago(t.createdAt) + '</td>' +
         '</tr>' +
@@ -1543,7 +1573,7 @@ export function buildWebUiHtml(): string {
         '</div>';
     }
     var fields = [
-      ['Status',     badge(d.status)],
+      ['Status',     taskStatusHtml(d)],
       ['Type',       esc(taskType(d) || '—')],
       ['Agent',      esc(d.nextAgent || d.currentAgent || '—')],
       ['Project',    esc(d.project || '—')],
@@ -1554,6 +1584,11 @@ export function buildWebUiHtml(): string {
       fields.push(['Parent task', '<button class="btn" style="font-size:11px;padding:3px 8px" onclick="openDrawer(\\'' + esc(d.parentTaskId) + '\\')">' + esc(d.parentTaskId) + '</button>']);
     }
     if (d.rootProjectId) fields.push(['Root project', esc(d.rootProjectId)]);
+    if (typeof d.priority === 'number') fields.push(['Priority', esc('P' + d.priority)]);
+    if (d.milestone) fields.push(['Milestone', esc(d.milestone)]);
+    fields.push(['Parallelizable', d.parallelizable === false ? 'No' : 'Yes']);
+    if (Array.isArray(d.dependsOn) && d.dependsOn.length) fields.push(['Depends on', d.dependsOn.map(function (depId) { return esc(depId); }).join(', ')]);
+    if (Array.isArray(d.blockedBy) && d.blockedBy.length) fields.push(['Blocked by', d.blockedBy.map(function (depId) { return esc(depId); }).join(', ')]);
     var infoHtml = fields.map(function (f) {
       return '<div class="project-info-row"><span class="project-info-key">' + f[0] + '</span><span class="drawer-field">' + f[1] + '</span></div>';
     }).join('');
@@ -1581,10 +1616,14 @@ export function buildWebUiHtml(): string {
         '<div style="display:flex;flex-direction:column;gap:8px">' +
         d.childTasks.map(function (child) {
           var childId = esc(child.taskId);
+          var childBlocked = Array.isArray(child.blockedBy) && child.blockedBy.length
+            ? ' · blocked by ' + esc(child.blockedBy.join(', '))
+            : (child.ready ? ' · ready' : '');
+          var childPlan = ' · P' + esc(child.priority || 3) + (child.milestone ? ' · ' + esc(child.milestone) : '');
           return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px">' +
             '<div style="min-width:0">' +
             '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(child.title || childId) + '</div>' +
-            '<div style="font-size:11px;color:var(--muted)">' + childId + ' · ' + esc(child.type || '—') + ' · ' + esc(child.status || '—') + '</div>' +
+            '<div style="font-size:11px;color:var(--muted)">' + childId + ' · ' + esc(child.type || '—') + ' · ' + esc(child.status || '—') + childPlan + childBlocked + '</div>' +
             '</div>' +
             '<button class="btn" style="font-size:11px;padding:3px 8px;white-space:nowrap" onclick="openDrawer(\\'' + childId + '\\')">Open</button>' +
             '</div>';
@@ -1596,7 +1635,23 @@ export function buildWebUiHtml(): string {
           return '<button class="btn" style="font-size:11px;padding:3px 8px;margin-right:6px;margin-bottom:6px" onclick="openDrawer(\\'' + esc(childId) + '\\')">' + esc(childId) + '</button>';
         }).join('') + '</div>';
     }
-    document.getElementById('dtab-overview').innerHTML = actBtns + infoHtml + rawHtml + childTasksHtml + timelineHtml;
+    var projectProgressHtml = '';
+    if (d.projectProgress && typeof d.projectProgress.totalChildren === 'number') {
+      var p = d.projectProgress;
+      var pct = Math.round((Number(p.completionRatio || 0)) * 100);
+      var milestoneRows = Array.isArray(p.milestones) && p.milestones.length
+        ? '<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">' + p.milestones.map(function (m) {
+            return '<div style="font-size:11px;color:var(--muted)">' + esc(m.milestone) + ': ' + esc(String(m.done)) + '/' + esc(String(m.total)) + ' done · ' + esc(String(m.blocked)) + ' blocked</div>';
+          }).join('') + '</div>'
+        : '';
+      projectProgressHtml = '<div class="drawer-section-title" style="margin-top:16px">Project Progress</div>' +
+        '<div class="drawer-field" style="display:flex;flex-direction:column;gap:6px">' +
+        '<div style="font-size:12px">State: <strong>' + esc(p.state || 'in_progress') + '</strong> · Completion: <strong>' + esc(String(pct)) + '%</strong></div>' +
+        '<div style="font-size:11px;color:var(--muted)">Subtasks: ' + esc(String(p.doneChildren || 0)) + '/' + esc(String(p.totalChildren || 0)) + ' done · ' + esc(String(p.readyChildren || 0)) + ' ready · ' + esc(String(p.blockedChildren || 0)) + ' blocked · ' + esc(String(p.failedChildren || 0)) + ' failed</div>' +
+        milestoneRows +
+        '</div>';
+    }
+    document.getElementById('dtab-overview').innerHTML = actBtns + infoHtml + rawHtml + projectProgressHtml + childTasksHtml + timelineHtml;
   }
 
   function renderDrawerArtifacts(id, files) {

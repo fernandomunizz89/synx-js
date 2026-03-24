@@ -161,13 +161,40 @@ describe.sequential("lib/observability/queries", () => {
     expect(parentSummary?.sourceKind).toBe("project-intake");
     expect(parentSummary?.childTaskIds).toContain(child.taskId);
     expect(parentSummary?.rootProjectId).toBe(parent.taskId);
+    expect(parentSummary?.projectProgress?.totalChildren).toBe(1);
 
     expect(childSummary?.sourceKind).toBe("project-subtask");
     expect(childSummary?.parentTaskId).toBe(parent.taskId);
     expect(childSummary?.rootProjectId).toBe(parent.taskId);
+    expect(childSummary?.ready).toBe(true);
+    expect(childSummary?.blockedBy).toEqual([]);
 
     const parentDetail = await getTaskDetail(parent.taskId);
     expect(parentDetail?.childTasks.map((entry) => entry.taskId)).toContain(child.taskId);
+  });
+
+  it("surfaces blocked dependencies in task summaries", async () => {
+    const parent = await createTask({
+      ...baseTaskInput("Dependency project"),
+      typeHint: "Project",
+    });
+    const firstChild = await createTask(baseTaskInput("First implementation task"), {
+      sourceKind: "project-subtask",
+      parentTaskId: parent.taskId,
+      rootProjectId: parent.taskId,
+    });
+    await createTask(baseTaskInput("Second implementation task"), {
+      sourceKind: "project-subtask",
+      parentTaskId: parent.taskId,
+      rootProjectId: parent.taskId,
+      dependsOn: [firstChild.taskId],
+    });
+
+    const summaries = await listTaskSummaries();
+    const secondChildSummary = summaries.find((item) => item.title === "Second implementation task");
+    expect(secondChildSummary?.dependsOn).toEqual([firstChild.taskId]);
+    expect(secondChildSummary?.blockedBy).toEqual([firstChild.taskId]);
+    expect(secondChildSummary?.ready).toBe(false);
   });
 
   it("returns runtime as not alive when daemon state is absent", async () => {

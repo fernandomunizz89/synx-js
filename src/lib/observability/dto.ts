@@ -1,5 +1,6 @@
 import type { PipelineState, TaskMeta, TaskMetaHistoryItem } from "../types.js";
 import type { TaskCancelRequest } from "../task-cancel.js";
+import type { ProjectProgressSummary } from "../project-graph.js";
 
 export interface RuntimeStatusDto {
   isAlive: boolean;
@@ -35,7 +36,14 @@ export interface TaskSummaryDto {
   parentTaskId?: string;
   rootProjectId: string;
   sourceKind: TaskMeta["sourceKind"];
+  dependsOn: string[];
+  blockedBy: string[];
+  priority: number;
+  milestone?: string;
+  parallelizable: boolean;
+  ready: boolean;
   childTaskIds: string[];
+  projectProgress?: ProjectProgressSummary | null;
   consumption: TaskConsumptionDto;
 }
 
@@ -56,6 +64,10 @@ export interface TaskDetailDto extends TaskSummaryDto {
     title: string;
     status: TaskMeta["status"];
     type: TaskMeta["type"];
+    blockedBy: string[];
+    ready: boolean;
+    priority: number;
+    milestone?: string;
   }>;
   pipelineState: PipelineState | null;
   cancelRequest: TaskCancelRequest | null;
