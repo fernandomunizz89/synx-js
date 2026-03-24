@@ -34,6 +34,13 @@ Expand it as project conventions evolve.
 - Common commit types in this repo include `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`.
 - Use scope when it adds clarity, for example `feat(ui): add task drawer`.
 
+## Pull Requests
+
+- Any change merged into `main` should go through a pull request.
+- Pull requests targeting `main` should have a clear title and a structured Markdown description.
+- The pull request description should include context, scope, validation performed, and any relevant risks or follow-up work.
+- Keep pull requests focused and reviewable.
+
 ## Code Quality
 
 - Follow the existing TypeScript, ESM, and project conventions already present in the repo.
