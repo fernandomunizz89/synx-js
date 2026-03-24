@@ -31,7 +31,13 @@ export type AgentName =
   | "Synx Performance Optimizer"
   | "Synx Release Manager"
   | "Synx Incident Triage"
-  | "Synx Customer Feedback Synthesizer";
+  | "Synx Customer Feedback Synthesizer"
+  // Phase 4 – Pre-build Planning Squad
+  | "Synx Product Strategist"
+  | "Synx Requirements Analyst"
+  | "Synx UX Flow Designer"
+  | "Synx Solution Architect"
+  | "Synx Delivery Planner";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
 

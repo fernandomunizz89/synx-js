@@ -13,14 +13,27 @@ import { SynxPerformanceOptimizer } from "./experts/synx-performance-optimizer.j
 import { SynxReleaseManager } from "./experts/synx-release-manager.js";
 import { SynxIncidentTriage } from "./experts/synx-incident-triage.js";
 import { SynxCustomerFeedbackSynthesizer } from "./experts/synx-customer-feedback-synthesizer.js";
+import { SynxProductStrategist } from "./planning/synx-product-strategist.js";
+import { SynxRequirementsAnalyst } from "./planning/synx-requirements-analyst.js";
+import { SynxUxFlowDesigner } from "./planning/synx-ux-flow-designer.js";
+import { SynxSolutionArchitect } from "./planning/synx-solution-architect.js";
+import { SynxDeliveryPlanner } from "./planning/synx-delivery-planner.js";
 import { GenericAgent } from "./generic-agent.js";
 import { PipelineExecutor } from "./pipeline-executor.js";
 import { ProjectOrchestrator } from "./project-orchestrator.js";
+import { ProjectDecomposer } from "./project-decomposer.js";
 import { loadAgentDefinitions } from "../lib/agent-registry.js";
 import type { WorkerBase } from "./base.js";
 
 export const workers = {
   projectOrchestrator: new ProjectOrchestrator(),
+  // Phase 4 – Pre-build Planning Squad
+  productStrategist: new SynxProductStrategist(),
+  requirementsAnalyst: new SynxRequirementsAnalyst(),
+  uxFlowDesigner: new SynxUxFlowDesigner(),
+  solutionArchitect: new SynxSolutionArchitect(),
+  deliveryPlanner: new SynxDeliveryPlanner(),
+  projectDecomposer: new ProjectDecomposer(),
   dispatcher: new DispatcherWorker(),
   front: new SynxFrontExpert(),
   mobile: new SynxMobileExpert(),

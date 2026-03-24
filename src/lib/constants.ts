@@ -35,6 +35,13 @@ export const STAGE_FILE_NAMES = {
   synxReleaseManager:    "09-synx-release-manager.request.json",
   synxIncidentTriage:    "10-synx-incident-triage.request.json",
   synxFeedbackSynth:     "11-synx-customer-feedback-synthesizer.request.json",
+  // Phase 4 – Pre-build Planning Squad
+  synxProductStrategist:   "01-synx-product-strategist.request.json",
+  synxRequirementsAnalyst: "02-synx-requirements-analyst.request.json",
+  synxUxFlowDesigner:      "03-synx-ux-flow-designer.request.json",
+  synxSolutionArchitect:   "04-synx-solution-architect.request.json",
+  synxDeliveryPlanner:     "05-synx-delivery-planner.request.json",
+  projectDecomposer:       "00-project-orchestrator-decompose.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -59,6 +66,14 @@ export const DONE_FILE_NAMES = {
   synxReleaseManager:    "09-synx-release-manager.done.json",
   synxIncidentTriage:    "10-synx-incident-triage.done.json",
   synxFeedbackSynth:     "11-synx-customer-feedback-synthesizer.done.json",
+  // Phase 4 – Pre-build Planning Squad
+  synxProductStrategist:   "01-synx-product-strategist.done.json",
+  synxRequirementsAnalyst: "02-synx-requirements-analyst.done.json",
+  synxUxFlowDesigner:      "03-synx-ux-flow-designer.done.json",
+  synxSolutionArchitect:   "04-synx-solution-architect.done.json",
+  synxDeliveryPlanner:     "05-synx-delivery-planner.done.json",
+  projectOrchestrator:     "00-project-orchestrator.done.json",
+  projectDecomposer:       "00-project-orchestrator-decompose.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [

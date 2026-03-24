@@ -1,227 +1,22 @@
-import path from "node:path";
-import { readJson } from "../lib/fs.js";
-import { STAGE_FILE_NAMES } from "../lib/constants.js";
-import { loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib/config.js";
+import { DONE_FILE_NAMES, STAGE_FILE_NAMES } from "../lib/constants.js";
 import { taskDir } from "../lib/paths.js";
-import { createProvider } from "../providers/factory.js";
-import { createTaskService } from "../lib/services/task-services.js";
 import { logDaemon, logTaskEvent } from "../lib/logging.js";
-import { ARTIFACT_FILES, saveTaskArtifact } from "../lib/task-artifacts.js";
-import { buildLearningsPromptSection, inferCapabilityTagsForAgent, loadRecentLearnings, recordLearning } from "../lib/learnings.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
-import type { NewTaskInput, StageEnvelope, TaskType } from "../lib/types.js";
-import { z } from "zod";
-import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
+import type { StageEnvelope } from "../lib/types.js";
 
 const ORCHESTRATOR_AGENT = "Project Orchestrator" as const;
-const MAX_SUBTASKS = 10;
 
-const subtaskSchema = z.object({
-  taskKey: z.string().min(1).max(80).optional(),
-  title: z.string().min(1),
-  typeHint: z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed"]),
-  rawRequest: z.string().min(1),
-  dependsOn: z.array(z.string()).default([]),
-  priority: z.number().int().min(1).max(5).default(3),
-  milestone: z.string().max(120).optional(),
-  parallelizable: z.boolean().default(true),
-});
-
-const orchestratorOutputSchema = z.object({
-  projectSummary: z.string(),
-  tasks: z.array(subtaskSchema).min(1).max(MAX_SUBTASKS),
-});
-
-type OrchestratorOutput = z.infer<typeof orchestratorOutputSchema>;
-
-const projectBriefSchema = z.object({
-  problemStatement: z.string().min(1),
-  targetUsers: z.array(z.string().min(1)).min(1),
-  productGoals: z.array(z.string().min(1)).min(1),
-  inScope: z.array(z.string().min(1)).min(1),
-  outOfScope: z.array(z.string().min(1)).default([]),
-  assumptions: z.array(z.string().min(1)).default([]),
-  unknowns: z.array(z.string().min(1)).default([]),
-});
-
-const milestonePlanItemSchema = z.object({
-  milestone: z.string().min(1).max(120),
-  objective: z.string().min(1),
-  deliverables: z.array(z.string().min(1)).min(1),
-});
-
-const clarificationSchema = z.object({
-  required: z.boolean().default(false),
-  rationale: z.string().optional(),
-  questions: z.array(z.string().min(1)).default([]),
-});
-
-const prebuildPlanningSchema = z.object({
-  projectBrief: projectBriefSchema,
-  acceptanceCriteria: z.array(z.string().min(1)).min(1),
-  milestonePlan: z.array(milestonePlanItemSchema).min(1),
-  clarification: clarificationSchema,
-});
-
-type PrebuildPlanning = z.infer<typeof prebuildPlanningSchema>;
-
-function normalizeKey(value: string): string {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function normalizeTaskKey(value: string | undefined, fallbackLabel: string, index: number): string {
-  const fromField = normalizeKey(String(value || ""));
-  if (fromField) return fromField;
-  const fromFallbackLabel = normalizeKey(fallbackLabel);
-  if (fromFallbackLabel) return fromFallbackLabel;
-  return `task-${index + 1}`;
-}
-
-function normalizeOwnershipBoundary(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+/g, "/")
-    .replace(/[),.;:]+$/g, "")
-    .replace(/\/+$/, "");
-  if (!normalized) return undefined;
-  if (normalized === ".") return undefined;
-  return normalized;
-}
-
-function extractOwnershipBoundaries(rawRequest: string): string[] {
-  const matches = rawRequest.match(/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+(?:\.[A-Za-z0-9._-]+)?/g) || [];
-  const normalized = matches
-    .map((value) => normalizeOwnershipBoundary(value))
-    .filter((value): value is string => Boolean(value));
-  return Array.from(new Set(normalized)).slice(0, 12);
-}
-
-function buildPlanningSystemPrompt(input: NewTaskInput, learningsSection: string): string {
-  return `You are the pre-build planning squad for SYNX.
-
-You must collaborate as these roles before implementation starts:
-- Product Strategist
-- Requirements Analyst / PRD Writer
-- UX Flow Designer
-- Solution Architect
-- Delivery Planner
-
-Your goal is to transform a vague or high-level request into a build-ready plan.
-
-Output must include:
-1) projectBrief: product framing and scope boundaries
-2) acceptanceCriteria: testable acceptance criteria
-3) milestonePlan: MVP-first milestones, then later iterations
-4) clarification: whether human clarification is needed before implementation
-
-Rules:
-- Keep the plan implementation-oriented and specific.
-- Favor MVP scope when uncertain.
-- Surface assumptions and unknowns explicitly.
-- If requirements are underspecified, set clarification.required = true and provide focused questions.
-
-Project request:
-Title: ${input.title}
-Description: ${input.rawRequest}
-
-${learningsSection ? `Recent learning feedback for planning quality:\n${learningsSection}\n` : ""}
-
-Respond with a JSON object matching this schema exactly:
-{
-  "projectBrief": {
-    "problemStatement": "string",
-    "targetUsers": ["string"],
-    "productGoals": ["string"],
-    "inScope": ["string"],
-    "outOfScope": ["string"],
-    "assumptions": ["string"],
-    "unknowns": ["string"]
-  },
-  "acceptanceCriteria": ["string"],
-  "milestonePlan": [
-    {
-      "milestone": "string",
-      "objective": "string",
-      "deliverables": ["string"]
-    }
-  ],
-  "clarification": {
-    "required": false,
-    "rationale": "string",
-    "questions": ["string"]
-  }
-}`;
-}
-
-function buildDecompositionSystemPrompt(input: NewTaskInput, planning: PrebuildPlanning, learningsSection: string): string {
-  return `You are the Project Orchestrator for SYNX, a multi-agent software development system.
-
-Your job is to receive a high-level project or feature request and decompose it into a concrete execution plan of subtasks for specialized agents.
-
-Available agents:
-- Synx Front Expert: Next.js App Router, React, TailwindCSS, WCAG 2.1, server components
-- Synx Mobile Expert: Expo, React Native, Reanimated, EAS
-- Synx Back Expert: NestJS, Fastify, Prisma ORM, REST/GraphQL APIs, TypeScript
-- Synx SEO Specialist: Core Web Vitals, JSON-LD, Next.js Metadata API, Lighthouse
-
-Rules for decomposition:
-1. Each subtask must have a unique kebab-case "taskKey" (example: "design-auth-model").
-2. Subtasks can depend on earlier subtasks using "dependsOn" with taskKey values.
-3. Set "priority" from 1 (lowest) to 5 (highest).
-4. Set "parallelizable" to false when a task should run alone to avoid collisions.
-5. Optionally assign a "milestone" label such as "MVP", "Beta", or "Hardening".
-6. Each subtask must be concrete and specific enough that a single expert can implement it without clarifying scope.
-7. Include enough context in rawRequest so the agent knows exactly what to build (endpoints, component names, data models, file paths, acceptance criteria).
-8. Do not create more than ${MAX_SUBTASKS} subtasks. Aim for 3–7 focused tasks.
-9. Do not create subtasks for QA or testing — the QA Engineer runs automatically after each expert.
-10. Use typeHint "Feature" for new functionality, "Bug" for fixes, "Refactor" for code improvements.
-
-Project request:
-Title: ${input.title}
-Description: ${input.rawRequest}
-
-Pre-build planning context:
-Project brief:
-${JSON.stringify(planning.projectBrief, null, 2)}
-
-Acceptance criteria:
-${planning.acceptanceCriteria.map((item, index) => `${index + 1}. ${item}`).join("\n")}
-
-Milestone plan:
-${planning.milestonePlan.map((item, index) => `${index + 1}. ${item.milestone}: ${item.objective} | Deliverables: ${item.deliverables.join("; ")}`).join("\n")}
-
-Clarification request:
-Required: ${planning.clarification.required ? "yes" : "no"}
-${planning.clarification.rationale ? `Rationale: ${planning.clarification.rationale}\n` : ""}${planning.clarification.questions.length ? `Questions:\n${planning.clarification.questions.map((q, index) => `${index + 1}. ${q}`).join("\n")}` : "Questions: none"}
-
-${learningsSection ? `Recent learning feedback for decomposition quality:\n${learningsSection}\n` : ""}
-
-Respond with a JSON object matching this schema exactly:
-{
-  "projectSummary": "Brief one-sentence summary of the project",
-  "tasks": [
-    {
-      "taskKey": "unique-task-key",
-      "title": "Short actionable title",
-      "typeHint": "Feature",
-      "rawRequest": "Detailed description with specifics: file paths, component names, API endpoints, data models, acceptance criteria",
-      "dependsOn": ["task-key-this-task-needs"],
-      "priority": 3,
-      "milestone": "MVP",
-      "parallelizable": true
-    }
-  ]
-}`;
-}
-
+/**
+ * Project intake stage.
+ *
+ * Receives a project-type task, logs it, and immediately hands off to the
+ * pre-build planning squad (Product Strategist → Requirements Analyst →
+ * UX Flow Designer → Solution Architect → Delivery Planner → Decomposer).
+ *
+ * No LLM call is made here. Planning and decomposition are owned by the
+ * five specialist workers and ProjectDecomposer respectively.
+ */
 export class ProjectOrchestrator extends WorkerBase {
   readonly agent = ORCHESTRATOR_AGENT;
   readonly requestFileName = STAGE_FILE_NAMES.projectOrchestrator;
@@ -229,270 +24,40 @@ export class ProjectOrchestrator extends WorkerBase {
 
   protected async processTask(taskId: string, request: StageEnvelope): Promise<void> {
     const startedAt = nowIso();
-    const config = await loadResolvedProjectConfig();
+    const input = await this.loadTaskInput(taskId);
 
-    // Use Dispatcher provider for the orchestrator (it's a routing/planning agent)
-    const provider = createProvider(resolveProviderConfigForAgent(config, "Dispatcher"));
-
-    const input = await readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
-    const parentMeta = await loadTaskMeta(taskId);
-    const rootProjectId = parentMeta.rootProjectId || taskId;
-
-    await logTaskEvent(taskDir(taskId), `Project Orchestrator: analysing request "${input.title}"...`);
-    await logDaemon(`ProjectOrchestrator: decomposing task ${taskId}`);
-
-    const recentLearnings = await loadRecentLearnings(ORCHESTRATOR_AGENT).catch(() => []);
-    const learningsSection = buildLearningsPromptSection(recentLearnings);
-    const planningPrompt = buildPlanningSystemPrompt(input, learningsSection);
-    const planningResult = await provider.generateStructured({
-      agent: ORCHESTRATOR_AGENT,
-      taskId,
-      stage: request.stage,
-      taskType: input.typeHint,
-      systemPrompt: planningPrompt,
-      input,
-      expectedJsonSchemaDescription:
-        '{ "projectBrief": { "problemStatement": "string", "targetUsers": ["string"], "productGoals": ["string"], "inScope": ["string"], "outOfScope": ["string"], "assumptions": ["string"], "unknowns": ["string"] }, "acceptanceCriteria": ["string"], "milestonePlan": [{ "milestone": "string", "objective": "string", "deliverables": ["string"] }], "clarification": { "required": "boolean", "rationale": "string?", "questions": ["string"] } }',
-    });
-    const planning = prebuildPlanningSchema.parse(planningResult.parsed) as PrebuildPlanning;
-
-    await saveTaskArtifact(taskId, ARTIFACT_FILES.projectBrief, {
-      projectTaskId: taskId,
-      rootProjectId,
-      createdAt: nowIso(),
-      ...planning.projectBrief,
-    });
-    await saveTaskArtifact(taskId, ARTIFACT_FILES.acceptanceCriteria, {
-      projectTaskId: taskId,
-      rootProjectId,
-      createdAt: nowIso(),
-      acceptanceCriteria: planning.acceptanceCriteria,
-    });
-    await saveTaskArtifact(taskId, ARTIFACT_FILES.milestonePlan, {
-      projectTaskId: taskId,
-      rootProjectId,
-      createdAt: nowIso(),
-      milestones: planning.milestonePlan,
-    });
-    if (planning.clarification.required || planning.clarification.questions.length > 0) {
-      await saveTaskArtifact(taskId, ARTIFACT_FILES.clarificationRequest, {
-        projectTaskId: taskId,
-        rootProjectId,
-        createdAt: nowIso(),
-        required: planning.clarification.required,
-        rationale: planning.clarification.rationale,
-        questions: planning.clarification.questions,
-      });
-      await logTaskEvent(taskDir(taskId), "Project Orchestrator: clarification questions were generated for this project.");
-    }
-
-    const systemPrompt = buildDecompositionSystemPrompt(input, planning, learningsSection);
-
-    const result = await provider.generateStructured({
-      agent: ORCHESTRATOR_AGENT,
-      taskId,
-      stage: request.stage,
-      taskType: input.typeHint,
-      systemPrompt,
-      input,
-      expectedJsonSchemaDescription:
-        '{ "projectSummary": "string", "tasks": [{ "taskKey": "string", "title": "string", "typeHint": "Feature|Bug|Refactor|Research|Documentation|Mixed", "rawRequest": "string", "dependsOn": ["taskKey"], "priority": "1..5", "milestone": "string?", "parallelizable": "boolean" }] }',
-    });
-
-    const output = orchestratorOutputSchema.parse(result.parsed) as OrchestratorOutput;
-    const keyedTasks = output.tasks.map((task, index) => ({
-      ...task,
-      taskKey: normalizeTaskKey(task.taskKey, task.title, index),
-      dependsOn: Array.from(new Set((task.dependsOn || []).map((key) => normalizeKey(key)).filter(Boolean))),
-      milestone: String(task.milestone || "").trim() || undefined,
-      priority: Math.min(5, Math.max(1, Number(task.priority || 3))),
-      parallelizable: task.parallelizable !== false,
-    }));
-    const seenTaskKeys = new Set<string>();
-    for (const task of keyedTasks) {
-      let key = task.taskKey;
-      let suffix = 2;
-      while (seenTaskKeys.has(key)) {
-        key = `${task.taskKey}-${suffix}`;
-        suffix += 1;
-      }
-      task.taskKey = key;
-      seenTaskKeys.add(key);
-    }
-
-    await logTaskEvent(taskDir(taskId), `Project Orchestrator: creating ${keyedTasks.length} subtask(s)...`);
-
-    const createdIds: string[] = [];
-    const createdByKey = new Map<string, string>();
-    for (const [index, subtask] of keyedTasks.entries()) {
-      const ownershipBoundaries = extractOwnershipBoundaries(subtask.rawRequest);
-      const subtaskInput: Omit<NewTaskInput, "project"> = {
-        title: subtask.title,
-        typeHint: subtask.typeHint as TaskType,
-        rawRequest: subtask.rawRequest,
-        extraContext: {
-          relatedFiles: [],
-          logs: [],
-          notes: [
-            `Part of project: ${input.title}`,
-            `Project summary: ${output.projectSummary}`,
-            `Parent project intake task: ${taskId}`,
-            `Root project id: ${rootProjectId}`,
-            `Task key: ${subtask.taskKey}`,
-            `Priority: ${subtask.priority}`,
-            `Parallelizable: ${subtask.parallelizable ? "yes" : "no"}`,
-            `Merge strategy: ${subtask.parallelizable ? "auto-rebase" : "manual-review"}`,
-            ...(subtask.milestone ? [`Milestone: ${subtask.milestone}`] : []),
-            ...(ownershipBoundaries.length ? [`Ownership boundaries: ${ownershipBoundaries.join(", ")}`] : []),
-            `Acceptance criteria: ${planning.acceptanceCriteria.slice(0, 5).join(" | ")}`,
-            "Planning artifacts available: project-brief.json, acceptance-criteria.json, milestone-plan.json",
-            `Subtask ${index + 1} of ${output.tasks.length}`,
-          ],
-          qaPreferences: {
-            e2ePolicy: "auto",
-            e2eFramework: "auto",
-            objective: "",
-          },
-        },
-      };
-      const created = await createTaskService({
-        ...subtaskInput,
-        project: input.project,
-        metadata: {
-          sourceKind: "project-subtask",
-          parentTaskId: taskId,
-          rootProjectId,
-          priority: subtask.priority as 1 | 2 | 3 | 4 | 5,
-          milestone: subtask.milestone,
-          parallelizable: subtask.parallelizable,
-          ownershipBoundaries,
-          mergeStrategy: subtask.parallelizable ? "auto-rebase" : "manual-review",
-        },
-      });
-      createdIds.push(created.taskId);
-      createdByKey.set(subtask.taskKey, created.taskId);
-      await logTaskEvent(taskDir(taskId), `Created subtask: [${subtask.taskKey}] ${subtask.title} → ${created.taskId}`);
-    }
-
-    for (const [index, subtask] of keyedTasks.entries()) {
-      const createdTaskId = createdIds[index];
-      if (!createdTaskId) continue;
-
-      const resolvedDependencies = Array.from(new Set(
-        subtask.dependsOn
-          .map((dependencyKey) => createdByKey.get(dependencyKey))
-          .filter((dependencyTaskId): dependencyTaskId is string => Boolean(dependencyTaskId))
-          .filter((dependencyTaskId) => dependencyTaskId !== createdTaskId),
-      ));
-      const unresolvedDependencies = subtask.dependsOn.filter((dependencyKey) => !createdByKey.has(dependencyKey));
-      if (unresolvedDependencies.length) {
-        await logTaskEvent(
-          taskDir(taskId),
-          `Subtask ${createdTaskId} has unresolved dependency key(s): ${unresolvedDependencies.join(", ")}.`,
-        );
-      }
-
-      if (!resolvedDependencies.length) continue;
-      const childMeta = await loadTaskMeta(createdTaskId);
-      childMeta.dependsOn = resolvedDependencies;
-      childMeta.blockedBy = resolvedDependencies;
-      await saveTaskMeta(createdTaskId, childMeta);
-      await logTaskEvent(taskDir(taskId), `Subtask ${createdTaskId} depends on ${resolvedDependencies.join(", ")}.`);
-    }
-
-    await saveTaskArtifact(taskId, ARTIFACT_FILES.projectDecomposition, {
-      projectTaskId: taskId,
-      rootProjectId,
-      projectSummary: output.projectSummary,
-      tasks: keyedTasks.map((task, index) => ({
-        ...task,
-        taskId: createdIds[index],
-        dependsOnTaskIds: task.dependsOn
-          .map((dependencyKey) => createdByKey.get(dependencyKey))
-          .filter((dependencyTaskId): dependencyTaskId is string => Boolean(dependencyTaskId)),
-      })),
-      createdTaskIds: createdIds,
-      createdAt: nowIso(),
-    });
-
-    await logDaemon(`ProjectOrchestrator: created ${createdIds.length} subtasks for ${taskId}: ${createdIds.join(", ")}`);
+    await logTaskEvent(
+      taskDir(taskId),
+      `Project Orchestrator: forwarding "${input.title}" to the pre-build planning squad...`,
+    );
+    await logDaemon(`ProjectOrchestrator: intake for ${taskId}`);
 
     await this.finishStage({
       taskId,
       stage: request.stage,
-      doneFileName: "00-project-orchestrator.done.json",
+      doneFileName: DONE_FILE_NAMES.projectOrchestrator,
       viewFileName: "00-project-orchestrator.view.md",
       viewContent: [
-        `# Project: ${input.title}`,
+        `# Project Intake: ${input.title}`,
         "",
-        output.projectSummary,
+        "Request received. Forwarding to the pre-build planning squad.",
         "",
-        "## Pre-build planning artifacts",
-        "- project-brief.json",
-        "- acceptance-criteria.json",
-        "- milestone-plan.json",
-        ...(planning.clarification.required || planning.clarification.questions.length
-          ? ["- clarification-request.json"]
-          : []),
-        "",
-        planning.clarification.required
-          ? `Clarification required before implementation confidence is high. Questions: ${planning.clarification.questions.length}`
-          : "No clarification required by planning loop.",
-        "",
-        "## Subtasks created",
-        ...keyedTasks.map((t, i) => {
-          const dependencyKeys = t.dependsOn.length ? t.dependsOn.join(", ") : "none";
-          const milestone = t.milestone ? ` | milestone: ${t.milestone}` : "";
-          return `${i + 1}. **[${t.typeHint}]** ${t.title} (\`${t.taskKey}\`) → \`${createdIds[i]}\` | priority: ${t.priority}${milestone} | parallelizable: ${t.parallelizable ? "yes" : "no"} | dependsOn: ${dependencyKeys}`;
-        }),
+        "## Planning chain",
+        "1. Synx Product Strategist — product brief and scope",
+        "2. Synx Requirements Analyst — requirements and acceptance criteria",
+        "3. Synx UX Flow Designer — user journeys and screen list",
+        "4. Synx Solution Architect — technical design",
+        "5. Synx Delivery Planner — milestones and delivery constraints",
+        "6. Project Orchestrator (decompose) — subtask creation",
       ].join("\n"),
-      output: {
-        ...output,
-        tasks: keyedTasks.map((task, index) => ({
-          ...task,
-          taskId: createdIds[index],
-          dependsOnTaskIds: task.dependsOn
-            .map((dependencyKey) => createdByKey.get(dependencyKey))
-            .filter((dependencyTaskId): dependencyTaskId is string => Boolean(dependencyTaskId)),
-        })),
-        rootProjectId,
-        prebuildPlanning: planning,
-        createdTaskIds: createdIds,
-      },
-      // No nextAgent — intake stays open for project tracking while subtasks execute.
+      output: { stage: "intake", title: input.title, project: input.project },
+      nextAgent: "Synx Product Strategist",
+      nextStage: "synx-product-strategist",
+      nextRequestFileName: STAGE_FILE_NAMES.synxProductStrategist,
+      nextInputRef: "input/new-task.json",
       startedAt,
-      provider: result.provider,
-      model: result.model,
-      parseRetries: result.parseRetries,
-      validationPassed: result.validationPassed,
-      providerAttempts: result.providerAttempts,
-      providerBackoffRetries: result.providerBackoffRetries,
-      providerBackoffWaitMs: result.providerBackoffWaitMs,
-      providerRateLimitWaitMs: result.providerRateLimitWaitMs,
-      estimatedInputTokens: result.estimatedInputTokens,
-      estimatedOutputTokens: result.estimatedOutputTokens,
-      estimatedTotalTokens: result.estimatedTotalTokens,
-      estimatedCostUsd: result.estimatedCostUsd,
     });
 
-    await recordLearning({
-      timestamp: nowIso(),
-      taskId,
-      agentId: ORCHESTRATOR_AGENT,
-      summary: `Project decomposition completed with ${createdIds.length} subtask(s).`,
-      outcome: "approved",
-      workflow: "project-intake",
-      taskType: input.typeHint,
-      sourceKind: parentMeta.sourceKind,
-      project: input.project,
-      rootProjectId,
-      parentTaskId: parentMeta.parentTaskId,
-      stage: request.stage,
-      capabilities: inferCapabilityTagsForAgent(ORCHESTRATOR_AGENT),
-      provider: result.provider,
-      model: result.model,
-    });
-
-    await logTaskEvent(taskDir(taskId), `Project Orchestrator: decomposition complete. ${createdIds.length} subtask(s) are now queued.`);
+    await logTaskEvent(taskDir(taskId), "Project Orchestrator: intake complete. Planning squad queued.");
   }
 }
