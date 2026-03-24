@@ -599,3 +599,37 @@ export const securityAuditOutputSchema = z.object({
 export type SecurityAuditOutput = z.infer<typeof securityAuditOutputSchema>;
 
 // Legacy agent output schemas were removed.
+
+// ─── Agent API schemas ────────────────────────────────────────────────────────
+
+export const agentTaskInputSchema = z.object({
+  title: z.string().min(1),
+  rawRequest: z.string().min(1),
+  typeHint: taskTypeSchema.optional().default("Feature"),
+  project: z.string().optional(),
+  relatedFiles: z.array(z.string()).optional().default([]),
+  notes: z.array(z.string()).optional().default([]),
+  e2ePolicy: e2ePolicySchema.optional().default("auto"),
+});
+export type AgentTaskInput = z.infer<typeof agentTaskInputSchema>;
+
+export const observationResponseSchema = z.object({
+  ok: z.boolean(),
+  observation: z.object({
+    taskId: z.string().optional(),
+    status: taskStatusSchema.optional(),
+    currentAgent: z.string().optional(),
+    needsAction: z.boolean(),
+    actionRequired: z.enum(["approve_or_reprove", "provide_input"]).nullable().optional(),
+    output: z.unknown().optional(),
+    history: z.array(taskMetaHistoryItemSchema).optional(),
+    nextPollMs: z.number().int().nonnegative(),
+    message: z.string(),
+  }),
+});
+export type ObservationResponse = z.infer<typeof observationResponseSchema>;
+
+export const nemoActionInputSchema = z.object({
+  parameters: z.record(z.unknown()).optional().default({}),
+});
+export type NemoActionInput = z.infer<typeof nemoActionInputSchema>;

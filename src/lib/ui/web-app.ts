@@ -4,6 +4,8 @@ export function buildWebUiHtml(): string {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="synx-task-count" id="meta-task-count" content="0" />
+  <meta name="synx-status" id="meta-status" content="unknown" />
   <title>SYNX — Mission Control</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -707,9 +709,9 @@ export function buildWebUiHtml(): string {
     </div>
 
     <div class="sidebar-footer">
-      <div class="engine-pill" style="margin-bottom:8px">
+      <div class="engine-pill" data-testid="engine-status-pill" style="margin-bottom:8px">
         <span class="dot dot-unk" id="engine-dot"></span>
-        <span id="engine-label">Connecting…</span>
+        <span id="engine-label" data-testid="engine-status-label">Connecting…</span>
       </div>
       <div class="cmd-footer">
         <div class="cmd-wrap">
@@ -742,10 +744,10 @@ export function buildWebUiHtml(): string {
         <h2>Welcome to Mission Control</h2>
         <p>Describe what you want to build — the squad decomposes it into tasks and starts working in parallel.</p>
         <div class="prompt-row">
-          <textarea class="prompt-ta" id="prompt-ta" rows="1"
+          <textarea class="prompt-ta" id="prompt-ta" data-testid="task-prompt-input" rows="1"
             placeholder="Build a user authentication system with JWT, refresh tokens, and a React login page…"
             autocomplete="off"></textarea>
-          <button class="btn-send" id="btn-send">Send →</button>
+          <button class="btn-send" id="btn-send" data-testid="task-prompt-submit">Send →</button>
         </div>
         <div class="prompt-msg" id="prompt-msg"></div>
       </div>
@@ -784,7 +786,7 @@ export function buildWebUiHtml(): string {
             <h3>Recent Tasks</h3>
             <button class="sc-link" onclick="go('tasks')">View All →</button>
           </div>
-          <div id="recent-tasks"><div class="empty">No tasks yet</div></div>
+          <div id="recent-tasks" aria-live="polite" aria-label="Recent tasks"><div class="empty">No tasks yet</div></div>
         </div>
 
         <div class="sc">
@@ -819,20 +821,20 @@ export function buildWebUiHtml(): string {
             <option value="failed">Failed</option>
           </select>
         </div>
-        <table>
+        <table role="grid" aria-label="Task board">
           <thead>
             <tr>
               <th>Task</th><th>Type</th><th>Status</th><th>Stage</th><th>Created</th>
             </tr>
           </thead>
-          <tbody id="tasks-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          <tbody id="tasks-body" data-testid="task-list-body"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
 
     <!-- REVIEW -->
     <div class="page" id="page-review">
-      <div id="review-list"><div class="empty">No tasks waiting for review</div></div>
+      <div id="review-list" data-testid="review-queue-list" aria-live="polite" aria-label="Review queue"><div class="empty">No tasks waiting for review</div></div>
     </div>
 
     <!-- STREAM -->
@@ -1073,14 +1075,14 @@ export function buildWebUiHtml(): string {
 </div>
 
 <!-- NEW TASK MODAL -->
-<div class="modal-back" id="newtask-modal">
+<div class="modal-back" id="newtask-modal" role="dialog" aria-modal="true" aria-label="Create new task">
   <div class="modal-box" style="max-width:560px">
     <h3>＋ Nova Task</h3>
     <p>Create a targeted task dispatched directly to the most appropriate expert.</p>
     <label class="modal-label">Title *</label>
-    <input class="modal-input" type="text" id="nt-title" placeholder="Add email verification to user registration">
+    <input class="modal-input" type="text" id="nt-title" data-testid="newtask-title-input" placeholder="Add email verification to user registration">
     <div class="modal-row">
-      <select class="modal-select" id="nt-type">
+      <select class="modal-select" id="nt-type" data-testid="newtask-type-select">
         <option value="Feature">Feature</option>
         <option value="Bug">Bug</option>
         <option value="Refactor">Refactor</option>
@@ -1095,24 +1097,24 @@ export function buildWebUiHtml(): string {
       </select>
     </div>
     <label class="modal-label">Description *</label>
-    <textarea class="modal-ta" id="nt-desc" placeholder="Describe what needs to be done in detail…"></textarea>
+    <textarea class="modal-ta" id="nt-desc" data-testid="newtask-description-input" placeholder="Describe what needs to be done in detail…"></textarea>
     <label class="modal-label" style="margin-top:10px">Related files <span style="font-weight:400;color:var(--muted)">(one per line, optional)</span></label>
     <textarea class="modal-ta" id="nt-files" style="min-height:52px;font-family:var(--mono);font-size:12px" placeholder="src/auth/users.ts&#10;src/lib/email.ts"></textarea>
     <div class="modal-err" id="nt-err"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeNewTask()">Cancel</button>
-      <button class="btn btn-approve" id="nt-submit" onclick="submitNewTask()">Create Task →</button>
+      <button class="btn btn-approve" id="nt-submit" data-testid="newtask-submit-button" onclick="submitNewTask()">Create Task →</button>
     </div>
   </div>
 </div>
 
 <!-- REPROVE MODAL -->
-<div class="modal-back" id="reprove-modal">
+<div class="modal-back" id="reprove-modal" role="dialog" aria-modal="true" aria-label="Send back for revision">
   <div class="modal-box">
     <h3>Send Back for Revision</h3>
     <p>Describe what needs to be fixed. The agent will receive this feedback and retry.</p>
     <label class="modal-label">Reason *</label>
-    <textarea class="modal-ta" id="reprove-reason"
+    <textarea class="modal-ta" id="reprove-reason" data-testid="reprove-reason-input"
       placeholder="e.g. Missing error handling for network timeouts, the loading state never clears…"></textarea>
     <div class="modal-check">
       <input type="checkbox" id="reprove-rollback">
@@ -1121,7 +1123,7 @@ export function buildWebUiHtml(): string {
     <div class="modal-err" id="reprove-err"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-reprove" id="reprove-submit" onclick="submitReprove()">Send Back</button>
+      <button class="btn btn-reprove" id="reprove-submit" data-testid="reprove-submit-button" onclick="submitReprove()">Send Back</button>
     </div>
   </div>
 </div>
@@ -1247,14 +1249,21 @@ export function buildWebUiHtml(): string {
   function refreshOverview() {
     fetch('/api/overview').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d) return;
-      var counts  = d.data ? d.data.counts  : (d.counts  || {});
-      var running = d.data ? d.data.engine.status === 'running' : (d.engine && d.engine.status === 'running');
+      var payload = d.data || d;
+      var counts = payload.counts || {};
+      var runtime = payload.runtime || payload.engine || {};
+      var running = runtime.isAlive === true || runtime.status === 'running';
 
       document.getElementById('s-total').textContent   = counts.total          || 0;
       document.getElementById('s-done').textContent    = counts.done           || 0;
       document.getElementById('s-active').textContent  = counts.active         || 0;
       document.getElementById('s-waiting').textContent = counts.waiting_human  || 0;
       document.getElementById('s-failed').textContent  = counts.failed         || 0;
+
+      var taskCountMeta = document.getElementById('meta-task-count');
+      if (taskCountMeta) taskCountMeta.setAttribute('content', String(counts.total || 0));
+      var statusMeta = document.getElementById('meta-status');
+      if (statusMeta) statusMeta.setAttribute('content', running ? 'running' : 'stopped');
 
       document.getElementById('engine-dot').className   = 'dot ' + (running ? 'dot-run' : 'dot-stop');
       document.getElementById('engine-label').textContent = running ? 'Engine running' : 'Engine stopped';
@@ -1340,8 +1349,8 @@ export function buildWebUiHtml(): string {
     tbody.innerHTML = list.map(function (t) {
       var id = esc(t.taskId);
       var approveBtn = (t.status === 'waiting_human')
-        ? '<button class="btn btn-approve" onclick="event.stopPropagation();approveTask(\\'' + id + '\\')">Approve</button>'
-        + '<button class="btn btn-reprove" onclick="event.stopPropagation();openReprove(\\'' + id + '\\')">Send Back</button>' : '';
+        ? '<button class="btn btn-approve" data-testid="approve-button-' + id + '" aria-label="Approve task ' + id + '" onclick="event.stopPropagation();approveTask(\\'' + id + '\\')">Approve</button>'
+        + '<button class="btn btn-reprove" data-testid="reprove-button-' + id + '" aria-label="Send back task ' + id + '" onclick="event.stopPropagation();openReprove(\\'' + id + '\\')">Send Back</button>' : '';
       var cancelBtn = (t.status !== 'done' && t.status !== 'failed' && t.status !== 'archived')
         ? '<button class="btn btn-cancel" onclick="event.stopPropagation();cancelTask(\\'' + id + '\\')">Cancel</button>' : '';
       var detailBtn = '<button class="btn" style="font-size:11px;padding:4px 8px" onclick="event.stopPropagation();openDrawer(\\'' + id + '\\')">Details</button>';
@@ -1357,7 +1366,7 @@ export function buildWebUiHtml(): string {
       var planHtml = plan
         ? '<div style="font-size:11px;color:var(--muted)">' + esc(plan) + '</div>'
         : '';
-      return '<tr class="trow" onclick="toggleExpand(\\'' + id + '\\')">' +
+      return '<tr class="trow" data-testid="task-row-' + id + '" onclick="toggleExpand(\\'' + id + '\\')">' +
         '<td><div style="font-weight:500">' + esc(t.title) + '</div>' +
         '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + id + '</div>' + relationHtml + planHtml + blockedHtml + '</td>' +
         '<td style="color:var(--muted)">' + esc(taskType(t) || '—') + '</td>' +
@@ -1393,8 +1402,8 @@ export function buildWebUiHtml(): string {
           '<span style="font-size:12px;color:var(--muted)">' + ago(t.createdAt) + '</span></div>' +
           '<div class="rv-body"><div class="rv-raw">' + esc(t.rawRequest || '') + '</div>' +
           '<div class="rv-actions">' +
-          '<button class="btn btn-approve" onclick="approveTask(\\'' + id + '\\', true)">Approve</button>' +
-          '<button class="btn btn-reprove" onclick="openReprove(\\'' + id + '\\')">Send Back</button>' +
+          '<button class="btn btn-approve" data-testid="review-approve-' + id + '" aria-label="Approve task ' + id + '" onclick="approveTask(\\'' + id + '\\', true)">Approve</button>' +
+          '<button class="btn btn-reprove" data-testid="review-reprove-' + id + '" aria-label="Send back task ' + id + '" onclick="openReprove(\\'' + id + '\\')">Send Back</button>' +
           '</div><div class="rv-msg" id="rv-msg-' + id + '"></div></div></div>';
       }).join('');
     }).catch(function(){});
