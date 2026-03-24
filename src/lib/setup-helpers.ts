@@ -148,9 +148,23 @@ export async function chooseOpenAiCompatibleModel(config: ProviderStageConfig, m
     if (config.type === "openai-compatible" && !config.baseUrl) {
       console.log(`Tip: choose saved connection details in setup to avoid exporting ${config.baseUrlEnv || DEFAULT_BASE_URL_ENV}.`);
     }
-    console.log("You can still continue by typing the model manually.");
+
     if (manualExamples.length) {
-      console.log(`Model examples for this provider: ${manualExamples.join(", ")}`);
+      const manualEntryToken = "__manual-model-entry__";
+      const defaultChoice = suggestedManualModel && manualExamples.includes(suggestedManualModel)
+        ? suggestedManualModel
+        : manualExamples[0];
+      const model = await selectOption<string>(
+        "Choose model (or type manually)",
+        [
+          ...manualExamples.map((m) => ({ value: m, label: m })),
+          { value: manualEntryToken, label: "Type model name manually" },
+        ],
+        defaultChoice
+      );
+      if (model !== manualEntryToken) return model;
+    } else {
+      console.log("You can still continue by typing the model manually.");
     }
   }
 
