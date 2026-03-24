@@ -19,10 +19,10 @@ import { parseHumanInputCommand, parseInlineCommand, type InlineCommand } from "
 import { runInlineCommand } from "../start/command-handler.js";
 import { exists, listFiles, readJson, readText, writeJson } from "../fs.js";
 import { exportTask } from "../export.js";
-import { configDir, taskDir } from "../paths.js";
+import { configDir, globalConfigPath, taskDir } from "../paths.js";
 import { loadGlobalConfig, loadLocalProjectConfig, loadResolvedProjectConfig } from "../config.js";
-import { localProjectConfigSchema } from "../schema.js";
-import { checkProviderHealth } from "../provider-health.js";
+import { globalConfigSchema, localProjectConfigSchema } from "../schema.js";
+import { checkProviderHealth, discoverProviderModels } from "../provider-health.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -41,6 +41,7 @@ export interface StartedUiServer {
 interface ApiErrorPayload {
   ok: false;
   error: string;
+  [key: string]: unknown;
 }
 
 interface ApiSuccessPayload<T> {
@@ -530,6 +531,200 @@ export function createUiRequestHandler(options: {
         const validated = localProjectConfigSchema.parse(raw);
         await writeJson(projectConfigPath, validated);
         sendJson(res, 200, { ok: true, data: validated });
+        return;
+      }
+
+      // ── POST /api/setup ──────────────────────────────────────────────────────
+      if (method === "POST" && pathname === "/api/setup") {
+        if (!options.enableMutations) {
+          sendJson(res, 405, { ok: false, error: "Mutating actions are disabled in read-only mode." });
+          return;
+        }
+        const body = await parseJsonBody(req);
+        const providerType = normalizeString(body.providerType);
+        const humanReviewer = normalizeString(body.humanReviewer);
+        const model = normalizeString(body.model);
+        // FIX #1: distinguish "key not sent" (preserve) from "key sent as empty" (also preserve — no explicit clear)
+        const apiKeyFromBody = "apiKey" in body ? normalizeString(body.apiKey) : null;
+        const baseUrl = normalizeString(body.baseUrl);
+        const force = body.force === true;
+
+        const validProviderTypes = ["mock", "lmstudio", "openai-compatible", "google", "anthropic"];
+        if (!validProviderTypes.includes(providerType)) {
+          sendJson(res, 400, { ok: false, error: "Invalid providerType." }); return;
+        }
+        if (!humanReviewer) {
+          sendJson(res, 400, { ok: false, error: "humanReviewer is required." }); return;
+        }
+        if (providerType !== "mock" && !model) {
+          sendJson(res, 400, { ok: false, error: "model is required for non-mock providers." }); return;
+        }
+
+        const globalPath = globalConfigPath();
+        const projectPath = `${configDir()}/project.json`;
+
+        let rawGlobal: Record<string, unknown> = {};
+        try { rawGlobal = await readJson<Record<string, unknown>>(globalPath); } catch { /* first-time */ }
+        let rawLocal: Record<string, unknown> = {};
+        try { rawLocal = await readJson<Record<string, unknown>>(projectPath); } catch { /* first-time */ }
+
+        type ProviderCfg = { type: string; model: string; baseUrlEnv?: string; apiKeyEnv?: string; baseUrl?: string; apiKey?: string };
+        type GlobalShape = { providers?: { dispatcher?: ProviderCfg; planner?: ProviderCfg }; agentProviders?: Record<string, ProviderCfg>; defaults?: Record<string, unknown> };
+        const existingGlobal = rawGlobal as GlobalShape;
+        const existingDispatcher = existingGlobal.providers?.dispatcher;
+
+        // FIX #7: clearApiKey flag explicitly removes stored key
+        const clearApiKey = body.clearApiKey === true;
+
+        // FIX #1: If no new key was sent, preserve the stored key when provider type matches
+        function resolveApiKey(newKey: string | null, existing?: ProviderCfg, newType?: string): string {
+          if (clearApiKey) return "";                                      // explicit clear
+          if (newKey) return newKey;                                       // new key provided
+          if (existing?.type === newType && existing?.apiKey) return existing.apiKey; // preserve
+          return "";
+        }
+
+        function buildCfg(pType: string, pModel: string, pApiKey: string, pBaseUrl: string): ProviderCfg {
+          if (pType === "mock") {
+            return { type: "mock", model: "mock-dispatcher-v1", baseUrlEnv: "AI_AGENTS_OPENAI_BASE_URL", apiKeyEnv: "AI_AGENTS_OPENAI_API_KEY" };
+          }
+          const base: ProviderCfg = { type: pType, model: pModel };
+          if (pType === "lmstudio") {
+            base.baseUrlEnv = "AI_AGENTS_LMSTUDIO_BASE_URL";
+            base.apiKeyEnv  = "AI_AGENTS_LMSTUDIO_API_KEY";
+            if (pBaseUrl) base.baseUrl = pBaseUrl;
+          } else if (pType === "google") {
+            base.baseUrlEnv = "AI_AGENTS_GOOGLE_BASE_URL";
+            base.apiKeyEnv  = "AI_AGENTS_GOOGLE_API_KEY";
+            base.baseUrl = pBaseUrl || "https://generativelanguage.googleapis.com/v1beta";
+            if (pApiKey) base.apiKey = pApiKey;
+          } else if (pType === "anthropic") {
+            base.baseUrlEnv = "AI_AGENTS_ANTHROPIC_BASE_URL";
+            base.apiKeyEnv  = "AI_AGENTS_ANTHROPIC_API_KEY";
+            base.baseUrl = pBaseUrl || "https://api.anthropic.com";
+            if (pApiKey) base.apiKey = pApiKey;
+          } else {
+            base.baseUrlEnv = "AI_AGENTS_OPENAI_BASE_URL";
+            base.apiKeyEnv  = "AI_AGENTS_OPENAI_API_KEY";
+            if (pBaseUrl) base.baseUrl = pBaseUrl;
+            if (pApiKey) base.apiKey = pApiKey;
+          }
+          return base;
+        }
+
+        const dispApiKey = resolveApiKey(apiKeyFromBody, existingDispatcher, providerType);
+        const providerConfig = buildCfg(providerType, model, dispApiKey, baseUrl);
+
+        // FIX #4: health check before saving (bypass with force:true)
+        if (providerType !== "mock" && !force) {
+          const health = await checkProviderHealth(providerConfig as Parameters<typeof checkProviderHealth>[0]);
+          if (!health.reachable) {
+            sendJson(res, 422, { ok: false, error: `Provider unreachable: ${health.message}`, healthResult: health });
+            return;
+          }
+        }
+
+        // FIX #3: per-expert agentProviders
+        const agentProvidersInput = Array.isArray(body.agentProviders)
+          ? (body.agentProviders as Array<Record<string, unknown>>)
+          : [];
+        const existingAgentProviders: Record<string, ProviderCfg> = { ...(existingGlobal.agentProviders ?? {}) };
+        for (const entry of agentProvidersInput) {
+          const agentName = normalizeString(entry.agentName as string);
+          if (!agentName) continue;
+          if (entry.reset === true) { delete existingAgentProviders[agentName]; continue; }
+          const aPType = normalizeString(entry.providerType as string);
+          const aModel = normalizeString(entry.model as string);
+          const aApiKey = "apiKey" in entry ? normalizeString(entry.apiKey as string) : null;
+          const aBaseUrl = normalizeString(entry.baseUrl as string);
+          if (!validProviderTypes.includes(aPType)) continue;
+          if (aPType !== "mock" && !aModel) continue;
+          const resolvedAgentKey = resolveApiKey(aApiKey, existingAgentProviders[agentName], aPType);
+          existingAgentProviders[agentName] = buildCfg(aPType, aModel, resolvedAgentKey, aBaseUrl);
+        }
+
+        // FIX #8: separate planner config
+        const plannerSeparate = body.plannerSeparate === true;
+        let plannerConfig = providerConfig;
+        if (plannerSeparate) {
+          const plannerType    = normalizeString(body.plannerProviderType) || providerType;
+          const plannerModel   = normalizeString(body.plannerModel)        || model;
+          const plannerKeyBody = "plannerApiKey" in body ? normalizeString(body.plannerApiKey) : null;
+          const plannerBaseUrl = normalizeString(body.plannerBaseUrl);
+          const existingPlanner = existingGlobal.providers?.planner as ProviderCfg | undefined;
+          const plannerApiKey  = resolveApiKey(plannerKeyBody, existingPlanner, plannerType);
+          plannerConfig = buildCfg(plannerType, plannerModel, plannerApiKey, plannerBaseUrl);
+        }
+
+        const updatedGlobal = {
+          ...existingGlobal,
+          providers: { dispatcher: providerConfig, planner: plannerConfig },
+          defaults: { ...(existingGlobal.defaults ?? {}), humanReviewer },
+          ...(Object.keys(existingAgentProviders).length > 0 ? { agentProviders: existingAgentProviders } : {}),
+        };
+        const validatedGlobal = globalConfigSchema.parse(updatedGlobal);
+
+        // FIX #2: null = explicitly cleared, undefined = not sent (keep existing), number = update
+        const autoApproveThresholdRaw = body.autoApproveThreshold;
+        const updatedLocal: Record<string, unknown> = { ...(rawLocal as Record<string, unknown>), humanReviewer };
+        if (typeof autoApproveThresholdRaw === "number") {
+          updatedLocal.autoApproveThreshold = Math.min(1, Math.max(0, autoApproveThresholdRaw));
+        } else if (autoApproveThresholdRaw === null) {
+          delete updatedLocal.autoApproveThreshold;
+        }
+        const validatedLocal = localProjectConfigSchema.parse(updatedLocal);
+
+        await writeJson(globalPath, validatedGlobal);
+        await writeJson(projectPath, validatedLocal);
+        sendJson(res, 200, { ok: true, data: { providerType, humanReviewer, model: providerConfig.model } });
+        return;
+      }
+
+      // ── POST /api/setup/discover-models ──────────────────────────────────────
+      if (method === "POST" && pathname === "/api/setup/discover-models") {
+        const body = await parseJsonBody(req);
+        const providerType = normalizeString(body.providerType);
+        const apiKeyFromBody = normalizeString(body.apiKey);
+        const baseUrl = normalizeString(body.baseUrl);
+
+        const discoverableTypes = ["lmstudio", "openai-compatible", "google", "anthropic"];
+        if (!discoverableTypes.includes(providerType)) {
+          sendJson(res, 400, { ok: false, error: "Invalid providerType for discovery." }); return;
+        }
+
+        type DiscoveryCfg = { type: string; model: string; baseUrlEnv?: string; apiKeyEnv?: string; baseUrl?: string; apiKey?: string };
+        const cfg: DiscoveryCfg = { type: providerType, model: "any" };
+        if (baseUrl) cfg.baseUrl = baseUrl;
+        if (providerType === "lmstudio") {
+          cfg.baseUrlEnv = "AI_AGENTS_LMSTUDIO_BASE_URL";
+          cfg.apiKeyEnv  = "AI_AGENTS_LMSTUDIO_API_KEY";
+        } else if (providerType === "google") {
+          cfg.baseUrlEnv = "AI_AGENTS_GOOGLE_BASE_URL";
+          cfg.apiKeyEnv  = "AI_AGENTS_GOOGLE_API_KEY";
+        } else if (providerType === "anthropic") {
+          cfg.baseUrlEnv = "AI_AGENTS_ANTHROPIC_BASE_URL";
+          cfg.apiKeyEnv  = "AI_AGENTS_ANTHROPIC_API_KEY";
+        } else {
+          cfg.baseUrlEnv = "AI_AGENTS_OPENAI_BASE_URL";
+          cfg.apiKeyEnv  = "AI_AGENTS_OPENAI_API_KEY";
+        }
+
+        // Prefer key sent in body; fall back to stored key for the same provider
+        if (apiKeyFromBody) {
+          cfg.apiKey = apiKeyFromBody;
+        } else {
+          const globalPath = globalConfigPath();
+          let rawGlobal: Record<string, unknown> = {};
+          try { rawGlobal = await readJson<Record<string, unknown>>(globalPath); } catch { /* ignore */ }
+          type GShape = { providers?: { dispatcher?: DiscoveryCfg } };
+          const eg = rawGlobal as GShape;
+          if (eg.providers?.dispatcher?.type === providerType && eg.providers.dispatcher.apiKey) {
+            cfg.apiKey = eg.providers.dispatcher.apiKey;
+          }
+        }
+
+        const discovery = await discoverProviderModels(cfg as Parameters<typeof discoverProviderModels>[0]);
+        sendJson(res, 200, { ok: true, data: discovery });
         return;
       }
 

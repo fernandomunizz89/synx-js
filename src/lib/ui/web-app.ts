@@ -536,6 +536,56 @@ export function buildWebUiHtml(): string {
     .project-info-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
     .project-info-key { color: var(--muted); min-width: 130px; font-weight: 500; }
 
+    /* ── setup wizard ── */
+    .setup-field { margin-bottom: 16px; }
+    .setup-label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 5px; }
+    .setup-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--fg); padding: 8px 12px;
+      font-size: 13px; outline: none;
+    }
+    .setup-input:focus { border-color: var(--teal); }
+    .setup-select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--r-sm); color: var(--fg); padding: 8px 12px;
+      font-size: 13px; outline: none;
+    }
+    .setup-select:focus { border-color: var(--teal); }
+    .setup-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .setup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .setup-msg { font-size: 12px; margin-top: 10px; min-height: 16px; }
+    .setup-msg.ok  { color: var(--green); }
+    .setup-msg.err { color: var(--red); }
+    .btn-action {
+      padding: 7px 16px; border-radius: var(--r-sm); font-size: 13px; font-weight: 600;
+      background: var(--teal-dim); border: 1px solid rgba(20,184,166,.35); color: var(--teal);
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-action:hover:not(:disabled) { background: rgba(20,184,166,.2); }
+    .btn-action:disabled { opacity: .4; cursor: not-allowed; }
+    .setup-key-saved { font-size: 10px; font-weight: 600; color: var(--green); margin-left: 6px; }
+    .setup-warn {
+      padding: 10px 14px; border-radius: var(--r-sm); font-size: 12px;
+      background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3); color: var(--orange);
+      margin-top: 10px; display: none;
+    }
+    .setup-warn.on { display: block; }
+
+    /* ── expert overrides grid ── */
+    .expert-grid { display: flex; flex-direction: column; gap: 8px; }
+    .expert-row {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden;
+    }
+    .expert-row-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; cursor: pointer; font-size: 13px;
+      transition: background .1s;
+    }
+    .expert-row-head:hover { background: rgba(255,255,255,.03); }
+    .expert-icon { font-size: 15px; flex-shrink: 0; }
+    .expert-label { font-weight: 500; }
+    .expert-body { padding: 14px; border-top: 1px solid var(--border); background: var(--bg2); }
+
     /* ── metrics page ── */
     .metrics-period { display: flex; gap: 8px; margin-bottom: 20px; }
     .period-btn {
@@ -831,6 +881,132 @@ export function buildWebUiHtml(): string {
 
     <!-- SETTINGS -->
     <div class="page" id="page-settings">
+
+      <!-- Setup Wizard -->
+      <div class="settings-section">
+        <div class="settings-section-head">🔧 Setup Wizard</div>
+        <div class="settings-section-body">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:18px">Configure the AI provider, API keys, and reviewer name. Changes are saved to <code style="font-family:var(--mono);background:var(--bg3);padding:1px 5px;border-radius:4px">~/.ai-agents/config.json</code> and the local project config.</p>
+
+          <div class="setup-row">
+            <div class="setup-field">
+              <label class="setup-label" for="setup-reviewer">Human Reviewer Name *</label>
+              <input class="setup-input" type="text" id="setup-reviewer" placeholder="e.g. Alice">
+              <div class="setup-hint">Name shown in approval/reprove prompts.</div>
+            </div>
+            <div class="setup-field">
+              <label class="setup-label" for="setup-provider">AI Provider *</label>
+              <select class="setup-select" id="setup-provider" onchange="onSetupProviderChange()">
+                <option value="mock">Mock (offline / demo mode)</option>
+                <option value="lmstudio">LM Studio (local)</option>
+                <option value="openai-compatible">OpenAI-compatible endpoint</option>
+                <option value="google">Google Generative AI (Gemini)</option>
+                <option value="anthropic">Anthropic Claude</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="setup-model-row" class="setup-field">
+            <label class="setup-label" for="setup-model">Model Name *</label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="setup-input" type="text" id="setup-model" list="setup-model-list" placeholder="e.g. gpt-4o, claude-sonnet-4-6, gemini-1.5-pro" style="flex:1;min-width:0">
+              <datalist id="setup-model-list"></datalist>
+              <button class="btn btn-action" id="setup-discover-btn" onclick="discoverModels()" style="display:none;white-space:nowrap;font-size:12px;padding:5px 10px">🔍 Discover</button>
+            </div>
+            <div class="setup-hint" id="setup-model-hint">Model identifier used by the provider.</div>
+          </div>
+
+          <div class="setup-row">
+            <div class="setup-field" id="setup-apikey-row">
+              <label class="setup-label" for="setup-apikey">API Key<span class="setup-key-saved" id="setup-key-saved-indicator" style="display:none">✓ key saved</span></label>
+              <input class="setup-input" type="password" id="setup-apikey" placeholder="leave blank to keep existing" autocomplete="off">
+              <div style="display:flex;align-items:center;gap:6px;margin-top:5px">
+                <input type="checkbox" id="setup-env-mode" onchange="onEnvModeChange()" style="margin:0">
+                <label for="setup-env-mode" style="font-size:12px;color:var(--muted);cursor:pointer">Use environment variable instead</label>
+              </div>
+              <div class="setup-hint" id="setup-apikey-hint">Leave blank to keep the saved key. Enter a new value to replace it.</div>
+              <div class="setup-hint" id="setup-env-hint" style="display:none;color:var(--accent)">Stored key will be cleared. Export the env var shown above before running.</div>
+            </div>
+            <div class="setup-field" id="setup-baseurl-row">
+              <label class="setup-label" for="setup-baseurl">Base URL</label>
+              <input class="setup-input" type="text" id="setup-baseurl" placeholder="http://localhost:1234/v1">
+              <div class="setup-hint" id="setup-baseurl-hint">Override default endpoint URL.</div>
+            </div>
+          </div>
+
+          <div class="setup-field" style="max-width:220px">
+            <label class="setup-label" for="setup-threshold">Auto-approve Threshold</label>
+            <input class="setup-input" type="number" id="setup-threshold" min="0" max="1" step="0.05" placeholder="0 = disabled">
+            <div class="setup-hint">0 = disabled, 1 = always auto-approve.</div>
+          </div>
+
+          <!-- Separate planner config -->
+          <details style="margin-bottom:16px" id="setup-planner-details">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);user-select:none;padding:8px 0">
+              🧠 Planner Override <span style="font-weight:400;font-size:11px">(optional — defaults to main provider)</span>
+            </summary>
+            <div style="margin-top:10px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <input type="checkbox" id="setup-planner-separate" onchange="onPlannerSeparateChange()" style="margin:0">
+                <label for="setup-planner-separate" style="font-size:13px;cursor:pointer">Use a different provider for the Planner agent</label>
+              </div>
+              <div id="setup-planner-fields" style="display:none">
+                <div class="setup-row">
+                  <div class="setup-field">
+                    <label class="setup-label" for="setup-planner-provider">Provider</label>
+                    <select class="setup-select" id="setup-planner-provider" onchange="onPlannerProviderChange()">
+                      <option value="mock">Mock (offline / demo mode)</option>
+                      <option value="lmstudio">LM Studio (local)</option>
+                      <option value="openai-compatible">OpenAI-compatible endpoint</option>
+                      <option value="google">Google Generative AI (Gemini)</option>
+                      <option value="anthropic">Anthropic Claude</option>
+                    </select>
+                  </div>
+                  <div class="setup-field" id="setup-planner-model-row">
+                    <label class="setup-label" for="setup-planner-model">Model Name *</label>
+                    <input class="setup-input" type="text" id="setup-planner-model" placeholder="model identifier">
+                  </div>
+                </div>
+                <div class="setup-row">
+                  <div class="setup-field" id="setup-planner-apikey-row">
+                    <label class="setup-label" for="setup-planner-apikey">API Key<span class="setup-key-saved" id="setup-planner-key-indicator" style="display:none">✓ key saved</span></label>
+                    <input class="setup-input" type="password" id="setup-planner-apikey" placeholder="leave blank to keep existing" autocomplete="off">
+                  </div>
+                  <div class="setup-field" id="setup-planner-baseurl-row">
+                    <label class="setup-label" for="setup-planner-baseurl">Base URL</label>
+                    <input class="setup-input" type="text" id="setup-planner-baseurl" placeholder="override URL (optional)">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Per-expert provider overrides -->
+          <details style="margin-bottom:16px">
+            <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);user-select:none;padding:8px 0">
+              🧑‍💻 Per-Expert Provider Overrides <span style="font-weight:400;font-size:11px">(optional — defaults to main provider)</span>
+            </summary>
+            <div style="margin-top:10px">
+              <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Configure a different LLM per expert agent. Leave unconfigured to inherit the main provider above.</p>
+              <div class="expert-grid" id="expert-section"><div class="empty">Loading…</div></div>
+            </div>
+          </details>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+            <button class="btn-action" id="setup-save-btn" onclick="saveSetup(false)">Apply Setup</button>
+            <button class="btn" onclick="loadSetupForm()" style="font-size:12px">Reset</button>
+          </div>
+          <div class="setup-warn" id="setup-warn">
+            <strong>Provider unreachable.</strong> <span id="setup-warn-msg"></span>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="btn btn-reprove" style="font-size:11px" onclick="saveSetup(true)">Save Anyway</button>
+              <button class="btn" style="font-size:11px" onclick="document.getElementById('setup-warn').classList.remove('on')">Cancel</button>
+            </div>
+          </div>
+          <div class="setup-msg" id="setup-msg"></div>
+        </div>
+      </div>
+
       <div class="settings-section">
         <div class="settings-section-head">⚙️ Providers &amp; Models</div>
         <div class="settings-section-body">
@@ -1444,8 +1620,389 @@ export function buildWebUiHtml(): string {
     if (tabPanel) tabPanel.classList.add('active');
   };
 
+  /* ── setup wizard ── */
+  var PROVIDER_HINTS = {
+    mock:                { model: '', apikey: false, baseurl: false, canDiscover: false, models: [], modelHint: 'No model needed — mock provider simulates responses offline.', baseurlHint: '' },
+    lmstudio:            { model: 'e.g. lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF', apikey: false, baseurl: true, canDiscover: true, models: [], modelHint: 'LM Studio model identifier. Use Discover to list loaded models.', baseurlHint: 'LM Studio server URL, e.g. http://localhost:1234/v1' },
+    'openai-compatible': { model: 'e.g. gpt-4o, gpt-4.1', apikey: true, baseurl: true, canDiscover: true, models: [], modelHint: 'Model ID for the OpenAI-compatible endpoint. Use Discover to list available models.', baseurlHint: 'Endpoint base URL, e.g. https://api.openai.com/v1' },
+    google:              { model: 'e.g. gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash', apikey: true, baseurl: false, canDiscover: true, models: ['gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-pro','gemini-1.5-flash','gemini-1.0-pro'], modelHint: 'Google Gemini model identifier.', baseurlHint: '' },
+    anthropic:           { model: 'e.g. claude-sonnet-4-6, claude-opus-4-6', apikey: true, baseurl: false, canDiscover: true, models: ['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001','claude-opus-4-5','claude-sonnet-4-5','claude-haiku-3-5'], modelHint: 'Anthropic Claude model identifier.', baseurlHint: '' },
+  };
+  var PROVIDER_KEY_ENV = {
+    lmstudio:            'AI_AGENTS_LMSTUDIO_API_KEY',
+    'openai-compatible': 'AI_AGENTS_OPENAI_API_KEY',
+    google:              'AI_AGENTS_GOOGLE_API_KEY',
+    anthropic:           'AI_AGENTS_ANTHROPIC_API_KEY',
+  };
+  var EXPERT_AGENTS = [
+    { key: 'Synx Front Expert',   label: 'Front Expert',   icon: '🎨' },
+    { key: 'Synx Mobile Expert',  label: 'Mobile Expert',  icon: '📱' },
+    { key: 'Synx Back Expert',    label: 'Back Expert',    icon: '⚙️' },
+    { key: 'Synx QA Engineer',    label: 'QA Engineer',    icon: '🔍' },
+    { key: 'Synx SEO Specialist', label: 'SEO Specialist', icon: '📈' },
+  ];
+  // null = use default; object = custom config for that expert
+  var expertOverrides = {};
+
+  function expertSafeId(key) { return key.replace(/\\s+/g, '-').toLowerCase(); }
+
+  function applyProviderHints(type, modelId, apikeyId, baseurlId, modelRowId) {
+    var hint = PROVIDER_HINTS[type] || PROVIDER_HINTS['openai-compatible'];
+    var modelRow = modelRowId ? document.getElementById(modelRowId) : null;
+    var apikeyEl = document.getElementById(apikeyId);
+    var baseurlEl = document.getElementById(baseurlId);
+    var modelInput = document.getElementById(modelId);
+    if (modelRow) modelRow.style.display = (type === 'mock') ? 'none' : '';
+    if (apikeyEl) apikeyEl.parentElement.style.display = hint.apikey ? '' : 'none';
+    if (baseurlEl) baseurlEl.parentElement.style.display = hint.baseurl ? '' : 'none';
+    if (modelInput) modelInput.placeholder = hint.model || '';
+  }
+
+  window.onSetupProviderChange = function () {
+    var type = document.getElementById('setup-provider').value;
+    var hint = PROVIDER_HINTS[type] || PROVIDER_HINTS['openai-compatible'];
+    var modelRow      = document.getElementById('setup-model-row');
+    var apikeyRow     = document.getElementById('setup-apikey-row');
+    var baseurlRow    = document.getElementById('setup-baseurl-row');
+    var modelInput    = document.getElementById('setup-model');
+    var modelHintEl   = document.getElementById('setup-model-hint');
+    var baseurlHintEl = document.getElementById('setup-baseurl-hint');
+    var discoverBtn   = document.getElementById('setup-discover-btn');
+    var datalist      = document.getElementById('setup-model-list');
+    var envModeCheck  = document.getElementById('setup-env-mode');
+    var envHint       = document.getElementById('setup-env-hint');
+    var apikeyInput   = document.getElementById('setup-apikey');
+    var apikeyHint    = document.getElementById('setup-apikey-hint');
+
+    if (modelRow)   modelRow.style.display   = (type === 'mock') ? 'none' : '';
+    if (apikeyRow)  apikeyRow.style.display  = hint.apikey ? '' : 'none';
+    if (baseurlRow) baseurlRow.style.display = hint.baseurl ? '' : 'none';
+    if (modelInput) modelInput.placeholder   = hint.model || '';
+    if (modelHintEl)  modelHintEl.textContent  = hint.modelHint || '';
+    if (baseurlHintEl) baseurlHintEl.textContent = hint.baseurlHint || '';
+
+    // Discover button
+    if (discoverBtn) discoverBtn.style.display = hint.canDiscover ? '' : 'none';
+
+    // Static model suggestions datalist
+    if (datalist) {
+      datalist.innerHTML = (hint.models || []).map(function (m) { return '<option value="' + esc(m) + '">'; }).join('');
+    }
+
+    // Reset env-var mode when switching providers
+    if (envModeCheck) { envModeCheck.checked = false; }
+    if (envHint) envHint.style.display = 'none';
+    if (apikeyHint) apikeyHint.style.display = '';
+    if (apikeyInput) { apikeyInput.disabled = false; apikeyInput.placeholder = 'leave blank to keep existing'; }
+
+    // Show env var name in the API key hint area
+    var envVar = PROVIDER_KEY_ENV[type] || '';
+    if (apikeyHint && envVar) apikeyHint.textContent = 'Leave blank to keep the saved key. Enter a new value to replace it. Env: ' + envVar;
+    else if (apikeyHint) apikeyHint.textContent = 'Leave blank to keep the saved key. Enter a new value to replace it.';
+  };
+
+  window.onEnvModeChange = function () {
+    var envModeCheck = document.getElementById('setup-env-mode');
+    var envHint      = document.getElementById('setup-env-hint');
+    var apikeyHint   = document.getElementById('setup-apikey-hint');
+    var apikeyInput  = document.getElementById('setup-apikey');
+    var type         = (document.getElementById('setup-provider') || {}).value || '';
+    var envVar       = PROVIDER_KEY_ENV[type] || 'the provider env var';
+    var isEnvMode    = envModeCheck && envModeCheck.checked;
+
+    if (isEnvMode) {
+      if (apikeyInput) { apikeyInput.value = ''; apikeyInput.disabled = true; apikeyInput.placeholder = 'env var mode — key will be cleared'; }
+      if (apikeyHint)  apikeyHint.style.display = 'none';
+      if (envHint)     { envHint.textContent = 'Stored key will be cleared. Run: export ' + envVar + '=<your-key>'; envHint.style.display = ''; }
+    } else {
+      if (apikeyInput) { apikeyInput.disabled = false; apikeyInput.placeholder = 'leave blank to keep existing'; }
+      if (apikeyHint)  apikeyHint.style.display = '';
+      if (envHint)     envHint.style.display = 'none';
+    }
+  };
+
+  window.discoverModels = function () {
+    var btn        = document.getElementById('setup-discover-btn');
+    var type       = (document.getElementById('setup-provider') || {}).value || '';
+    var apiKey     = ((document.getElementById('setup-apikey') || {}).value || '').trim();
+    var baseUrl    = ((document.getElementById('setup-baseurl') || {}).value || '').trim();
+    var datalist   = document.getElementById('setup-model-list');
+    var modelInput = document.getElementById('setup-model');
+    var msgEl      = document.getElementById('setup-msg');
+
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Discovering…'; }
+    if (msgEl) { msgEl.className = 'setup-msg'; msgEl.textContent = 'Discovering models…'; }
+
+    fetch('/api/setup/discover-models', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providerType: type, apiKey: apiKey || undefined, baseUrl: baseUrl || undefined }),
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 Discover'; }
+      if (!d.ok) { if (msgEl) { msgEl.className = 'setup-msg err'; msgEl.textContent = d.error || 'Discovery failed'; } return; }
+      var models = (d.data && d.data.models) || [];
+      if (datalist) {
+        datalist.innerHTML = models.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('');
+      }
+      if (models.length) {
+        if (msgEl) { msgEl.className = 'setup-msg ok'; msgEl.textContent = '✓ Found ' + models.length + ' model(s). Click the model field to see suggestions.'; }
+        // Auto-fill if field is empty and exactly one model discovered
+        if (models.length === 1 && modelInput && !modelInput.value) modelInput.value = models[0];
+      } else {
+        if (msgEl) { msgEl.className = 'setup-msg'; msgEl.textContent = d.data.message || 'No models found.'; }
+      }
+    }).catch(function () {
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 Discover'; }
+      if (msgEl) { msgEl.className = 'setup-msg err'; msgEl.textContent = 'Network error during discovery'; }
+    });
+  };
+
+  function renderExpertSection(agentProviders) {
+    var el = document.getElementById('expert-section');
+    if (!el) return;
+    // Sync state from saved agentProviders
+    EXPERT_AGENTS.forEach(function (exp) {
+      var saved = agentProviders && agentProviders[exp.key];
+      if (saved && !(exp.key in expertOverrides)) {
+        expertOverrides[exp.key] = { providerType: saved.type || 'mock', model: saved.model || '', baseUrl: saved.baseUrl || '', hasExistingKey: Boolean(saved.apiKey) };
+      }
+    });
+
+    var html = '<div class="expert-grid">';
+    EXPERT_AGENTS.forEach(function (exp) {
+      var sid  = expertSafeId(exp.key);
+      var cfg  = expertOverrides[exp.key] || null;
+      var isCustom = cfg !== null;
+      var typeClass = isCustom ? (cfg.providerType || 'mock').replace(/-/g, '') : '';
+      html += '<div class="expert-row">';
+      html += '<div class="expert-row-head" onclick="toggleExpert(\\'' + esc(exp.key) + '\\')">';
+      html += '<span class="expert-icon">' + exp.icon + '</span>';
+      html += '<span class="expert-label">' + esc(exp.label) + '</span>';
+      if (isCustom) {
+        html += '<span class="cfg-chip ' + typeClass + '" style="margin-left:auto;margin-right:6px">' + esc(cfg.providerType) + '</span>';
+        html += '<span style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + esc(cfg.model) + '</span>';
+      } else {
+        html += '<span style="margin-left:auto;font-size:11px;color:var(--muted)">inherited</span>';
+      }
+      html += '<span style="color:var(--muted);font-size:11px;margin-left:8px">' + (isCustom ? '▲' : '▼') + '</span>';
+      html += '</div>';
+      if (isCustom) {
+        var provOpts = [['mock','Mock'],['lmstudio','LM Studio'],['openai-compatible','OpenAI-compat'],['google','Google'],['anthropic','Anthropic']];
+        html += '<div class="expert-body">';
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
+        html += '<label style="font-size:12px;color:var(--muted);white-space:nowrap">Provider:</label>';
+        html += '<select class="setup-select" style="width:auto" id="exp-prov-' + sid + '" onchange="onExpertChange(\\'' + esc(exp.key) + '\\')">';
+        provOpts.forEach(function (p) {
+          html += '<option value="' + p[0] + '"' + (cfg.providerType === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+        });
+        html += '</select></div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+        html += '<div><label class="setup-label">Model</label><input class="setup-input" id="exp-model-' + sid + '" value="' + esc(cfg.model) + '" placeholder="model name"></div>';
+        html += '<div><label class="setup-label">API Key';
+        if (cfg.hasExistingKey) html += '<span class="setup-key-saved">✓ saved</span>';
+        html += '</label><input class="setup-input" type="password" id="exp-key-' + sid + '" placeholder="leave blank to keep existing" autocomplete="off"></div>';
+        html += '<div><label class="setup-label">Base URL</label><input class="setup-input" id="exp-url-' + sid + '" value="' + esc(cfg.baseUrl) + '" placeholder="override URL (optional)"></div>';
+        html += '</div>';
+        html += '<button class="btn btn-reprove" style="font-size:11px;padding:4px 10px" onclick="resetExpert(\\'' + esc(exp.key) + '\\')">Reset to default</button>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  window.toggleExpert = function (key) {
+    if (expertOverrides[key]) {
+      // already custom — just re-render (toggle could collapse but simpler to keep open)
+      return;
+    }
+    expertOverrides[key] = { providerType: 'mock', model: '', baseUrl: '', hasExistingKey: false };
+    renderExpertSection(null);
+  };
+
+  window.onExpertChange = function (key) {
+    if (!expertOverrides[key]) return;
+    var sid = expertSafeId(key);
+    var sel = document.getElementById('exp-prov-' + sid);
+    if (sel) expertOverrides[key].providerType = sel.value;
+  };
+
+  window.resetExpert = function (key) {
+    delete expertOverrides[key];
+    renderExpertSection(null);
+  };
+
+  function collectExpertOverrides() {
+    return EXPERT_AGENTS.map(function (exp) {
+      var sid = expertSafeId(exp.key);
+      var cfg = expertOverrides[exp.key] || null;
+      if (!cfg) return { agentName: exp.key, reset: true };
+      var model   = (document.getElementById('exp-model-' + sid) || {}).value || '';
+      var apiKey  = (document.getElementById('exp-key-' + sid) || {}).value || '';
+      var baseUrl = (document.getElementById('exp-url-' + sid) || {}).value || '';
+      var pType   = (document.getElementById('exp-prov-' + sid) || {}).value || cfg.providerType;
+      return { agentName: exp.key, providerType: pType, model: model.trim(), apiKey: apiKey.trim() || undefined, baseUrl: baseUrl.trim() || undefined };
+    });
+  }
+
+  window.onPlannerSeparateChange = function () {
+    var cb = document.getElementById('setup-planner-separate');
+    var fields = document.getElementById('setup-planner-fields');
+    if (fields) fields.style.display = (cb && cb.checked) ? '' : 'none';
+  };
+
+  window.onPlannerProviderChange = function () {
+    var type = (document.getElementById('setup-planner-provider') || {}).value || 'mock';
+    var hint = PROVIDER_HINTS[type] || PROVIDER_HINTS['openai-compatible'];
+    var apikeyRow  = document.getElementById('setup-planner-apikey-row');
+    var baseurlRow = document.getElementById('setup-planner-baseurl-row');
+    var modelRow   = document.getElementById('setup-planner-model-row');
+    var modelInput = document.getElementById('setup-planner-model');
+    if (modelRow)   modelRow.style.display   = (type === 'mock') ? 'none' : '';
+    if (apikeyRow)  apikeyRow.style.display  = hint.apikey ? '' : 'none';
+    if (baseurlRow) baseurlRow.style.display = hint.baseurl ? '' : 'none';
+    if (modelInput) modelInput.placeholder   = hint.model || 'model identifier';
+  };
+
+  window.loadSetupForm = function () {
+    fetch('/api/config').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.data) return;
+      var g = d.data.global || {};
+      var l = d.data.local  || {};
+      var disp    = (g.providers && g.providers.dispatcher) ? g.providers.dispatcher : {};
+      var planner = (g.providers && g.providers.planner)    ? g.providers.planner    : {};
+
+      var rev = document.getElementById('setup-reviewer');
+      if (rev) rev.value = l.humanReviewer || (g.defaults && g.defaults.humanReviewer) || '';
+
+      var prov = document.getElementById('setup-provider');
+      if (prov && disp.type) { prov.value = disp.type; onSetupProviderChange(); }
+
+      var mod = document.getElementById('setup-model');
+      if (mod) mod.value = (disp.type !== 'mock') ? (disp.model || '') : '';
+
+      // FIX #1: never pre-fill key but show indicator if one is saved
+      var apikey = document.getElementById('setup-apikey');
+      if (apikey) { apikey.value = ''; apikey.disabled = false; }
+      var keyIndicator = document.getElementById('setup-key-saved-indicator');
+      if (keyIndicator) keyIndicator.style.display = disp.apiKey ? '' : 'none';
+      var envModeCheck = document.getElementById('setup-env-mode');
+      if (envModeCheck) envModeCheck.checked = false;
+      var envHint = document.getElementById('setup-env-hint');
+      if (envHint) envHint.style.display = 'none';
+
+      var baseurl = document.getElementById('setup-baseurl');
+      if (baseurl) baseurl.value = disp.baseUrl || '';
+
+      var thresh = document.getElementById('setup-threshold');
+      if (thresh) thresh.value = typeof l.autoApproveThreshold === 'number' ? l.autoApproveThreshold : '';
+
+      // FIX #8: planner separate config
+      var isSeparate = planner.type && planner.type !== disp.type || planner.model !== disp.model;
+      var plannerCb = document.getElementById('setup-planner-separate');
+      if (plannerCb) plannerCb.checked = Boolean(isSeparate);
+      var plannerFields = document.getElementById('setup-planner-fields');
+      if (plannerFields) plannerFields.style.display = isSeparate ? '' : 'none';
+      if (isSeparate && planner.type) {
+        var plannerProv = document.getElementById('setup-planner-provider');
+        if (plannerProv) { plannerProv.value = planner.type; onPlannerProviderChange(); }
+        var plannerMod = document.getElementById('setup-planner-model');
+        if (plannerMod) plannerMod.value = planner.model || '';
+        var plannerKey = document.getElementById('setup-planner-apikey');
+        if (plannerKey) plannerKey.value = '';
+        var plannerKeyInd = document.getElementById('setup-planner-key-indicator');
+        if (plannerKeyInd) plannerKeyInd.style.display = planner.apiKey ? '' : 'none';
+        var plannerUrl = document.getElementById('setup-planner-baseurl');
+        if (plannerUrl) plannerUrl.value = planner.baseUrl || '';
+      }
+
+      // Reset expert overrides state and re-render
+      expertOverrides = {};
+      renderExpertSection(g.agentProviders || {});
+
+      // Hide any previous warnings
+      var warn = document.getElementById('setup-warn');
+      if (warn) warn.classList.remove('on');
+    }).catch(function(){});
+  };
+
+  window.saveSetup = function (force) {
+    var msgEl = document.getElementById('setup-msg');
+    var btn   = document.getElementById('setup-save-btn');
+    var warn  = document.getElementById('setup-warn');
+
+    var reviewer     = (document.getElementById('setup-reviewer').value || '').trim();
+    var providerType = document.getElementById('setup-provider').value;
+    var model        = (document.getElementById('setup-model').value || '').trim();
+    var apiKey       = (document.getElementById('setup-apikey').value || '').trim();
+    var baseUrl      = (document.getElementById('setup-baseurl').value || '').trim();
+    var threshRaw    = document.getElementById('setup-threshold').value.trim();
+    var autoApproveThreshold = threshRaw !== '' ? parseFloat(threshRaw) : undefined;
+
+    if (!reviewer) { msgEl.className = 'setup-msg err'; msgEl.textContent = 'Human reviewer name is required.'; return; }
+    if (providerType !== 'mock' && !model) { msgEl.className = 'setup-msg err'; msgEl.textContent = 'Model name is required for this provider.'; return; }
+    if (autoApproveThreshold !== undefined && (isNaN(autoApproveThreshold) || autoApproveThreshold < 0 || autoApproveThreshold > 1)) {
+      msgEl.className = 'setup-msg err'; msgEl.textContent = 'Auto-approve threshold must be 0–1.'; return;
+    }
+
+    // FIX #7: env-var mode clears stored key
+    var envModeCheck = document.getElementById('setup-env-mode');
+    var isEnvMode = envModeCheck && envModeCheck.checked;
+
+    var payload = { humanReviewer: reviewer, providerType: providerType, model: model, agentProviders: collectExpertOverrides() };
+    if (isEnvMode) {
+      payload.clearApiKey = true;
+    } else if (apiKey) {
+      payload.apiKey = apiKey;
+    }
+    if (baseUrl) payload.baseUrl = baseUrl;
+    // FIX #2: send null to clear threshold, omit to preserve
+    if (threshRaw === '') {
+      payload.autoApproveThreshold = null;
+    } else if (autoApproveThreshold !== undefined) {
+      payload.autoApproveThreshold = autoApproveThreshold;
+    }
+    // FIX #8: planner separate
+    var plannerCb = document.getElementById('setup-planner-separate');
+    if (plannerCb && plannerCb.checked) {
+      payload.plannerSeparate = true;
+      payload.plannerProviderType = ((document.getElementById('setup-planner-provider') || {}).value || providerType);
+      payload.plannerModel    = ((document.getElementById('setup-planner-model') || {}).value || '').trim() || model;
+      var plannerKey = ((document.getElementById('setup-planner-apikey') || {}).value || '').trim();
+      if (plannerKey) payload.plannerApiKey = plannerKey;
+      var plannerUrl = ((document.getElementById('setup-planner-baseurl') || {}).value || '').trim();
+      if (plannerUrl) payload.plannerBaseUrl = plannerUrl;
+    }
+    if (force) payload.force = true;
+
+    btn.disabled = true;
+    if (warn) warn.classList.remove('on');
+    msgEl.className = 'setup-msg'; msgEl.textContent = force ? 'Force saving…' : 'Checking provider & saving…';
+
+    fetch('/api/setup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (r) { return r.json().then(function (b) { return { status: r.status, b: b }; }); }).then(function (res) {
+      if (res.status === 200) {
+        msgEl.className = 'setup-msg ok';
+        msgEl.textContent = '✓ Setup saved — provider: ' + (res.b.data && res.b.data.providerType || providerType);
+        loadSettings();
+      } else if (res.status === 422 && res.b.healthResult) {
+        // FIX #4: health check failed — offer force save
+        msgEl.className = 'setup-msg'; msgEl.textContent = '';
+        var warnMsg = document.getElementById('setup-warn-msg');
+        if (warnMsg) warnMsg.textContent = res.b.error || 'Could not reach provider.';
+        if (warn) warn.classList.add('on');
+      } else {
+        msgEl.className = 'setup-msg err'; msgEl.textContent = res.b.error || 'Error saving setup';
+      }
+    }).catch(function () { msgEl.className = 'setup-msg err'; msgEl.textContent = 'Network error'; })
+      .finally(function () { btn.disabled = false; });
+  };
+
   /* ── settings ── */
   function loadSettings() {
+    loadSetupForm();
     fetch('/api/config').then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d || !d.data) return;
       var g = d.data.global || {};
