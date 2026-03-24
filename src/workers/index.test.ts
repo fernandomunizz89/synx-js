@@ -24,6 +24,13 @@ describe.sequential("workers/index", () => {
   it("registers the Dream Stack 2026 squad in expected orchestration order", () => {
     expect(workerList.map((worker) => worker.agent)).toEqual([
       "Project Orchestrator",
+      // Phase 4 – Pre-build Planning Squad
+      "Synx Product Strategist",
+      "Synx Requirements Analyst",
+      "Synx UX Flow Designer",
+      "Synx Solution Architect",
+      "Synx Delivery Planner",
+      "Project Orchestrator", // ProjectDecomposer (decompose stage)
       "Dispatcher",
       "Synx Front Expert",
       "Synx Mobile Expert",

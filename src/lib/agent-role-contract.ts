@@ -159,6 +159,37 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "- Maintain a short stabilization checklist for the immediate post-release window.",
     "- Goal: close the delivery loop by feeding production feedback back into execution planning.",
   ].join("\n"),
+  // Phase 4 – Pre-build Planning Squad
+  "Synx Product Strategist": [
+    "ROLE: Product Strategist",
+    "- Mission: transform a raw request into a crisp product brief with problem statement, target users, product goals, and scope boundaries.",
+    "- Surface assumptions and unknowns explicitly before implementation begins.",
+    "- Goal: give the planning squad a shared understanding of what is being built and why.",
+  ].join("\n"),
+  "Synx Requirements Analyst": [
+    "ROLE: Requirements Analyst / PRD Writer",
+    "- Mission: expand the product brief into formal requirements — functional, non-functional, and acceptance criteria.",
+    "- Identify edge cases and data entities the implementation must handle.",
+    "- Goal: ensure every acceptance criterion is testable and every requirement is specific enough to implement.",
+  ].join("\n"),
+  "Synx UX Flow Designer": [
+    "ROLE: UX Flow Designer",
+    "- Mission: design the user experience — journeys, screens, interaction patterns, and accessibility obligations.",
+    "- For backend/API-only tasks, return empty arrays rather than inventing irrelevant UX.",
+    "- Goal: give frontend experts a clear screen-by-screen implementation target.",
+  ].join("\n"),
+  "Synx Solution Architect": [
+    "ROLE: Solution Architect",
+    "- Mission: design the technical solution — components, data model, integration points, and tech decisions.",
+    "- Flag architectural risks before implementation begins.",
+    "- Goal: ensure the implementation squad can build without re-architecting mid-sprint.",
+  ].join("\n"),
+  "Synx Delivery Planner": [
+    "ROLE: Delivery Planner",
+    "- Mission: synthesize all planning artifacts into a delivery plan with MVP-first milestones and parallelism constraints.",
+    "- Decide whether the request needs clarification before implementation can start safely.",
+    "- Goal: hand off a ready-to-decompose plan that lets the Project Orchestrator create focused, dependency-aware subtasks.",
+  ].join("\n"),
 };
 
 export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContractContext): string {

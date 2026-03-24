@@ -20,6 +20,11 @@ export const ARTIFACT_FILES = {
   releaseCandidate: "release-candidate.json",
   productionIncidentIntake: "production-incident-intake.json",
   customerFeedbackSummary: "customer-feedback-summary.json",
+  // Phase 4 – Pre-build Planning Squad artifacts
+  requirementsPrd: "requirements-prd.json",
+  uxFlowSpec: "ux-flow-spec.json",
+  solutionArchitecture: "solution-architecture.json",
+  deliveryPlan: "delivery-plan.json",
 } as const;
 
 function artifactPath(taskId: string, fileName: string): string {

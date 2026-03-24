@@ -82,6 +82,12 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   "Synx Release Manager": 0.1,
   "Synx Incident Triage": 0.05,
   "Synx Customer Feedback Synthesizer": 0.2,
+  // Phase 4 – Pre-build Planning Squad
+  "Synx Product Strategist": 0.7,
+  "Synx Requirements Analyst": 0.7,
+  "Synx UX Flow Designer": 0.7,
+  "Synx Solution Architect": 0.7,
+  "Synx Delivery Planner": 0.7,
 };
 
 const TASK_TYPE_DEFAULT_TEMPERATURES: Record<TaskType, number> = {
