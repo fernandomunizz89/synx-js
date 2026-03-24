@@ -9,6 +9,7 @@ import { loadPipelineState } from "../pipeline-state.js";
 import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import { requestTaskCancel } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
+import { deliverWebhook } from "../webhooks.js";
 import type { AgentName, NewTaskInput, StageEnvelope, TaskType } from "../types.js";
 import type { RollbackSummary } from "./task-rollback.js";
 
@@ -147,6 +148,9 @@ export async function approveTaskService(taskId: string): Promise<void> {
   } catch {
     // Not a pipeline task or state unavailable — skip learning record.
   }
+
+  // Phase 5 — webhook delivery (best-effort)
+  await deliverWebhook("task.approved", taskId, { decision: "approved" }).catch(() => {});
 }
 
 export async function reproveTaskService(args: {
@@ -234,6 +238,9 @@ export async function reproveTaskService(args: {
   } catch {
     // Not a pipeline task or state unavailable — skip learning record.
   }
+
+  // Phase 5 — webhook delivery (best-effort)
+  await deliverWebhook("task.reproved", args.taskId, { decision: "reproved", reason, returnedTo: target.agent }).catch(() => {});
 
   return {
     taskId: args.taskId,

@@ -18,6 +18,7 @@ import {
 import { parseHumanInputCommand, parseInlineCommand, type InlineCommand } from "../start-inline-command.js";
 import { runInlineCommand } from "../start/command-handler.js";
 import { exists, listFiles, readJson, readText, writeJson } from "../fs.js";
+import { exportTask } from "../export.js";
 import { configDir, taskDir } from "../paths.js";
 import { loadGlobalConfig, loadLocalProjectConfig } from "../config.js";
 import { localProjectConfigSchema } from "../schema.js";
@@ -503,6 +504,16 @@ export function createUiRequestHandler(options: {
         const validated = localProjectConfigSchema.parse(raw);
         await writeJson(projectConfigPath, validated);
         sendJson(res, 200, { ok: true, data: validated });
+        return;
+      }
+
+      // ── GET /api/tasks/:id/export ─────────────────────────────────────────────
+      const taskExportMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/export$/);
+      if (method === "GET" && taskExportMatch) {
+        const taskId = decodeURIComponent(taskExportMatch[1]);
+        await assertTaskExists(taskId);
+        const exported = await exportTask(taskId);
+        sendJson(res, 200, { ok: true, data: exported });
         return;
       }
 

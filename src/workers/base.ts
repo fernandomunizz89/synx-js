@@ -15,6 +15,7 @@ import { formatSynxStreamLog } from "../lib/synx-ui.js";
 import { loadLocalProjectConfig } from "../lib/config.js";
 import { approveTaskService } from "../lib/services/task-services.js";
 import { loadProjectMemory, type ProjectMemory } from "../lib/project-memory.js";
+import { requestAgentConsultation, type ConsultationRequest, type ConsultationDecision } from "../lib/agent-consultation.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -460,5 +461,32 @@ export abstract class WorkerBase {
       suggestedChain: meta.suggestedChain,
       projectMemory,
     };
+  }
+
+  /**
+   * Phase 4.2 — Consult a specialist agent in-process.
+   * Answers are cached per (stage, consultant, question) — best-effort, never throws.
+   */
+  protected async consultAgent(
+    taskId: string,
+    stage: string,
+    specialistAgent: AgentName,
+    question: string,
+    context: string,
+    providerFactory: (agent: AgentName) => ReturnType<typeof import("../providers/factory.js").createProvider>,
+  ): Promise<ConsultationDecision | null> {
+    try {
+      const req: ConsultationRequest = {
+        taskId,
+        stage,
+        requesterAgent: String(this.agent),
+        consultantAgent: specialistAgent,
+        question,
+        context,
+      };
+      return await requestAgentConsultation(req, providerFactory as any);
+    } catch {
+      return null;
+    }
   }
 }

@@ -156,6 +156,12 @@ export const localProjectConfigSchema = z.object({
     planner: providerStageConfigSchema.partial().optional(),
     agents: z.record(agentNameSchema, providerStageConfigSchema.partial()).optional(),
   }).optional(),
+  /** Phase 5 — Webhook delivery configuration */
+  webhooks: z.object({
+    enabled: z.boolean().default(false),
+    url: z.string().url().optional(),
+    events: z.array(z.string()).optional(),
+  }).optional(),
 });
 
 export const newTaskInputSchema = z.object({

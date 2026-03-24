@@ -172,6 +172,13 @@ export interface LocalProjectConfig {
     planner: Partial<ProviderStageConfig>;
     agents: Partial<Record<AgentName, Partial<ProviderStageConfig>>>;
   }>;
+  /** Phase 5 — Webhook delivery configuration */
+  webhooks?: {
+    enabled: boolean;
+    url?: string;
+    /** If set, only these event types are delivered */
+    events?: string[];
+  };
 }
 
 export interface ResolvedProjectConfig {
