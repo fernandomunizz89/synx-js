@@ -9,6 +9,7 @@ import { readJson } from "../lib/fs.js";
 const mocks = vi.hoisted(() => ({
   createTaskService: vi.fn<(input: unknown) => Promise<{ taskId: string; taskPath: string }>>(),
   saveTaskArtifact: vi.fn<(taskId: string, fileName: string, payload: unknown) => Promise<void>>(),
+  generateStructured: vi.fn(),
 }));
 
 vi.mock("../lib/services/task-services.js", () => ({
@@ -19,41 +20,17 @@ vi.mock("../lib/task-artifacts.js", () => ({
   ARTIFACT_FILES: {
     projectProfile: "project-profile.json",
     projectDecomposition: "project-decomposition.json",
+    projectBrief: "project-brief.json",
+    acceptanceCriteria: "acceptance-criteria.json",
+    milestonePlan: "milestone-plan.json",
+    clarificationRequest: "clarification-request.json",
   },
   saveTaskArtifact: mocks.saveTaskArtifact,
 }));
 
 vi.mock("../providers/factory.js", () => ({
   createProvider: vi.fn().mockReturnValue({
-    generateStructured: vi.fn().mockResolvedValue({
-      parsed: {
-        projectSummary: "Launch MVP with authentication and dashboard",
-        tasks: [
-          {
-            title: "Build authentication API",
-            typeHint: "Feature",
-            rawRequest: "Implement auth endpoints and token validation",
-          },
-          {
-            title: "Create dashboard shell",
-            typeHint: "Feature",
-            rawRequest: "Create dashboard layout and summary widgets",
-          },
-        ],
-      },
-      provider: "mock",
-      model: "static-mock",
-      parseRetries: 0,
-      validationPassed: true,
-      providerAttempts: 1,
-      providerBackoffRetries: 0,
-      providerBackoffWaitMs: 0,
-      providerRateLimitWaitMs: 0,
-      estimatedInputTokens: 100,
-      estimatedOutputTokens: 80,
-      estimatedTotalTokens: 180,
-      estimatedCostUsd: 0,
-    }),
+    generateStructured: mocks.generateStructured,
   }),
 }));
 
@@ -93,6 +70,77 @@ describe.sequential("workers/project-orchestrator", () => {
     fixture = await createFixture();
     process.chdir(fixture.repoRoot);
     vi.clearAllMocks();
+    mocks.generateStructured
+      .mockResolvedValueOnce({
+        parsed: {
+          projectBrief: {
+            problemStatement: "Teams need a simple dashboard MVP with auth.",
+            targetUsers: ["Small SaaS teams"],
+            productGoals: ["Allow secure sign-in", "Show dashboard summary"],
+            inScope: ["Auth", "Dashboard shell"],
+            outOfScope: ["Billing"],
+            assumptions: ["Email/password auth is acceptable"],
+            unknowns: ["SSO requirements"],
+          },
+          acceptanceCriteria: [
+            "Users can sign in and sign out.",
+            "Unauthenticated users are redirected to sign-in.",
+            "Authenticated users can see dashboard summary cards.",
+          ],
+          milestonePlan: [
+            {
+              milestone: "MVP",
+              objective: "Ship core auth and dashboard shell",
+              deliverables: ["Auth API", "Dashboard UI skeleton"],
+            },
+          ],
+          clarification: {
+            required: false,
+            questions: [],
+          },
+        },
+        provider: "mock",
+        model: "static-mock",
+        parseRetries: 0,
+        validationPassed: true,
+        providerAttempts: 1,
+        providerBackoffRetries: 0,
+        providerBackoffWaitMs: 0,
+        providerRateLimitWaitMs: 0,
+        estimatedInputTokens: 120,
+        estimatedOutputTokens: 140,
+        estimatedTotalTokens: 260,
+        estimatedCostUsd: 0,
+      })
+      .mockResolvedValueOnce({
+        parsed: {
+          projectSummary: "Launch MVP with authentication and dashboard",
+          tasks: [
+            {
+              title: "Build authentication API",
+              typeHint: "Feature",
+              rawRequest: "Implement auth endpoints and token validation",
+            },
+            {
+              title: "Create dashboard shell",
+              typeHint: "Feature",
+              rawRequest: "Create dashboard layout and summary widgets",
+            },
+          ],
+        },
+        provider: "mock",
+        model: "static-mock",
+        parseRetries: 0,
+        validationPassed: true,
+        providerAttempts: 1,
+        providerBackoffRetries: 0,
+        providerBackoffWaitMs: 0,
+        providerRateLimitWaitMs: 0,
+        estimatedInputTokens: 100,
+        estimatedOutputTokens: 80,
+        estimatedTotalTokens: 180,
+        estimatedCostUsd: 0,
+      });
 
     let createdCount = 0;
     mocks.createTaskService.mockImplementation(async () => {
@@ -161,6 +209,30 @@ describe.sequential("workers/project-orchestrator", () => {
         projectTaskId: parent.taskId,
         rootProjectId: parent.taskId,
         createdTaskIds: ["task-child-1", "task-child-2"],
+      }),
+    );
+    expect(mocks.saveTaskArtifact).toHaveBeenCalledWith(
+      parent.taskId,
+      "project-brief.json",
+      expect.objectContaining({
+        projectTaskId: parent.taskId,
+        rootProjectId: parent.taskId,
+      }),
+    );
+    expect(mocks.saveTaskArtifact).toHaveBeenCalledWith(
+      parent.taskId,
+      "acceptance-criteria.json",
+      expect.objectContaining({
+        projectTaskId: parent.taskId,
+        rootProjectId: parent.taskId,
+      }),
+    );
+    expect(mocks.saveTaskArtifact).toHaveBeenCalledWith(
+      parent.taskId,
+      "milestone-plan.json",
+      expect.objectContaining({
+        projectTaskId: parent.taskId,
+        rootProjectId: parent.taskId,
       }),
     );
 
