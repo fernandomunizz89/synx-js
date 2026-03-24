@@ -23,6 +23,8 @@ describe("start-progress", () => {
     humanApprovalRequired: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    rootProjectId: "task-1",
+    sourceKind: "standalone",
     history: [
       {
         stage: "dispatcher",

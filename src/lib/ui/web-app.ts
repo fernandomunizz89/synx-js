@@ -1200,6 +1200,24 @@ export function buildWebUiHtml(): string {
     var c = { in_progress:'var(--blue)', waiting_agent:'var(--teal)', waiting_human:'var(--orange)', done:'var(--green)', failed:'var(--red)', blocked:'var(--yellow)' };
     return 'background:' + (c[s] || 'var(--muted)');
   }
+  function taskType(task) {
+    return task && (task.type || task.typeHint) ? String(task.type || task.typeHint) : '';
+  }
+  function taskStage(task) {
+    return task && (task.currentStage || task.stage) ? String(task.currentStage || task.stage) : '';
+  }
+  function taskRelationLabel(task) {
+    if (!task) return '';
+    var kind = String(task.sourceKind || '');
+    var children = Array.isArray(task.childTaskIds) ? task.childTaskIds : [];
+    if (kind === 'project-intake') {
+      return children.length ? ('Project parent · ' + children.length + ' subtask' + (children.length === 1 ? '' : 's')) : 'Project parent';
+    }
+    if (kind === 'project-subtask') {
+      return task.parentTaskId ? ('Subtask of ' + task.parentTaskId) : 'Project subtask';
+    }
+    return '';
+  }
 
   /* ── overview ── */
   function refreshOverview() {
@@ -1241,10 +1259,11 @@ export function buildWebUiHtml(): string {
       var el = document.getElementById('recent-tasks');
       if (!recent.length) { el.innerHTML = '<div class="empty">No tasks yet</div>'; return; }
       el.innerHTML = recent.map(function (t) {
+        var relation = taskRelationLabel(t);
         return '<div class="task-row-d" onclick="go(\\'tasks\\')">' +
           '<span class="tdot" style="' + dotColor(t.status) + '"></span>' +
           '<div class="tinfo"><div class="ttitle">' + esc(t.title) + '</div>' +
-          '<div class="tsub">' + esc(t.status) + (t.typeHint ? ' · ' + esc(t.typeHint) : '') + '</div></div>' +
+          '<div class="tsub">' + esc(t.status) + (taskType(t) ? ' · ' + esc(taskType(t)) : '') + (relation ? ' · ' + esc(relation) : '') + '</div></div>' +
           '<span class="ttime">' + ago(t.createdAt) + '</span></div>';
       }).join('');
     }).catch(function(){});
@@ -1282,7 +1301,13 @@ export function buildWebUiHtml(): string {
     var q   = (document.getElementById('task-search').value || '').toLowerCase();
     var fil = document.getElementById('task-filter').value || '';
     var list = allTasks.filter(function (t) {
-      return (!q || t.title.toLowerCase().includes(q) || t.taskId.toLowerCase().includes(q)) &&
+      var relation = taskRelationLabel(t).toLowerCase();
+      return (!q
+        || t.title.toLowerCase().includes(q)
+        || t.taskId.toLowerCase().includes(q)
+        || relation.includes(q)
+        || String(t.parentTaskId || '').toLowerCase().includes(q)
+        || String(t.rootProjectId || '').toLowerCase().includes(q)) &&
              (!fil || t.status === fil);
     });
     var tbody = document.getElementById('tasks-body');
@@ -1295,12 +1320,16 @@ export function buildWebUiHtml(): string {
       var cancelBtn = (t.status !== 'done' && t.status !== 'failed' && t.status !== 'archived')
         ? '<button class="btn btn-cancel" onclick="event.stopPropagation();cancelTask(\\'' + id + '\\')">Cancel</button>' : '';
       var detailBtn = '<button class="btn" style="font-size:11px;padding:4px 8px" onclick="event.stopPropagation();openDrawer(\\'' + id + '\\')">Details</button>';
+      var relation = taskRelationLabel(t);
+      var relationHtml = relation
+        ? '<div style="font-size:11px;color:var(--muted)">' + esc(relation) + '</div>'
+        : '';
       return '<tr class="trow" onclick="toggleExpand(\\'' + id + '\\')">' +
         '<td><div style="font-weight:500">' + esc(t.title) + '</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + id + '</div></td>' +
-        '<td style="color:var(--muted)">' + esc(t.typeHint || '—') + '</td>' +
+        '<div style="font-size:11px;color:var(--muted);font-family:var(--mono)">' + id + '</div>' + relationHtml + '</td>' +
+        '<td style="color:var(--muted)">' + esc(taskType(t) || '—') + '</td>' +
         '<td>' + badge(t.status) + '</td>' +
-        '<td style="font-size:12px;color:var(--muted)">' + esc(t.stage || '—') + '</td>' +
+        '<td style="font-size:12px;color:var(--muted)">' + esc(taskStage(t) || '—') + '</td>' +
         '<td style="font-size:12px;color:var(--muted)">' + ago(t.createdAt) + '</td>' +
         '</tr>' +
         '<tr class="expand-row" id="exp-' + id + '">' +
@@ -1491,7 +1520,7 @@ export function buildWebUiHtml(): string {
       if (!drawerDetail) return;
       var d = drawerDetail;
       document.getElementById('drawer-title').textContent = d.title || id;
-      document.getElementById('drawer-subtitle').textContent = (d.typeHint || '') + (d.status ? ' · ' + d.status : '');
+      document.getElementById('drawer-subtitle').textContent = (taskType(d) || '') + (d.status ? ' · ' + d.status : '');
       renderDrawerOverview(d);
       renderDrawerArtifacts(id, drawerFiles);
       renderDrawerHistory(d);
@@ -1515,11 +1544,16 @@ export function buildWebUiHtml(): string {
     }
     var fields = [
       ['Status',     badge(d.status)],
-      ['Type',       esc(d.typeHint || '—')],
+      ['Type',       esc(taskType(d) || '—')],
       ['Agent',      esc(d.nextAgent || d.currentAgent || '—')],
       ['Project',    esc(d.project || '—')],
       ['Created',    esc(ago(d.createdAt))],
     ];
+    if (d.sourceKind) fields.push(['Source', esc(d.sourceKind)]);
+    if (d.parentTaskId) {
+      fields.push(['Parent task', '<button class="btn" style="font-size:11px;padding:3px 8px" onclick="openDrawer(\\'' + esc(d.parentTaskId) + '\\')">' + esc(d.parentTaskId) + '</button>']);
+    }
+    if (d.rootProjectId) fields.push(['Root project', esc(d.rootProjectId)]);
     var infoHtml = fields.map(function (f) {
       return '<div class="project-info-row"><span class="project-info-key">' + f[0] + '</span><span class="drawer-field">' + f[1] + '</span></div>';
     }).join('');
@@ -1541,7 +1575,28 @@ export function buildWebUiHtml(): string {
             '</div></div>';
         }).join('');
     }
-    document.getElementById('dtab-overview').innerHTML = actBtns + infoHtml + rawHtml + timelineHtml;
+    var childTasksHtml = '';
+    if (Array.isArray(d.childTasks) && d.childTasks.length) {
+      childTasksHtml = '<div class="drawer-section-title" style="margin-top:16px">Subtasks</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+        d.childTasks.map(function (child) {
+          var childId = esc(child.taskId);
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px">' +
+            '<div style="min-width:0">' +
+            '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(child.title || childId) + '</div>' +
+            '<div style="font-size:11px;color:var(--muted)">' + childId + ' · ' + esc(child.type || '—') + ' · ' + esc(child.status || '—') + '</div>' +
+            '</div>' +
+            '<button class="btn" style="font-size:11px;padding:3px 8px;white-space:nowrap" onclick="openDrawer(\\'' + childId + '\\')">Open</button>' +
+            '</div>';
+        }).join('') +
+        '</div>';
+    } else if (Array.isArray(d.childTaskIds) && d.childTaskIds.length) {
+      childTasksHtml = '<div class="drawer-section-title" style="margin-top:16px">Subtasks</div>' +
+        '<div class="drawer-field">' + d.childTaskIds.map(function (childId) {
+          return '<button class="btn" style="font-size:11px;padding:3px 8px;margin-right:6px;margin-bottom:6px" onclick="openDrawer(\\'' + esc(childId) + '\\')">' + esc(childId) + '</button>';
+        }).join('') + '</div>';
+    }
+    document.getElementById('dtab-overview').innerHTML = actBtns + infoHtml + rawHtml + childTasksHtml + timelineHtml;
   }
 
   function renderDrawerArtifacts(id, files) {

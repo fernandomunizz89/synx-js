@@ -2,7 +2,7 @@ import path from "node:path";
 import { STAGE_FILE_NAMES } from "./constants.js";
 import { ensureDir, exists, listDirectories, readJsonValidated, writeJson, writeText } from "./fs.js";
 import { taskDir, tasksDir } from "./paths.js";
-import type { NewTaskInput, StageEnvelope, TaskMeta, TaskMetaHistoryItem } from "./types.js";
+import type { NewTaskInput, StageEnvelope, TaskCreationMetadata, TaskMeta, TaskMetaHistoryItem, TaskSourceKind } from "./types.js";
 import { nowIso, randomId, slugify, todayDate } from "./utils.js";
 import { taskMetaSchema } from "./schema.js";
 
@@ -14,6 +14,48 @@ function normalizeTaskMetaHistoryAgent(agent: string): TaskMetaHistoryItem["agen
 function normalizeTaskMetaAgent(agent: string): TaskMeta["currentAgent"] {
   if (agent === "System" || agent === "[none]") return "";
   return agent as TaskMeta["currentAgent"];
+}
+
+function normalizeOptionalTaskId(value: unknown): string | undefined {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || undefined;
+}
+
+function inferSourceKind(typeHint: NewTaskInput["typeHint"], parentTaskId?: string): TaskSourceKind {
+  if (parentTaskId) return "project-subtask";
+  return typeHint === "Project" ? "project-intake" : "standalone";
+}
+
+function normalizeTaskSourceKind(args: {
+  sourceKind?: string;
+  typeHint: NewTaskInput["typeHint"];
+  parentTaskId?: string;
+}): TaskSourceKind {
+  const value = String(args.sourceKind || "").trim().toLowerCase();
+  if (value === "standalone" || value === "project-intake" || value === "project-subtask") {
+    return value;
+  }
+  return inferSourceKind(args.typeHint, args.parentTaskId);
+}
+
+function resolveTaskRelationshipMeta(args: {
+  taskId: string;
+  typeHint: NewTaskInput["typeHint"];
+  metadata?: TaskCreationMetadata;
+}): Pick<TaskMeta, "parentTaskId" | "rootProjectId" | "sourceKind"> {
+  const parentTaskId = normalizeOptionalTaskId(args.metadata?.parentTaskId);
+  const sourceKind = normalizeTaskSourceKind({
+    sourceKind: args.metadata?.sourceKind,
+    typeHint: args.typeHint,
+    parentTaskId,
+  });
+  const rootProjectId = normalizeOptionalTaskId(args.metadata?.rootProjectId)
+    || (sourceKind === "project-subtask" ? (parentTaskId || args.taskId) : args.taskId);
+  return {
+    parentTaskId,
+    rootProjectId,
+    sourceKind,
+  };
 }
 
 export async function ensureTaskStructure(baseTaskDir: string): Promise<void> {
@@ -41,11 +83,17 @@ function resolveInitialStage(input: NewTaskInput): {
   };
 }
 
-export async function createTask(input: NewTaskInput): Promise<{ taskId: string; taskPath: string }> {
+export async function createTask(input: NewTaskInput, metadata?: TaskCreationMetadata): Promise<{ taskId: string; taskPath: string }> {
   const id = `task-${todayDate()}-${randomId(4)}-${slugify(input.title)}`;
   const dir = taskDir(id);
   await ensureTaskStructure(dir);
   const entryStage = resolveInitialStage(input);
+  const createdAt = nowIso();
+  const relationshipMeta = resolveTaskRelationshipMeta({
+    taskId: id,
+    typeHint: input.typeHint,
+    metadata,
+  });
 
   const meta: TaskMeta = {
     taskId: id,
@@ -57,8 +105,11 @@ export async function createTask(input: NewTaskInput): Promise<{ taskId: string;
     currentAgent: "",
     nextAgent: entryStage.agent,
     humanApprovalRequired: false,
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
+    createdAt,
+    updatedAt: createdAt,
+    parentTaskId: relationshipMeta.parentTaskId,
+    rootProjectId: relationshipMeta.rootProjectId,
+    sourceKind: relationshipMeta.sourceKind,
     history: [],
   };
 
@@ -78,8 +129,20 @@ export async function createTask(input: NewTaskInput): Promise<{ taskId: string;
 
 export async function loadTaskMeta(taskId: string): Promise<TaskMeta> {
   const parsed = await readJsonValidated(path.join(taskDir(taskId), "meta.json"), taskMetaSchema);
+  const parentTaskId = normalizeOptionalTaskId(parsed.parentTaskId);
+  const sourceKind = normalizeTaskSourceKind({
+    sourceKind: parsed.sourceKind,
+    typeHint: parsed.type,
+    parentTaskId,
+  });
+  const rootProjectId = normalizeOptionalTaskId(parsed.rootProjectId)
+    || (sourceKind === "project-subtask" ? (parentTaskId || parsed.taskId) : parsed.taskId);
+
   return {
     ...parsed,
+    parentTaskId,
+    rootProjectId,
+    sourceKind,
     currentAgent: normalizeTaskMetaAgent(String(parsed.currentAgent || "")),
     nextAgent: normalizeTaskMetaAgent(String(parsed.nextAgent || "")),
     history: parsed.history.map((item) => ({
@@ -90,6 +153,18 @@ export async function loadTaskMeta(taskId: string): Promise<TaskMeta> {
 }
 
 export async function saveTaskMeta(taskId: string, meta: TaskMeta): Promise<void> {
+  const parentTaskId = normalizeOptionalTaskId(meta.parentTaskId);
+  const sourceKind = normalizeTaskSourceKind({
+    sourceKind: meta.sourceKind,
+    typeHint: meta.type,
+    parentTaskId,
+  });
+  const rootProjectId = normalizeOptionalTaskId(meta.rootProjectId)
+    || (sourceKind === "project-subtask" ? (parentTaskId || meta.taskId) : meta.taskId);
+
+  meta.parentTaskId = parentTaskId;
+  meta.sourceKind = sourceKind;
+  meta.rootProjectId = rootProjectId;
   meta.updatedAt = nowIso();
   await writeJson(path.join(taskDir(taskId), "meta.json"), meta);
 }

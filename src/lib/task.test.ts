@@ -58,6 +58,9 @@ describe.sequential("task", () => {
     expect(meta.status).toBe("new");
     expect(meta.currentStage).toBe("submitted");
     expect(meta.nextAgent).toBe("Dispatcher");
+    expect(meta.sourceKind).toBe("standalone");
+    expect(meta.rootProjectId).toBe(created.taskId);
+    expect(meta.parentTaskId).toBeUndefined();
     expect(dispatcherRequest).toMatchObject({
       taskId: created.taskId,
       stage: "dispatcher",
@@ -81,6 +84,9 @@ describe.sequential("task", () => {
     const orchestratorRequest = await readJson(path.join(created.taskPath, "inbox", STAGE_FILE_NAMES.projectOrchestrator));
 
     expect(meta.nextAgent).toBe("Project Orchestrator");
+    expect(meta.sourceKind).toBe("project-intake");
+    expect(meta.rootProjectId).toBe(created.taskId);
+    expect(meta.parentTaskId).toBeUndefined();
     expect(orchestratorRequest).toMatchObject({
       taskId: created.taskId,
       stage: "project-orchestrator",
@@ -88,6 +94,23 @@ describe.sequential("task", () => {
       agent: "Project Orchestrator",
       inputRef: "input/new-task.json",
     });
+  });
+
+  it("stores explicit parent/root relationship metadata for project subtasks", async () => {
+    const parent = await createTask({
+      ...baseTaskInput("Parent project"),
+      typeHint: "Project",
+    });
+    const child = await createTask(baseTaskInput("Implement module"), {
+      sourceKind: "project-subtask",
+      parentTaskId: parent.taskId,
+      rootProjectId: parent.taskId,
+    });
+
+    const childMeta = await loadTaskMeta(child.taskId);
+    expect(childMeta.sourceKind).toBe("project-subtask");
+    expect(childMeta.parentTaskId).toBe(parent.taskId);
+    expect(childMeta.rootProjectId).toBe(parent.taskId);
   });
 
   it("normalizes legacy/system agent names when loading task metadata", async () => {

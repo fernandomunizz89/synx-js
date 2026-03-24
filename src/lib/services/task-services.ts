@@ -10,11 +10,15 @@ import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import { requestTaskCancel } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import { deliverWebhook } from "../webhooks.js";
-import type { AgentName, NewTaskInput, StageEnvelope, TaskType } from "../types.js";
+import type { AgentName, NewTaskInput, StageEnvelope, TaskCreationMetadata, TaskSourceKind, TaskType } from "../types.js";
 import type { RollbackSummary } from "./task-rollback.js";
 
 export type ProjectSource = "explicit" | "resolved-config" | "repository";
 export type RollbackMode = "none" | "task";
+
+export interface TaskServiceCreationMetadata extends TaskCreationMetadata {
+  sourceKind?: TaskSourceKind;
+}
 
 export interface ReproveTaskServiceResult {
   taskId: string;
@@ -58,10 +62,14 @@ export async function resolveProjectName(project: string | undefined): Promise<{
     return { project: explicitProject, source: "explicit" };
   }
 
-  const resolvedConfig = await loadResolvedProjectConfig();
-  const configProject = normalizeProjectName(resolvedConfig.projectName);
-  if (configProject) {
-    return { project: configProject, source: "resolved-config" };
+  try {
+    const resolvedConfig = await loadResolvedProjectConfig();
+    const configProject = normalizeProjectName(resolvedConfig.projectName);
+    if (configProject) {
+      return { project: configProject, source: "resolved-config" };
+    }
+  } catch {
+    // Configuration may not be initialized yet. Fall back to repository name below.
   }
 
   return {
@@ -70,17 +78,27 @@ export async function resolveProjectName(project: string | undefined): Promise<{
   };
 }
 
-export async function createTaskService(input: Omit<NewTaskInput, "project"> & { project?: string }): Promise<{
+export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
+  project?: string;
+  metadata?: TaskServiceCreationMetadata;
+}): Promise<{
   taskId: string;
   taskPath: string;
   project: string;
   projectSource: ProjectSource;
+  parentTaskId?: string;
+  rootProjectId?: string;
+  sourceKind?: TaskSourceKind;
 }> {
   const resolvedProject = await resolveProjectName(input.project);
-  const created = await createTask({
-    ...input,
+  const { metadata, project: _project, ...taskInput } = input;
+  const newTaskInput: NewTaskInput = {
+    ...taskInput,
     project: resolvedProject.project,
-  });
+  };
+  const created = metadata
+    ? await createTask(newTaskInput, metadata)
+    : await createTask(newTaskInput);
   await logRuntimeEvent({
     event: "task.created",
     taskId: created.taskId,
@@ -90,6 +108,9 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
       type: input.typeHint,
       project: resolvedProject.project,
       projectSource: resolvedProject.source,
+      sourceKind: metadata?.sourceKind,
+      parentTaskId: metadata?.parentTaskId,
+      rootProjectId: metadata?.rootProjectId,
     },
   });
 
@@ -97,6 +118,9 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
     ...created,
     project: resolvedProject.project,
     projectSource: resolvedProject.source,
+    parentTaskId: metadata?.parentTaskId,
+    rootProjectId: metadata?.rootProjectId,
+    sourceKind: metadata?.sourceKind,
   };
 }
 

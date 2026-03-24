@@ -255,6 +255,35 @@ describe.sequential("lib/ui/server", () => {
     }
   });
 
+  it("POST /api/project creates a project-intake parent task with project metadata", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: true,
+    });
+
+    try {
+      const res = await fetch(`${server.baseUrl}/api/project`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "Build an MVP with auth, billing, and dashboard" }),
+      });
+      expect(res.status).toBe(200);
+      const payload = await res.json() as { ok: boolean; data: { taskId: string } };
+      expect(payload.ok).toBe(true);
+
+      const meta = await loadTaskMeta(payload.data.taskId);
+      expect(meta.type).toBe("Project");
+      expect(meta.sourceKind).toBe("project-intake");
+      expect(meta.rootProjectId).toBe(payload.data.taskId);
+      expect(meta.parentTaskId).toBeUndefined();
+      expect(meta.nextAgent).toBe("Project Orchestrator");
+    } finally {
+      await server.close();
+    }
+  });
+
   it("POST /api/provider-health returns provider health data", async () => {
     // loadGlobalConfig() reads from ~/.ai-agents/config.json (not the fixture dir).
     // Back up the real file, write a valid test fixture, and restore afterward.

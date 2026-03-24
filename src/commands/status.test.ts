@@ -48,6 +48,8 @@ describe.sequential("commands/status", () => {
       humanApprovalRequired: false,
       createdAt: "2026-03-16T00:00:00.000Z",
       updatedAt: "2026-03-16T00:00:00.000Z",
+      rootProjectId: "task-default",
+      sourceKind: "standalone",
       history: [],
       ...overrides,
     };
