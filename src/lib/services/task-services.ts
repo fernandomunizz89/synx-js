@@ -10,7 +10,7 @@ import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import { requestTaskCancel } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import { deliverWebhook } from "../webhooks.js";
-import type { AgentName, NewTaskInput, StageEnvelope, TaskCreationMetadata, TaskSourceKind, TaskType } from "../types.js";
+import type { AgentName, NewTaskInput, StageEnvelope, TaskCreationMetadata, TaskPriority, TaskSourceKind, TaskType } from "../types.js";
 import type { RollbackSummary } from "./task-rollback.js";
 
 export type ProjectSource = "explicit" | "resolved-config" | "repository";
@@ -89,6 +89,11 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
   parentTaskId?: string;
   rootProjectId?: string;
   sourceKind?: TaskSourceKind;
+  dependsOn?: string[];
+  blockedBy?: string[];
+  priority?: TaskPriority;
+  milestone?: string;
+  parallelizable?: boolean;
 }> {
   const resolvedProject = await resolveProjectName(input.project);
   const { metadata, project: _project, ...taskInput } = input;
@@ -111,6 +116,11 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
       sourceKind: metadata?.sourceKind,
       parentTaskId: metadata?.parentTaskId,
       rootProjectId: metadata?.rootProjectId,
+      dependsOn: metadata?.dependsOn,
+      blockedBy: metadata?.blockedBy,
+      priority: metadata?.priority,
+      milestone: metadata?.milestone,
+      parallelizable: metadata?.parallelizable,
     },
   });
 
@@ -121,6 +131,11 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
     parentTaskId: metadata?.parentTaskId,
     rootProjectId: metadata?.rootProjectId,
     sourceKind: metadata?.sourceKind,
+    dependsOn: metadata?.dependsOn,
+    blockedBy: metadata?.blockedBy,
+    priority: metadata?.priority,
+    milestone: metadata?.milestone,
+    parallelizable: metadata?.parallelizable,
   };
 }
 

@@ -1,5 +1,6 @@
 export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed" | "Project";
 export type TaskSourceKind = "standalone" | "project-intake" | "project-subtask";
+export type TaskPriority = 1 | 2 | 3 | 4 | 5;
 export type TaskStatus =
   | "new"
   | "in_progress"
@@ -216,6 +217,11 @@ export interface TaskCreationMetadata {
   parentTaskId?: string;
   rootProjectId?: string;
   sourceKind?: TaskSourceKind;
+  dependsOn?: string[];
+  blockedBy?: string[];
+  priority?: TaskPriority;
+  milestone?: string;
+  parallelizable?: boolean;
 }
 
 export interface StageEnvelope<T = unknown> {
@@ -265,6 +271,11 @@ export interface TaskMeta {
   parentTaskId?: string;
   rootProjectId: string;
   sourceKind: TaskSourceKind;
+  dependsOn?: string[];
+  blockedBy?: string[];
+  priority?: TaskPriority;
+  milestone?: string;
+  parallelizable?: boolean;
   history: TaskMetaHistoryItem[];
   securityAuditRequired?: boolean;
   /** Phase 4.3 — ordered list of agents the Dispatcher suggests for this task */

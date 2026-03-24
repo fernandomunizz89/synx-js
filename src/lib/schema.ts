@@ -2,6 +2,13 @@ import { z } from "zod";
 
 export const taskTypeSchema = z.enum(["Feature", "Bug", "Refactor", "Research", "Documentation", "Mixed", "Project"]);
 export const taskSourceKindSchema = z.enum(["standalone", "project-intake", "project-subtask"]);
+export const taskPrioritySchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
 export const providerTypeSchema = z.enum(["mock", "openai-compatible", "lmstudio", "google", "anthropic"]);
 export const taskStatusSchema = z.enum([
   "new",
@@ -229,6 +236,11 @@ export const taskMetaSchema = z.object({
   parentTaskId: z.string().optional(),
   rootProjectId: z.string().optional(),
   sourceKind: taskSourceKindSchema.optional(),
+  dependsOn: z.array(z.string()).optional(),
+  blockedBy: z.array(z.string()).optional(),
+  priority: taskPrioritySchema.optional(),
+  milestone: z.string().optional(),
+  parallelizable: z.boolean().optional(),
   history: z.array(taskMetaHistoryItemSchema),
   securityAuditRequired: z.boolean().optional(),
   /** Phase 4.3 — persisted suggested chain from Dispatcher output */

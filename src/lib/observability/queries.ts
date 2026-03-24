@@ -7,6 +7,7 @@ import { loadPipelineState } from "../pipeline-state.js";
 import { loadTaskCancelRequest } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import { buildCollaborationMetricsReport } from "../collaboration-metrics.js";
+import { buildProjectGraphSnapshot } from "../project-graph.js";
 import type { NewTaskInput, TaskMeta } from "../types.js";
 import type { CollaborationMetricsReport } from "../metrics-helpers.js";
 import type {
@@ -30,7 +31,18 @@ function sumTaskConsumption(meta: TaskMeta): TaskConsumptionDto {
   };
 }
 
-function mapTaskSummary(meta: TaskMeta, childTaskIds: string[] = []): TaskSummaryDto {
+function mapTaskSummary(args: {
+  meta: TaskMeta;
+  childTaskIds?: string[];
+  blockedBy?: string[];
+  ready?: boolean;
+  projectProgress?: TaskSummaryDto["projectProgress"];
+}): TaskSummaryDto {
+  const childTaskIds = args.childTaskIds || [];
+  const blockedBy = args.blockedBy || [];
+  const ready = Boolean(args.ready);
+  const meta = args.meta;
+
   return {
     taskId: meta.taskId,
     title: meta.title,
@@ -48,7 +60,14 @@ function mapTaskSummary(meta: TaskMeta, childTaskIds: string[] = []): TaskSummar
     parentTaskId: meta.parentTaskId,
     rootProjectId: meta.rootProjectId,
     sourceKind: meta.sourceKind,
+    dependsOn: meta.dependsOn || [],
+    blockedBy,
+    priority: Number(meta.priority || 3),
+    milestone: meta.milestone,
+    parallelizable: meta.parallelizable !== false,
+    ready,
     childTaskIds,
+    projectProgress: args.projectProgress || null,
     consumption: sumTaskConsumption(meta),
   };
 }
@@ -87,26 +106,16 @@ export async function listTaskSummaries(): Promise<TaskSummaryDto[]> {
     .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
     .map((item) => item.value);
 
-  const childIdsByParent = new Map<string, string[]>();
-  const metaById = new Map(metas.map((meta) => [meta.taskId, meta]));
-  for (const meta of metas) {
-    if (!meta.parentTaskId) continue;
-    const list = childIdsByParent.get(meta.parentTaskId) || [];
-    list.push(meta.taskId);
-    childIdsByParent.set(meta.parentTaskId, list);
-  }
-
-  for (const [parentTaskId, childIds] of childIdsByParent.entries()) {
-    childIds.sort((a, b) => {
-      const aMeta = metaById.get(a);
-      const bMeta = metaById.get(b);
-      return Date.parse(aMeta?.createdAt || "") - Date.parse(bMeta?.createdAt || "");
-    });
-    childIdsByParent.set(parentTaskId, childIds);
-  }
+  const snapshot = buildProjectGraphSnapshot(metas);
 
   return metas
-    .map((meta) => mapTaskSummary(meta, childIdsByParent.get(meta.taskId) || []))
+    .map((meta) => mapTaskSummary({
+      meta,
+      childTaskIds: snapshot.childTaskIdsByParent.get(meta.taskId) || [],
+      blockedBy: snapshot.nodeByTaskId.get(meta.taskId)?.blockedBy || [],
+      ready: snapshot.nodeByTaskId.get(meta.taskId)?.ready || false,
+      projectProgress: snapshot.projectProgressByParent.get(meta.taskId) || null,
+    }))
     .sort(byUpdatedDesc);
 }
 
@@ -213,7 +222,13 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
   }
 
   const detailSummary = summaries.find((item) => item.taskId === taskId)
-    || mapTaskSummary(meta, summaries.filter((item) => item.parentTaskId === taskId).map((item) => item.taskId));
+    || mapTaskSummary({
+      meta,
+      childTaskIds: summaries.filter((item) => item.parentTaskId === taskId).map((item) => item.taskId),
+      blockedBy: meta.blockedBy || [],
+      ready: ["new", "waiting_agent"].includes(meta.status) && (meta.blockedBy || []).length === 0,
+      projectProgress: null,
+    });
   const childTasks = summaries
     .filter((item) => item.parentTaskId === taskId)
     .map((item) => ({
@@ -221,6 +236,10 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
       title: item.title,
       status: item.status,
       type: item.type,
+      blockedBy: item.blockedBy || [],
+      ready: item.ready,
+      priority: item.priority || 3,
+      milestone: item.milestone,
     }));
 
   return {

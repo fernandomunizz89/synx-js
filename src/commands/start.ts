@@ -22,6 +22,7 @@ import {
 import { parseHumanInputCommand, parseInlineCommand } from "../lib/start-inline-command.js";
 import type { TaskMeta } from "../lib/types.js";
 import { buildHumanInputLines, loadMetasSafe, processTasksWithConcurrency, resolveHumanTask } from "../lib/start/task-management.js";
+import { persistProjectGraphState } from "../lib/project-graph.js";
 import { appendConsole, appendEvent } from "../lib/start/ui-renderer.js";
 import { runInlineCommand } from "../lib/start/command-handler.js";
 import { checkExistingDaemon, performReadinessChecks, getProviderStatus } from "../lib/start/startup-checks.js";
@@ -207,7 +208,9 @@ export const startCommand = new Command("start")
         }
 
         const taskIds = await allTaskIds();
-        const outcomes = uiState.paused ? [] : await processTasksWithConcurrency(taskIds, taskConcurrency);
+        const loopMetas = await loadMetasSafe(taskIds);
+        const scheduling = await persistProjectGraphState(loopMetas);
+        const outcomes = uiState.paused ? [] : await processTasksWithConcurrency(scheduling.readyTaskIds, taskConcurrency);
         let processedStages = outcomes.reduce((sum, o) => sum + o.processedStages, 0);
         let processedTaskCount = outcomes.filter(o => o.processedStages > 0).length;
 

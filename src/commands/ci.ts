@@ -6,6 +6,7 @@ import { clearStaleLocks, recoverInterruptedTasks, recoverWorkingFiles } from ".
 import { logRuntimeEvent, writeDaemonState, logDaemon } from "../lib/logging.js";
 import { processTasksWithConcurrency } from "../lib/start/task-management.js";
 import { resolvePollIntervalMs, resolveMaxImmediateCycles, resolveTaskConcurrency } from "../lib/start/loop-utils.js";
+import { persistProjectGraphState } from "../lib/project-graph.js";
 import { sleep, nowIso } from "../lib/utils.js";
 import type { TaskStatus } from "../lib/types.js";
 
@@ -56,7 +57,9 @@ export const ciCommand = new Command("ci")
       while (Date.now() - startMs < timeoutMs) {
         loop += 1;
         const taskIds = await allTaskIds();
-        const outcomes = await processTasksWithConcurrency(taskIds, taskConcurrency);
+        const loopMetas = await Promise.all(taskIds.map((taskId) => loadTaskMeta(taskId)));
+        const scheduling = await persistProjectGraphState(loopMetas);
+        const outcomes = await processTasksWithConcurrency(scheduling.readyTaskIds, taskConcurrency);
         const processedStages = outcomes.reduce((sum, o) => sum + o.processedStages, 0);
         totalProcessedStages += processedStages;
 

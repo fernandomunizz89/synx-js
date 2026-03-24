@@ -6,9 +6,10 @@
 import path from "node:path";
 import { readJson, exists } from "./fs.js";
 import { taskDir } from "./paths.js";
-import { loadTaskMeta } from "./task.js";
+import { allTaskIds, loadTaskMeta } from "./task.js";
 import { DONE_FILE_NAMES } from "./constants.js";
 import type { TaskMeta } from "./types.js";
+import { buildProjectGraphSnapshot, type ProjectProgressSummary } from "./project-graph.js";
 
 export interface TaskStageExport {
   stage: string;
@@ -30,6 +31,17 @@ export interface TaskExport {
   status: string;
   createdAt: string;
   updatedAt: string;
+  parentTaskId?: string;
+  rootProjectId: string;
+  sourceKind: string;
+  dependsOn: string[];
+  blockedBy: string[];
+  priority: number;
+  milestone?: string;
+  parallelizable: boolean;
+  ready: boolean;
+  childTaskIds: string[];
+  projectProgress?: ProjectProgressSummary | null;
   suggestedChain?: string[];
   stages: TaskStageExport[];
   totalCostUsd: number;
@@ -43,6 +55,13 @@ export interface TaskExport {
 export async function exportTask(taskId: string): Promise<TaskExport> {
   const meta: TaskMeta = await loadTaskMeta(taskId);
   const base = taskDir(taskId);
+  const allIds = await allTaskIds();
+  const allMetasSettled = await Promise.allSettled(allIds.map((id) => loadTaskMeta(id)));
+  const allMetas = allMetasSettled
+    .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
+    .map((item) => item.value);
+  const snapshot = buildProjectGraphSnapshot(allMetas);
+  const node = snapshot.nodeByTaskId.get(taskId);
 
   const stages: TaskStageExport[] = meta.history.map((h) => ({
     stage: h.stage,
@@ -80,6 +99,17 @@ export async function exportTask(taskId: string): Promise<TaskExport> {
     status: meta.status,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
+    parentTaskId: meta.parentTaskId,
+    rootProjectId: meta.rootProjectId,
+    sourceKind: meta.sourceKind,
+    dependsOn: node?.dependsOn || meta.dependsOn || [],
+    blockedBy: node?.blockedBy || meta.blockedBy || [],
+    priority: node?.priority || Number(meta.priority || 3),
+    milestone: node?.milestone || meta.milestone,
+    parallelizable: node?.parallelizable ?? meta.parallelizable !== false,
+    ready: node?.ready || false,
+    childTaskIds: snapshot.childTaskIdsByParent.get(taskId) || [],
+    projectProgress: snapshot.projectProgressByParent.get(taskId) || null,
     suggestedChain: meta.suggestedChain,
     stages,
     totalCostUsd,

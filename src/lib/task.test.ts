@@ -61,6 +61,10 @@ describe.sequential("task", () => {
     expect(meta.sourceKind).toBe("standalone");
     expect(meta.rootProjectId).toBe(created.taskId);
     expect(meta.parentTaskId).toBeUndefined();
+    expect(meta.dependsOn).toEqual([]);
+    expect(meta.blockedBy).toEqual([]);
+    expect(meta.priority).toBe(3);
+    expect(meta.parallelizable).toBe(true);
     expect(dispatcherRequest).toMatchObject({
       taskId: created.taskId,
       stage: "dispatcher",
@@ -105,12 +109,21 @@ describe.sequential("task", () => {
       sourceKind: "project-subtask",
       parentTaskId: parent.taskId,
       rootProjectId: parent.taskId,
+      dependsOn: [parent.taskId],
+      priority: 5,
+      milestone: "MVP",
+      parallelizable: false,
     });
 
     const childMeta = await loadTaskMeta(child.taskId);
     expect(childMeta.sourceKind).toBe("project-subtask");
     expect(childMeta.parentTaskId).toBe(parent.taskId);
     expect(childMeta.rootProjectId).toBe(parent.taskId);
+    expect(childMeta.dependsOn).toEqual([parent.taskId]);
+    expect(childMeta.blockedBy).toEqual([parent.taskId]);
+    expect(childMeta.priority).toBe(5);
+    expect(childMeta.milestone).toBe("MVP");
+    expect(childMeta.parallelizable).toBe(false);
   });
 
   it("normalizes legacy/system agent names when loading task metadata", async () => {

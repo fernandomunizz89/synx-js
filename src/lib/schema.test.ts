@@ -54,8 +54,15 @@ describe("schema", () => {
     const parsedNormal = taskMetaSchema.parse({
       ...parsed,
       currentAgent: "Dispatcher",
+      priority: 5,
+      dependsOn: ["task-1"],
+      blockedBy: ["task-1"],
+      parallelizable: false,
     });
     expect(parsedNormal.currentAgent).toBe("Dispatcher");
+    expect(parsedNormal.priority).toBe(5);
+    expect(parsedNormal.blockedBy).toEqual(["task-1"]);
+    expect(parsedNormal.parallelizable).toBe(false);
   });
 
   it("parses fallbackModelSchema", () => {
