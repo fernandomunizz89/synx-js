@@ -65,6 +65,8 @@ describe.sequential("task", () => {
     expect(meta.blockedBy).toEqual([]);
     expect(meta.priority).toBe(3);
     expect(meta.parallelizable).toBe(true);
+    expect(meta.mergeStrategy).toBe("auto-rebase");
+    expect(meta.ownershipBoundaries).toEqual([]);
     expect(dispatcherRequest).toMatchObject({
       taskId: created.taskId,
       stage: "dispatcher",
@@ -113,6 +115,8 @@ describe.sequential("task", () => {
       priority: 5,
       milestone: "MVP",
       parallelizable: false,
+      mergeStrategy: "manual-review",
+      ownershipBoundaries: ["src/modules/payments", "src/modules/payments/api.ts"],
     });
 
     const childMeta = await loadTaskMeta(child.taskId);
@@ -124,6 +128,8 @@ describe.sequential("task", () => {
     expect(childMeta.priority).toBe(5);
     expect(childMeta.milestone).toBe("MVP");
     expect(childMeta.parallelizable).toBe(false);
+    expect(childMeta.mergeStrategy).toBe("manual-review");
+    expect(childMeta.ownershipBoundaries).toEqual(["src/modules/payments", "src/modules/payments/api.ts"]);
   });
 
   it("normalizes legacy/system agent names when loading task metadata", async () => {

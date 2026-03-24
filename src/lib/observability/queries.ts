@@ -8,6 +8,7 @@ import { loadTaskCancelRequest } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import { buildCollaborationMetricsReport } from "../collaboration-metrics.js";
 import { buildProjectGraphSnapshot } from "../project-graph.js";
+import { listFileLocks } from "../file-locks.js";
 import type { NewTaskInput, TaskMeta } from "../types.js";
 import type { CollaborationMetricsReport } from "../metrics-helpers.js";
 import type {
@@ -36,6 +37,8 @@ function mapTaskSummary(args: {
   childTaskIds?: string[];
   blockedBy?: string[];
   ready?: boolean;
+  ownershipBoundaries?: string[];
+  mergeStrategy?: "auto-rebase" | "manual-review";
   projectProgress?: TaskSummaryDto["projectProgress"];
 }): TaskSummaryDto {
   const childTaskIds = args.childTaskIds || [];
@@ -65,6 +68,8 @@ function mapTaskSummary(args: {
     priority: Number(meta.priority || 3),
     milestone: meta.milestone,
     parallelizable: meta.parallelizable !== false,
+    ownershipBoundaries: args.ownershipBoundaries || (meta.ownershipBoundaries || []),
+    mergeStrategy: args.mergeStrategy || meta.mergeStrategy || "auto-rebase",
     ready,
     childTaskIds,
     projectProgress: args.projectProgress || null,
@@ -106,7 +111,8 @@ export async function listTaskSummaries(): Promise<TaskSummaryDto[]> {
     .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
     .map((item) => item.value);
 
-  const snapshot = buildProjectGraphSnapshot(metas);
+  const lockMap = await listFileLocks().catch(() => ({ version: 1 as const, locks: {}, byTask: {}, updatedAt: nowIso() }));
+  const snapshot = buildProjectGraphSnapshot(metas, { lockMap });
 
   return metas
     .map((meta) => mapTaskSummary({
@@ -114,6 +120,8 @@ export async function listTaskSummaries(): Promise<TaskSummaryDto[]> {
       childTaskIds: snapshot.childTaskIdsByParent.get(meta.taskId) || [],
       blockedBy: snapshot.nodeByTaskId.get(meta.taskId)?.blockedBy || [],
       ready: snapshot.nodeByTaskId.get(meta.taskId)?.ready || false,
+      ownershipBoundaries: snapshot.nodeByTaskId.get(meta.taskId)?.ownershipBoundaries || [],
+      mergeStrategy: snapshot.nodeByTaskId.get(meta.taskId)?.mergeStrategy || "auto-rebase",
       projectProgress: snapshot.projectProgressByParent.get(meta.taskId) || null,
     }))
     .sort(byUpdatedDesc);
@@ -227,6 +235,8 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
       childTaskIds: summaries.filter((item) => item.parentTaskId === taskId).map((item) => item.taskId),
       blockedBy: meta.blockedBy || [],
       ready: ["new", "waiting_agent"].includes(meta.status) && (meta.blockedBy || []).length === 0,
+      ownershipBoundaries: meta.ownershipBoundaries || [],
+      mergeStrategy: meta.mergeStrategy || "auto-rebase",
       projectProgress: null,
     });
   const childTasks = summaries

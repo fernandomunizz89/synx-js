@@ -81,6 +81,28 @@ function normalizeTaskKey(value: string | undefined, fallbackLabel: string, inde
   return `task-${index + 1}`;
 }
 
+function normalizeOwnershipBoundary(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+/g, "/")
+    .replace(/[),.;:]+$/g, "")
+    .replace(/\/+$/, "");
+  if (!normalized) return undefined;
+  if (normalized === ".") return undefined;
+  return normalized;
+}
+
+function extractOwnershipBoundaries(rawRequest: string): string[] {
+  const matches = rawRequest.match(/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+(?:\.[A-Za-z0-9._-]+)?/g) || [];
+  const normalized = matches
+    .map((value) => normalizeOwnershipBoundary(value))
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set(normalized)).slice(0, 12);
+}
+
 function buildPlanningSystemPrompt(input: NewTaskInput): string {
   return `You are the pre-build planning squad for SYNX.
 
@@ -296,6 +318,7 @@ export class ProjectOrchestrator extends WorkerBase {
     const createdIds: string[] = [];
     const createdByKey = new Map<string, string>();
     for (const [index, subtask] of keyedTasks.entries()) {
+      const ownershipBoundaries = extractOwnershipBoundaries(subtask.rawRequest);
       const subtaskInput: Omit<NewTaskInput, "project"> = {
         title: subtask.title,
         typeHint: subtask.typeHint as TaskType,
@@ -311,7 +334,9 @@ export class ProjectOrchestrator extends WorkerBase {
             `Task key: ${subtask.taskKey}`,
             `Priority: ${subtask.priority}`,
             `Parallelizable: ${subtask.parallelizable ? "yes" : "no"}`,
+            `Merge strategy: ${subtask.parallelizable ? "auto-rebase" : "manual-review"}`,
             ...(subtask.milestone ? [`Milestone: ${subtask.milestone}`] : []),
+            ...(ownershipBoundaries.length ? [`Ownership boundaries: ${ownershipBoundaries.join(", ")}`] : []),
             `Acceptance criteria: ${planning.acceptanceCriteria.slice(0, 5).join(" | ")}`,
             "Planning artifacts available: project-brief.json, acceptance-criteria.json, milestone-plan.json",
             `Subtask ${index + 1} of ${output.tasks.length}`,
@@ -333,6 +358,8 @@ export class ProjectOrchestrator extends WorkerBase {
           priority: subtask.priority as 1 | 2 | 3 | 4 | 5,
           milestone: subtask.milestone,
           parallelizable: subtask.parallelizable,
+          ownershipBoundaries,
+          mergeStrategy: subtask.parallelizable ? "auto-rebase" : "manual-review",
         },
       });
       createdIds.push(created.taskId);

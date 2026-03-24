@@ -28,6 +28,8 @@ function baseMeta(overrides: Partial<TaskMeta> & Pick<TaskMeta, "taskId" | "titl
     priority: overrides.priority,
     milestone: overrides.milestone,
     parallelizable: overrides.parallelizable,
+    ownershipBoundaries: overrides.ownershipBoundaries,
+    mergeStrategy: overrides.mergeStrategy,
     history: overrides.history || [],
     securityAuditRequired: overrides.securityAuditRequired,
     suggestedChain: overrides.suggestedChain,
@@ -89,6 +91,65 @@ describe("lib/project-graph", () => {
     expect(snapshot.nodeByTaskId.get("task-high")?.ready).toBe(true);
     expect(snapshot.nodeByTaskId.get("task-low")?.ready).toBe(false);
     expect(snapshot.nodeByTaskId.get("task-low")?.blockedBy).toEqual(["task-high"]);
+  });
+
+  it("blocks overlapping ownership boundaries to prevent parallel collisions", () => {
+    const owner = baseMeta({
+      taskId: "task-owner",
+      title: "Ownership owner",
+      sourceKind: "project-subtask",
+      rootProjectId: "task-root",
+      parentTaskId: "task-root",
+      status: "in_progress",
+      ownershipBoundaries: ["src/features/auth"],
+      mergeStrategy: "auto-rebase",
+    });
+    const blocked = baseMeta({
+      taskId: "task-blocked",
+      title: "Ownership blocked",
+      sourceKind: "project-subtask",
+      rootProjectId: "task-root",
+      parentTaskId: "task-root",
+      ownershipBoundaries: ["src/features/auth/login.tsx"],
+      mergeStrategy: "auto-rebase",
+    });
+
+    const snapshot = buildProjectGraphSnapshot([owner, blocked]);
+    expect(snapshot.nodeByTaskId.get("task-blocked")?.ready).toBe(false);
+    expect(snapshot.nodeByTaskId.get("task-blocked")?.blockedBy).toContain("task-owner");
+  });
+
+  it("uses active file locks as blockers for ownership boundaries", () => {
+    const waitingTask = baseMeta({
+      taskId: "task-waiting",
+      title: "Waiting task",
+      sourceKind: "project-subtask",
+      rootProjectId: "task-root",
+      parentTaskId: "task-root",
+      ownershipBoundaries: ["src/features/payments"],
+      mergeStrategy: "auto-rebase",
+    });
+    const lockHolder = baseMeta({
+      taskId: "task-holder",
+      title: "Lock holder",
+      sourceKind: "project-subtask",
+      rootProjectId: "task-root",
+      parentTaskId: "task-root",
+      status: "in_progress",
+      ownershipBoundaries: ["src/features/payments/checkout.tsx"],
+      mergeStrategy: "auto-rebase",
+    });
+
+    const snapshot = buildProjectGraphSnapshot([waitingTask, lockHolder], {
+      lockMap: {
+        locks: {
+          "src/features/payments/checkout.tsx": "task-holder",
+        },
+      },
+    });
+
+    expect(snapshot.nodeByTaskId.get("task-waiting")?.ready).toBe(false);
+    expect(snapshot.nodeByTaskId.get("task-waiting")?.blockedBy).toContain("task-holder");
   });
 
   it("marks parent project as done when every child is done", async () => {

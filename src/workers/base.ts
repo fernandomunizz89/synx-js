@@ -17,6 +17,7 @@ import { approveTaskService } from "../lib/services/task-services.js";
 import { loadProjectMemory, type ProjectMemory } from "../lib/project-memory.js";
 import { requestAgentConsultation, type ConsultationRequest, type ConsultationDecision } from "../lib/agent-consultation.js";
 import { releaseFileLocks } from "../lib/file-locks.js";
+import { isWorkspaceEditConflictError } from "../lib/workspace-editor.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -31,6 +32,10 @@ function shouldEmitRuntimeStreamLog(): boolean {
 function emitRuntimeStreamLog(message: string): void {
   if (!shouldEmitRuntimeStreamLog()) return;
   console.log(formatSynxStreamLog(message));
+}
+
+function uniqueTaskIds(values: string[]): string[] {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 export abstract class WorkerBase {
@@ -49,6 +54,7 @@ export abstract class WorkerBase {
 
     const workingFile = path.join(taskPath, "working", this.workingFileName);
     let startedAt = nowIso();
+    let activeRequest: StageEnvelope | null = null;
 
     try {
       await moveFile(inboxFile, workingFile);
@@ -58,6 +64,7 @@ export abstract class WorkerBase {
         throw cancelled;
       }
       const request = await readJsonValidated(workingFile, stageEnvelopeSchema);
+      activeRequest = request;
       const stageStartAt = nowIso();
       const requestCreatedAt = typeof request.createdAt === "string" ? request.createdAt : "";
       const requestCreatedAtMs = requestCreatedAt ? new Date(requestCreatedAt).getTime() : Number.NaN;
@@ -124,6 +131,83 @@ export abstract class WorkerBase {
       await fs.unlink(workingFile).catch(() => undefined);
       return true;
     } catch (error) {
+      const editConflict = isWorkspaceEditConflictError(error) ? error : null;
+      if (editConflict) {
+        const blockerTaskIds = uniqueTaskIds(
+          editConflict.conflicts
+            .map((conflict) => String(conflict.heldBy || "").trim())
+            .filter((conflictTaskId) => conflictTaskId !== taskId),
+        );
+        const meta = await loadTaskMeta(taskId);
+        const stageLabel = activeRequest?.stage || this.workingFileName.replace(".working.json", "");
+        const conflictMessage = [
+          `Parallel conflict detected for ${taskId}.`,
+          `Lock holders: ${blockerTaskIds.join(", ") || "unknown"}.`,
+          `Merge strategy: ${editConflict.mergeStrategy}.`,
+        ].join(" ");
+
+        if (editConflict.mergeStrategy === "manual-review") {
+          meta.status = "waiting_human";
+          meta.currentAgent = "Human Review";
+          meta.currentStage = "parallel-conflict";
+          meta.nextAgent = "Human Review";
+          meta.humanApprovalRequired = true;
+        } else {
+          meta.status = "waiting_agent";
+          meta.currentAgent = this.agent;
+          meta.currentStage = `${stageLabel}-blocked`;
+          meta.nextAgent = this.agent;
+          meta.humanApprovalRequired = false;
+        }
+        meta.blockedBy = uniqueTaskIds([...(meta.blockedBy || []), ...blockerTaskIds]);
+        await saveTaskMeta(taskId, meta);
+
+        if (editConflict.mergeStrategy !== "manual-review" && activeRequest) {
+          await writeJson(path.join(taskPath, "inbox", this.requestFileName), {
+            taskId,
+            stage: activeRequest.stage,
+            status: "request",
+            createdAt: nowIso(),
+            agent: this.agent,
+            inputRef: activeRequest.inputRef,
+          } satisfies StageEnvelope);
+        }
+
+        await logTaskEvent(taskPath, `${this.agent} blocked due to file ownership conflict: ${conflictMessage}`);
+        await logDaemon(`${this.agent} blocked for ${taskId}: ${conflictMessage}`);
+        emitRuntimeStreamLog(`${this.agent} blocked on ${taskId}: ${conflictMessage}`);
+        await logRuntimeEvent({
+          event: "task.conflict_blocked",
+          source: "worker-base",
+          taskId,
+          stage: stageLabel,
+          agent: String(this.agent),
+          payload: {
+            mergeStrategy: editConflict.mergeStrategy,
+            blockers: blockerTaskIds,
+            conflicts: editConflict.conflicts,
+            status: meta.status,
+            currentStage: meta.currentStage,
+            currentAgent: String(meta.currentAgent || ""),
+          },
+        });
+        await logAgentAudit(taskPath, {
+          taskId,
+          stage: stageLabel,
+          agent: this.agent,
+          event: "stage_failed",
+          status: "blocked",
+          error: conflictMessage,
+          output: {
+            mergeStrategy: editConflict.mergeStrategy,
+            blockers: blockerTaskIds,
+            conflicts: editConflict.conflicts,
+          },
+        });
+        await fs.unlink(workingFile).catch(() => undefined);
+        return false;
+      }
+
       const endedAt = nowIso();
       const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
       const errorMeta = extractProviderErrorMeta(error);
@@ -218,6 +302,7 @@ export abstract class WorkerBase {
       if (cancellationRequested) {
         await clearTaskCancelRequest(taskId);
       }
+      await releaseFileLocks(taskId).catch(() => {});
       return false;
     } finally {
       await releaseLock(lockName);

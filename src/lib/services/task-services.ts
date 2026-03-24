@@ -10,7 +10,7 @@ import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import { requestTaskCancel } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import { deliverWebhook } from "../webhooks.js";
-import type { AgentName, NewTaskInput, StageEnvelope, TaskCreationMetadata, TaskPriority, TaskSourceKind, TaskType } from "../types.js";
+import type { AgentName, NewTaskInput, StageEnvelope, TaskCreationMetadata, TaskMergeStrategy, TaskPriority, TaskSourceKind, TaskType } from "../types.js";
 import type { RollbackSummary } from "./task-rollback.js";
 
 export type ProjectSource = "explicit" | "resolved-config" | "repository";
@@ -94,6 +94,8 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
   priority?: TaskPriority;
   milestone?: string;
   parallelizable?: boolean;
+  ownershipBoundaries?: string[];
+  mergeStrategy?: TaskMergeStrategy;
 }> {
   const resolvedProject = await resolveProjectName(input.project);
   const { metadata, project: _project, ...taskInput } = input;
@@ -121,6 +123,8 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
       priority: metadata?.priority,
       milestone: metadata?.milestone,
       parallelizable: metadata?.parallelizable,
+      ownershipBoundaries: metadata?.ownershipBoundaries,
+      mergeStrategy: metadata?.mergeStrategy,
     },
   });
 
@@ -136,6 +140,8 @@ export async function createTaskService(input: Omit<NewTaskInput, "project"> & {
     priority: metadata?.priority,
     milestone: metadata?.milestone,
     parallelizable: metadata?.parallelizable,
+    ownershipBoundaries: metadata?.ownershipBoundaries,
+    mergeStrategy: metadata?.mergeStrategy,
   };
 }
 

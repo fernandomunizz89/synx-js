@@ -2,7 +2,10 @@ import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyWorkspaceEdits, resolveWorkspacePath } from "./workspace-editor.js";
+import { acquireFileLocks } from "./file-locks.js";
+import { applyWorkspaceEdits, resolveWorkspacePath, WorkspaceEditConflictError } from "./workspace-editor.js";
+
+const originalCwd = process.cwd();
 
 describe("workspace-editor (hybrid)", () => {
   let workspaceRoot = "";
@@ -13,6 +16,7 @@ describe("workspace-editor (hybrid)", () => {
   });
 
   afterEach(async () => {
+    process.chdir(originalCwd);
     if (workspaceRoot) {
       await fs.rm(workspaceRoot, { recursive: true, force: true });
     }
@@ -152,5 +156,52 @@ describe("workspace-editor (hybrid)", () => {
 
   it("throws for invalid paths", () => {
     expect(() => resolveWorkspacePath(workspaceRoot, "")).toThrow("Edit path is empty.");
+  });
+
+  it("enforces file ownership locks before writing", async () => {
+    process.chdir(workspaceRoot);
+    await fs.mkdir(path.join(workspaceRoot, ".ai-agents", "runtime"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "package.json"), JSON.stringify({ name: "workspace-editor-locks" }), "utf8");
+    await fs.mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "src", "conflict.ts"), "export const value = 1;\n", "utf8");
+
+    await acquireFileLocks("task-owner", ["src/conflict.ts"], { includeParentScopes: true });
+
+    await expect(applyWorkspaceEdits({
+      workspaceRoot,
+      taskId: "task-blocked",
+      edits: [
+        {
+          path: "src/conflict.ts",
+          action: "replace_snippet",
+          find: "value = 1",
+          replace: "value = 2",
+        },
+      ],
+    })).rejects.toBeInstanceOf(WorkspaceEditConflictError);
+  });
+
+  it("reserves directory scope so same folder edits cannot collide silently", async () => {
+    process.chdir(workspaceRoot);
+    await fs.mkdir(path.join(workspaceRoot, ".ai-agents", "runtime"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "package.json"), JSON.stringify({ name: "workspace-editor-scope-locks" }), "utf8");
+    await fs.mkdir(path.join(workspaceRoot, "src", "features"), { recursive: true });
+    await fs.writeFile(path.join(workspaceRoot, "src", "features", "one.ts"), "export const one = 1;\n", "utf8");
+    await fs.writeFile(path.join(workspaceRoot, "src", "features", "two.ts"), "export const two = 2;\n", "utf8");
+
+    await acquireFileLocks("task-owner", ["src/features/one.ts"], { includeParentScopes: true });
+
+    await expect(applyWorkspaceEdits({
+      workspaceRoot,
+      taskId: "task-blocked",
+      edits: [
+        {
+          path: "src/features/two.ts",
+          action: "replace_snippet",
+          find: "two = 2",
+          replace: "two = 3",
+        },
+      ],
+    })).rejects.toBeInstanceOf(WorkspaceEditConflictError);
   });
 });

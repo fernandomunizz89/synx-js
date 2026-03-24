@@ -155,7 +155,7 @@ SYNX BACK EXPERT – EXECUTION CONTRACT:
     if (normalizedModelOutput.notes.length) output.risks = unique([...output.risks, ...normalizedModelOutput.notes]);
 
     const gitChangedBefore = await getGitChangedFiles(workspaceRoot);
-    const applied = await applyWorkspaceEdits({ workspaceRoot, edits: output.edits });
+    const applied = await applyWorkspaceEdits({ workspaceRoot, edits: output.edits, taskId });
     const gitChangedFiles = await getGitChangedFiles(workspaceRoot);
     const effectiveChanged = unique([...applied.changedFiles, ...gitChangedFiles.filter((f) => !gitChangedBefore.includes(f))]);
 

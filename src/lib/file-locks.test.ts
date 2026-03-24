@@ -87,4 +87,29 @@ describe("lib/file-locks", () => {
     expect(after.locks).toEqual(before.locks);
     expect(after.byTask).toEqual(before.byTask);
   });
+
+  it("supports all-or-nothing acquisition to avoid partial reservations on conflicts", async () => {
+    const { acquireFileLocks, listFileLocks } = await import("./file-locks.js");
+
+    await acquireFileLocks("task-owner", ["src/shared.ts"]);
+    const result = await acquireFileLocks("task-other", ["src/shared.ts", "src/free.ts"], {
+      allOrNothing: true,
+    });
+
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.acquired).toEqual([]);
+
+    const lockMap = await listFileLocks();
+    expect(lockMap.locks["src/free.ts"]).toBeUndefined();
+  });
+
+  it("detects scope conflicts when another task owns the same directory", async () => {
+    const { acquireFileLocks } = await import("./file-locks.js");
+
+    await acquireFileLocks("task-A", ["src/features/one.ts"], { includeParentScopes: true });
+    const result = await acquireFileLocks("task-B", ["src/features/two.ts"], { includeParentScopes: true });
+
+    expect(result.conflicts.length).toBeGreaterThan(0);
+    expect(result.conflicts.some((conflict) => conflict.heldBy === "task-A")).toBe(true);
+  });
 });

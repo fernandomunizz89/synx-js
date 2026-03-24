@@ -41,6 +41,8 @@ export interface TaskSummaryDto {
   priority: number;
   milestone?: string;
   parallelizable: boolean;
+  ownershipBoundaries: string[];
+  mergeStrategy: "auto-rebase" | "manual-review";
   ready: boolean;
   childTaskIds: string[];
   projectProgress?: ProjectProgressSummary | null;

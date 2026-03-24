@@ -6,6 +6,7 @@ import type {
   NewTaskInput,
   StageEnvelope,
   TaskCreationMetadata,
+  TaskMergeStrategy,
   TaskMeta,
   TaskMetaHistoryItem,
   TaskPriority,
@@ -15,6 +16,7 @@ import { nowIso, randomId, slugify, todayDate } from "./utils.js";
 import { taskMetaSchema } from "./schema.js";
 
 const DEFAULT_TASK_PRIORITY: TaskPriority = 3;
+const DEFAULT_TASK_MERGE_STRATEGY: TaskMergeStrategy = "auto-rebase";
 
 function normalizeTaskMetaHistoryAgent(agent: string): TaskMetaHistoryItem["agent"] {
   if (agent === "System") return "Human Review";
@@ -62,6 +64,31 @@ function normalizeTaskParallelizable(value: unknown): boolean {
   return true;
 }
 
+function normalizeOwnershipBoundary(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/\/+/g, "/")
+    .replace(/\/+$/, "");
+  return normalized || undefined;
+}
+
+function normalizeOwnershipBoundaries(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const normalized = value
+    .map((item) => normalizeOwnershipBoundary(item))
+    .filter((item): item is string => Boolean(item));
+  return Array.from(new Set(normalized));
+}
+
+function normalizeTaskMergeStrategy(value: unknown): TaskMergeStrategy {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "manual-review") return "manual-review";
+  return DEFAULT_TASK_MERGE_STRATEGY;
+}
+
 function inferSourceKind(typeHint: NewTaskInput["typeHint"], parentTaskId?: string): TaskSourceKind {
   if (parentTaskId) return "project-subtask";
   return typeHint === "Project" ? "project-intake" : "standalone";
@@ -102,19 +129,23 @@ function resolveTaskRelationshipMeta(args: {
 function resolveTaskExecutionMeta(args: {
   taskId: string;
   metadata?: TaskCreationMetadata;
-}): Pick<TaskMeta, "dependsOn" | "blockedBy" | "priority" | "milestone" | "parallelizable"> {
+}): Pick<TaskMeta, "dependsOn" | "blockedBy" | "priority" | "milestone" | "parallelizable" | "ownershipBoundaries" | "mergeStrategy"> {
   const dependsOn = normalizeTaskIdList(args.metadata?.dependsOn, { excludeTaskId: args.taskId });
   const blockedBy = normalizeTaskIdList(args.metadata?.blockedBy, { excludeTaskId: args.taskId });
   const mergedBlockedBy = Array.from(new Set([...dependsOn, ...blockedBy]));
   const priority = normalizeTaskPriority(args.metadata?.priority);
   const milestone = normalizeTaskMilestone(args.metadata?.milestone);
   const parallelizable = normalizeTaskParallelizable(args.metadata?.parallelizable);
+  const ownershipBoundaries = normalizeOwnershipBoundaries(args.metadata?.ownershipBoundaries);
+  const mergeStrategy = normalizeTaskMergeStrategy(args.metadata?.mergeStrategy);
   return {
     dependsOn,
     blockedBy: mergedBlockedBy,
     priority,
     milestone,
     parallelizable,
+    ownershipBoundaries,
+    mergeStrategy,
   };
 }
 
@@ -179,6 +210,8 @@ export async function createTask(input: NewTaskInput, metadata?: TaskCreationMet
     priority: executionMeta.priority,
     milestone: executionMeta.milestone,
     parallelizable: executionMeta.parallelizable,
+    ownershipBoundaries: executionMeta.ownershipBoundaries,
+    mergeStrategy: executionMeta.mergeStrategy,
     history: [],
   };
 
@@ -211,6 +244,8 @@ export async function loadTaskMeta(taskId: string): Promise<TaskMeta> {
   const priority = normalizeTaskPriority(parsed.priority);
   const milestone = normalizeTaskMilestone(parsed.milestone);
   const parallelizable = normalizeTaskParallelizable(parsed.parallelizable);
+  const ownershipBoundaries = normalizeOwnershipBoundaries(parsed.ownershipBoundaries);
+  const mergeStrategy = normalizeTaskMergeStrategy(parsed.mergeStrategy);
 
   return {
     ...parsed,
@@ -222,6 +257,8 @@ export async function loadTaskMeta(taskId: string): Promise<TaskMeta> {
     priority,
     milestone,
     parallelizable,
+    ownershipBoundaries,
+    mergeStrategy,
     currentAgent: normalizeTaskMetaAgent(String(parsed.currentAgent || "")),
     nextAgent: normalizeTaskMetaAgent(String(parsed.nextAgent || "")),
     history: parsed.history.map((item) => ({
@@ -245,6 +282,8 @@ export async function saveTaskMeta(taskId: string, meta: TaskMeta): Promise<void
   const priority = normalizeTaskPriority(meta.priority);
   const milestone = normalizeTaskMilestone(meta.milestone);
   const parallelizable = normalizeTaskParallelizable(meta.parallelizable);
+  const ownershipBoundaries = normalizeOwnershipBoundaries(meta.ownershipBoundaries);
+  const mergeStrategy = normalizeTaskMergeStrategy(meta.mergeStrategy);
 
   meta.parentTaskId = parentTaskId;
   meta.sourceKind = sourceKind;
@@ -254,6 +293,8 @@ export async function saveTaskMeta(taskId: string, meta: TaskMeta): Promise<void
   meta.priority = priority;
   meta.milestone = milestone;
   meta.parallelizable = parallelizable;
+  meta.ownershipBoundaries = ownershipBoundaries;
+  meta.mergeStrategy = mergeStrategy;
   meta.updatedAt = nowIso();
   await writeJson(path.join(taskDir(taskId), "meta.json"), meta);
 }
