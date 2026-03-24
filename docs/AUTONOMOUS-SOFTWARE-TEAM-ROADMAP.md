@@ -471,6 +471,34 @@ Exit criteria:
 
 - external orchestrators can create projects, observe progress, approve/reprove work, and inspect artifacts safely
 
+Implementation notes (2026-03-24):
+
+- Added a versioned external control plane under `/api/v1/`:
+  - `/api/v1/agent/*` for stable machine clients
+  - `/api/v1/nemo/*` for NeMo action-style integration
+- Added authenticated external access support:
+  - optional bearer auth via `SYNX_AGENT_TOKEN`
+  - timing-safe token comparison for request validation
+- Added an external observation model:
+  - standardized observation envelopes with `needsAction`, `actionRequired`, and `nextPollMs`
+  - reusable observation builder in `src/lib/agent-api/observation.ts`
+- Added stable external API contracts:
+  - OpenAI-compatible tool definitions
+  - generated OpenAPI spec endpoint (`/api/v1/agent/openapi.json`)
+  - NeMo action listing and Colang sample generation
+- Added project graph API:
+  - `/api/v1/agent/projects/:projectId/graph` for dependency and parent/child graph snapshots
+- Added webhook/event contracts for external orchestration:
+  - `/api/v1/agent/contracts/webhooks`
+  - `/api/v1/agent/contracts/events`
+  - `/api/v1/agent/events/recent` for recent runtime event polling
+- Added UI hardening for external/browser agents:
+  - `data-testid` attributes on key controls and dynamic task/review actions
+  - ARIA labels/live regions for task and review surfaces
+  - control-plane status meta tags (`meta-task-count`, `meta-status`)
+- Added external skill documentation:
+  - `skills/synx/SKILL.md`
+
 ## Recommended Build Order
 
 If you want the highest leverage path, build in this order:

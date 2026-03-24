@@ -169,4 +169,25 @@ describe("lib/ui/web-app", () => {
     expect(html).toContain("/api/runtime/");
     expect(html).toContain("/api/command");
   });
+
+  it("Phase 8 — exposes stable test ids, ARIA hooks, and meta telemetry tags", () => {
+    const html = buildWebUiHtml();
+    expect(html).toContain('id="meta-task-count"');
+    expect(html).toContain('id="meta-status"');
+    expect(html).toContain('data-testid="task-prompt-input"');
+    expect(html).toContain('data-testid="task-prompt-submit"');
+    expect(html).toContain('data-testid="task-list-body"');
+    expect(html).toContain('data-testid="review-queue-list"');
+    expect(html).toContain('data-testid="newtask-title-input"');
+    expect(html).toContain('data-testid="newtask-description-input"');
+    expect(html).toContain('data-testid="newtask-type-select"');
+    expect(html).toContain('data-testid="newtask-submit-button"');
+    expect(html).toContain('data-testid="reprove-reason-input"');
+    expect(html).toContain('data-testid="reprove-submit-button"');
+    expect(html).toContain('aria-label="Task board"');
+    expect(html).toContain('aria-label="Send back for revision"');
+    expect(html).toContain('aria-label="Create new task"');
+    expect(html).toContain('aria-label="Review queue"');
+    expect(html).toContain('aria-label="Recent tasks"');
+  });
 });

@@ -23,6 +23,7 @@ import { configDir, globalConfigPath, taskDir } from "../paths.js";
 import { loadGlobalConfig, loadLocalProjectConfig, loadResolvedProjectConfig } from "../config.js";
 import { globalConfigSchema, localProjectConfigSchema } from "../schema.js";
 import { checkProviderHealth, discoverProviderModels } from "../provider-health.js";
+import { handleAgentApiRequest } from "./agent-api.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -155,6 +156,14 @@ export function createUiRequestHandler(options: {
       if (method === "GET" && (pathname === "/" || pathname === "/index.html")) {
         sendHtml(res, 200, options.html);
         return;
+      }
+
+      if (pathname.startsWith("/api/v1/")) {
+        const handled = await handleAgentApiRequest(req, res, pathname, method, {
+          enableMutations: options.enableMutations,
+          bearerToken: process.env["SYNX_AGENT_TOKEN"] || undefined,
+        });
+        if (handled) return;
       }
 
       if (method === "GET" && pathname === "/api/health") {
