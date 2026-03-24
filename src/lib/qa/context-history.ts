@@ -14,10 +14,12 @@ import {
   type QaReturnContextItem,
 } from "./context-utils.js";
 
+export type QaFollowupAgent = "Human Review" | "Synx Release Manager" | QaRemediationAgent;
+
 export interface QaReturnHistoryEntry {
   attempt: number;
   returnedAt: string;
-  returnedTo: "Human Review" | QaRemediationAgent;
+  returnedTo: QaFollowupAgent;
   summary: string;
   failures: string[];
   findings: QaReturnContextItem[];
@@ -35,7 +37,7 @@ export interface QaCumulativeFinding extends QaReturnContextItem {
 export interface QaHandoffContext {
   attempt: number;
   maxRetries: number;
-  returnedTo: "Human Review" | QaRemediationAgent;
+  returnedTo: QaFollowupAgent;
   summary: string;
   latestFindings: QaReturnContextItem[];
   cumulativeFindings: QaCumulativeFinding[];
@@ -65,7 +67,7 @@ export function normalizeQaReturnHistoryEntries(value: unknown): QaReturnHistory
     const attemptRaw = raw.attempt;
     const attempt = typeof attemptRaw === "number" && Number.isFinite(attemptRaw) ? Math.floor(attemptRaw) : 0;
     const returnedTo = asText(raw.returnedTo);
-    if (attempt < 1 || (returnedTo !== "Human Review" && !isQaRemediationAgent(returnedTo))) continue;
+    if (attempt < 1 || (returnedTo !== "Human Review" && returnedTo !== "Synx Release Manager" && !isQaRemediationAgent(returnedTo))) continue;
 
     normalized.push({
       attempt,
@@ -248,7 +250,7 @@ export function extractQaHandoffContext(previousStage: unknown): QaHandoffContex
   const maxRetries = typeof maxRetriesRaw === "number" && Number.isFinite(maxRetriesRaw) ? Math.floor(maxRetriesRaw) : 0;
   const returnedToRaw = asText(raw.returnedTo);
   if (attempt < 1 || maxRetries < 1) return null;
-  if (returnedToRaw !== "Human Review" && !isQaRemediationAgent(returnedToRaw)) return null;
+  if (returnedToRaw !== "Human Review" && returnedToRaw !== "Synx Release Manager" && !isQaRemediationAgent(returnedToRaw)) return null;
 
   const latestFindings = compactQaReturnContextItems(normalizeQaReturnContextItems(raw.latestFindings));
   const history = compactQaReturnHistoryEntries(normalizeQaReturnHistoryEntries(raw.history));

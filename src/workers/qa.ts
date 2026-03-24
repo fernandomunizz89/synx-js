@@ -1239,7 +1239,7 @@ MANDATORY VALIDATION CONTRACT:
 - Explicitly fill filesReviewed, validationMode, technicalRiskSummary, recommendedChecks, manualValidationNeeded, and residualRisks.
 - Do not claim full certainty unless checks were truly executed.
 - If part of the conclusion is static analysis only, state it in residualRisks/manualValidationNeeded.
-- If verdict is "pass", set "nextAgent" to "Human Review".
+- If verdict is "pass", set "nextAgent" to "Synx Release Manager".
 - This QA attempt is ${currentQaAttempt} of max ${maxQaRetriesHint} before forced human escalation.
 - Keep failures specific and actionable.
 `;
@@ -1258,7 +1258,7 @@ MANDATORY VALIDATION CONTRACT:
       systemPrompt,
       input: modelInput,
       expectedJsonSchemaDescription:
-        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "Human Review | Synx Front Expert | Synx Back Expert" }',
+        '{ "mainScenarios": ["string"], "acceptanceChecklist": ["string"], "testCases": [{ "id": "string", "title": "string", "type": "functional | regression | integration | e2e | unit | config", "steps": ["string"], "expectedResult": "string", "actualResult": "string", "status": "pass | fail | blocked", "evidence": ["string"] }], "failures": ["string"], "verdict": "pass | fail", "e2ePlan": ["string"], "changedFiles": ["string"], "filesReviewed": ["string"], "validationMode": "static_review | executed_checks | mixed", "technicalRiskSummary": { "buildRisk": "low | medium | high | unknown", "syntaxRisk": "low | medium | high | unknown", "importExportRisk": "low | medium | high | unknown", "referenceRisk": "low | medium | high | unknown", "logicRisk": "low | medium | high | unknown", "regressionRisk": "low | medium | high | unknown" }, "recommendedChecks": ["string"], "manualValidationNeeded": ["string"], "residualRisks": ["string"], "executedChecks": [{ "command": "string", "status": "passed | failed | skipped", "exitCode": 0, "timedOut": false, "durationMs": 0, "stdoutPreview": "string", "stderrPreview": "string", "diagnostics": ["string"], "qaConfigNotes": ["string"], "artifacts": ["string"] }], "returnContext": [{ "issue": "string", "expectedResult": "string", "receivedResult": "string", "evidence": ["string"], "recommendedAction": "string" }], "nextAgent": "Synx Release Manager | Synx Front Expert | Synx Back Expert" }',
     });
     const output = qaOutputSchema.parse(result.parsed);
     output.changedFiles = unique([...output.changedFiles, ...changedFiles]);
@@ -1300,7 +1300,7 @@ MANDATORY VALIDATION CONTRACT:
       config: retryConfig,
     });
 
-    const finalNextAgent: AgentName = output.verdict === "pass" ? "Human Review" : remediationAgent;
+    const finalNextAgent: AgentName = output.verdict === "pass" ? "Synx Release Manager" : remediationAgent;
     output.nextAgent = finalNextAgent;
     const escalatedToHuman = output.verdict === "fail" && currentQaAttempt >= maxQaRetries;
     if (escalatedToHuman) {
@@ -1465,8 +1465,16 @@ MANDATORY VALIDATION CONTRACT:
     output.qaHandoffContext = qaHandoffContext;
 
     const queuedNextAgent = escalatedToHuman ? undefined : output.nextAgent;
-    const queuedNextStage = "builder";
-    const queuedNextRequestFileName = STAGE_FILE_NAMES.synxFrontExpert;
+    const queuedRouteMap: Record<string, { stage: string; requestFile: string }> = {
+      "Synx Front Expert": { stage: "synx-front-expert", requestFile: STAGE_FILE_NAMES.synxFrontExpert },
+      "Synx Mobile Expert": { stage: "synx-mobile-expert", requestFile: STAGE_FILE_NAMES.synxMobileExpert },
+      "Synx Back Expert": { stage: "synx-back-expert", requestFile: STAGE_FILE_NAMES.synxBackExpert },
+      "Synx SEO Specialist": { stage: "synx-seo-specialist", requestFile: STAGE_FILE_NAMES.synxSeoSpecialist },
+      "Synx Release Manager": { stage: "synx-release-manager", requestFile: STAGE_FILE_NAMES.synxReleaseManager },
+    };
+    const queuedRoute = queuedNextAgent ? queuedRouteMap[queuedNextAgent] : undefined;
+    const queuedNextStage = queuedRoute?.stage;
+    const queuedNextRequestFileName = queuedRoute?.requestFile;
     const nextInputRef = `done/${DONE_FILE_NAMES.synxQaEngineer}`;
 
     const view = `# HANDOFF
@@ -1561,8 +1569,8 @@ ${escalatedToHuman ? "Human Review" : output.nextAgent}
       viewContent: view,
       output,
       nextAgent: queuedNextAgent,
-      nextStage: queuedNextAgent ? queuedNextStage : undefined,
-      nextRequestFileName: queuedNextAgent ? queuedNextRequestFileName : undefined,
+      nextStage: queuedNextStage,
+      nextRequestFileName: queuedNextRequestFileName,
       nextInputRef,
       humanApprovalRequired: escalatedToHuman,
       startedAt,

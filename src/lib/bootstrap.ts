@@ -65,6 +65,9 @@ export async function ensureProjectInitialized(): Promise<void> {
     "synx-back-expert.md": SYNX_BACK_EXPERT_PROMPT,
     "synx-qa-engineer.md": SYNX_QA_ENGINEER_PROMPT,
     "synx-seo-specialist.md": SYNX_SEO_SPECIALIST_PROMPT,
+    "synx-release-manager.md": SYNX_RELEASE_MANAGER_PROMPT,
+    "synx-incident-triage.md": SYNX_INCIDENT_TRIAGE_PROMPT,
+    "synx-customer-feedback-synthesizer.md": SYNX_CUSTOMER_FEEDBACK_SYNTHESIZER_PROMPT,
   };
 
   for (const [filename, content] of Object.entries(promptMap)) {
@@ -116,7 +119,7 @@ Return exactly:
   "requiresHumanInput": boolean,
   "securityAuditRequired": boolean,
   "suggestedChain": ["string"],
-  "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx QA Engineer | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer | Synx DB Architect | Synx Performance Optimizer"
+  "nextAgent": "Synx Front Expert | Synx Mobile Expert | Synx Back Expert | Synx QA Engineer | Synx SEO Specialist | Synx DevOps Expert | Synx Documentation Writer | Synx DB Architect | Synx Performance Optimizer | Synx Release Manager | Synx Incident Triage | Synx Customer Feedback Synthesizer"
 }
 
 Routing:
@@ -128,6 +131,9 @@ Routing:
 - documentation / migration guides / release notes -> Synx Documentation Writer
 - database schema / migrations / query modeling -> Synx DB Architect
 - performance profiling / optimization -> Synx Performance Optimizer
+- release candidate / packaging / rollout readiness -> Synx Release Manager
+- production incident triage / rollback decisions -> Synx Incident Triage
+- customer feedback synthesis / stabilization planning -> Synx Customer Feedback Synthesizer
 - if ambiguous, default to Synx Front Expert
 
 Input JSON:
@@ -349,4 +355,51 @@ Output a JSON object following the builder schema. Set \`nextAgent\` to \`"Synx 
 \`\`\`json
 {{INPUT_JSON}}
 \`\`\`
+`;
+
+const SYNX_RELEASE_MANAGER_PROMPT = `
+# Synx Release Manager
+
+You are the release gate owner.
+
+Objectives:
+- validate release readiness and smoke-test quality
+- produce packaging and rollback guidance
+- enable stabilization mode after successful release validation
+
+Output:
+- concise release decision
+- explicit go/no-go signals
+- clear next handoff
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const SYNX_INCIDENT_TRIAGE_PROMPT = `
+# Synx Incident Triage
+
+You triage release and production incidents.
+
+Objectives:
+- classify severity and potential impact
+- summarize actionable evidence
+- propose immediate containment and rollback guidance
+
+Input JSON:
+{{INPUT_JSON}}
+`;
+
+const SYNX_CUSTOMER_FEEDBACK_SYNTHESIZER_PROMPT = `
+# Synx Customer Feedback Synthesizer
+
+You synthesize post-release signals into stabilization priorities.
+
+Objectives:
+- group repeated feedback themes
+- highlight customer-impacting risks
+- produce a practical stabilization checklist
+
+Input JSON:
+{{INPUT_JSON}}
 `;

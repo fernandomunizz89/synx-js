@@ -8,6 +8,8 @@ The system:
 - creates tasks and moves them through stages automatically
 - routes tasks to the right domain expert (Front, Mobile, Back, SEO Specialist)
 - validates results via the QA Engineer (Playwright E2E + Vitest unit)
+- runs a release candidate gate (readiness, smoke checks, packaging, rollback hints)
+- feeds release incidents and post-release signals back into stabilization planning
 - stops at the final human approval step
 - logs how long every stage took
 - can recover unfinished work after interruptions
@@ -51,7 +53,7 @@ synx setup
 
 When running in an interactive terminal, `start` also shows a live progress panel:
 - SYNX cyber logo + tagline
-- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Expert] ➔ [QA Engineer]`
+- control-flow diagram: `[SYNX] ➔ [Dispatcher] ➔ [Expert] ➔ [QA Engineer] ➔ [Release Manager] ➔ [Feedback Synthesizer]`
 - double-line cards for control/config/task states
 - `USER INPUT` card (boxed prompt with visible cursor indicator)
 - inline event stream card (clean runtime updates without terminal pollution)
@@ -116,9 +118,9 @@ Supported task types:
 - `Mixed`
 
 Routing summary:
-- **Bug tasks:** `Dispatcher → Bug Investigator → Synx QA Engineer → Human Review`
-- **Simple/clear tasks:** `Dispatcher → Expert → Synx QA Engineer → Human Review`
-- **Complex/ambiguous tasks:** `Dispatcher → Spec Planner (targetExpert hint) → Expert → Synx QA Engineer → Human Review`
+- **Bug tasks:** `Dispatcher → Expert → Synx QA Engineer` (fails loop back to remediation expert)
+- **QA pass path:** `Synx QA Engineer → Synx Release Manager → Synx Customer Feedback Synthesizer → Human Review`
+- **Release-blocked path:** `Synx Release Manager → Synx Incident Triage → Synx Customer Feedback Synthesizer → Human Review`
 
 Expert Squad:
 - `Synx Front Expert` – Next.js App Router, TailwindCSS, WCAG 2.1
@@ -126,6 +128,9 @@ Expert Squad:
 - `Synx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
 - `Synx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API, Lighthouse ≥ 90
 - `Synx QA Engineer` – Playwright E2E + Vitest unit; auto-routes failures to originating expert
+- `Synx Release Manager` – release candidate flow, readiness gates, smoke checks, rollback workflow
+- `Synx Incident Triage` – production/release issue intake with severity and containment actions
+- `Synx Customer Feedback Synthesizer` – post-release feedback synthesis + stabilization checklist
 
 QA failure behavior:
 - QA failure context is cumulative across retries

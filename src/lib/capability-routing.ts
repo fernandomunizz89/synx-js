@@ -204,6 +204,51 @@ const BUILTIN_TARGETS: CapabilityTarget[] = [
       preferredVerificationModes: ["performance_checks", "integration_tests", "e2e_tests"],
     },
   },
+  {
+    agentId: "synx-release-manager",
+    agentName: "Synx Release Manager",
+    source: "built-in",
+    stage: "synx-release-manager",
+    requestFileName: STAGE_FILE_NAMES.synxReleaseManager,
+    capabilities: {
+      domain: ["release", "delivery", "packaging", "smoke-test", "rollback", "production-readiness"],
+      frameworks: ["Docker", "CI/CD", "GitHub Actions"],
+      languages: ["TypeScript", "JavaScript", "YAML", "Shell"],
+      taskTypes: ["Feature", "Bug", "Refactor", "Mixed", "Project"],
+      riskProfile: "high",
+      preferredVerificationModes: ["integration_tests", "performance_checks", "manual_review"],
+    },
+  },
+  {
+    agentId: "synx-incident-triage",
+    agentName: "Synx Incident Triage",
+    source: "built-in",
+    stage: "synx-incident-triage",
+    requestFileName: STAGE_FILE_NAMES.synxIncidentTriage,
+    capabilities: {
+      domain: ["incident", "outage", "triage", "rollback", "containment"],
+      frameworks: ["SRE", "Incident Response"],
+      languages: ["TypeScript", "JavaScript", "Markdown"],
+      taskTypes: ["Bug", "Research", "Mixed", "Project"],
+      riskProfile: "high",
+      preferredVerificationModes: ["manual_review", "integration_tests", "security_checks"],
+    },
+  },
+  {
+    agentId: "synx-customer-feedback-synthesizer",
+    agentName: "Synx Customer Feedback Synthesizer",
+    source: "built-in",
+    stage: "synx-customer-feedback-synthesizer",
+    requestFileName: STAGE_FILE_NAMES.synxFeedbackSynth,
+    capabilities: {
+      domain: ["feedback", "post-release", "stabilization", "customer-impact"],
+      frameworks: ["Product Analytics", "Support Triage"],
+      languages: ["TypeScript", "JavaScript", "Markdown"],
+      taskTypes: ["Research", "Documentation", "Mixed", "Project"],
+      riskProfile: "medium",
+      preferredVerificationModes: ["manual_review", "static_review"],
+    },
+  },
 ];
 
 const KNOWN_TASK_TYPES = new Set<TaskType>([

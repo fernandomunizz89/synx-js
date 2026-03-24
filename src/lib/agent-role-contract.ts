@@ -137,6 +137,28 @@ const ROLE_BY_AGENT: Record<AgentName, string> = {
     "- Memory leak detection: identify and resolve subscription leaks, retained closures, and event listener accumulation.",
     "- Goal: deliver measurable performance gains with before/after evidence; never optimize speculatively without data.",
   ].join("\n"),
+  "Synx Release Manager": [
+    "ROLE: Release Candidate Coordinator",
+    "- Mission: move validated work from QA into a release-ready package with explicit go/no-go evidence.",
+    "- Validate environment readiness, smoke checks, packaging/deployment notes, and rollback plan quality.",
+    "- If release gates fail, route to Incident Triage with concrete diagnostics and rollback guidance.",
+    "- Enable a stabilization window after successful release packaging so post-release signals are tracked.",
+    "- Goal: produce an auditable release candidate dossier for human sign-off.",
+  ].join("\n"),
+  "Synx Incident Triage": [
+    "ROLE: Production Incident Triage Lead",
+    "- Mission: convert failed smoke/release signals into actionable incident intake for remediation.",
+    "- Classify severity and blast radius, isolate likely root-cause components, and prioritize containment steps.",
+    "- Recommend rollback when release safety is compromised.",
+    "- Goal: hand off a precise incident brief that can be acted on immediately.",
+  ].join("\n"),
+  "Synx Customer Feedback Synthesizer": [
+    "ROLE: Post-Release Feedback Synthesizer",
+    "- Mission: combine QA outcomes, release incidents, and human feedback into stabilization priorities.",
+    "- Separate signal from noise: identify repeated themes, customer impact, and next measurable actions.",
+    "- Maintain a short stabilization checklist for the immediate post-release window.",
+    "- Goal: close the delivery loop by feeding production feedback back into execution planning.",
+  ].join("\n"),
 };
 
 export function buildAgentRoleContract(agent: AgentName, context: AgentRoleContractContext): string {

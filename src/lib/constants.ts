@@ -31,6 +31,10 @@ export const STAGE_FILE_NAMES = {
   synxDbArchitect:       "04-synx-db-architect.request.json",
   // Phase 2.6
   synxPerfOptimizer:     "04-synx-performance-optimizer.request.json",
+  // Phase 6
+  synxReleaseManager:    "09-synx-release-manager.request.json",
+  synxIncidentTriage:    "10-synx-incident-triage.request.json",
+  synxFeedbackSynth:     "11-synx-customer-feedback-synthesizer.request.json",
 };
 
 export const DONE_FILE_NAMES = {
@@ -51,6 +55,10 @@ export const DONE_FILE_NAMES = {
   synxDbArchitect:       "04-synx-db-architect.done.json",
   // Phase 2.6
   synxPerfOptimizer:     "04-synx-performance-optimizer.done.json",
+  // Phase 6
+  synxReleaseManager:    "09-synx-release-manager.done.json",
+  synxIncidentTriage:    "10-synx-incident-triage.done.json",
+  synxFeedbackSynth:     "11-synx-customer-feedback-synthesizer.done.json",
 };
 
 export const REQUIRED_PROMPT_FILES = [

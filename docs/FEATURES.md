@@ -28,11 +28,15 @@
 - **Synx Back Expert:** NestJS/Fastify, Prisma ORM, strict TypeScript, Vitest integration tests with mock injection.
 - **Synx SEO Specialist:** Core Web Vitals (LCP/INP/CLS), JSON-LD Schema.org, Next.js Metadata API (`generateMetadata`), Lighthouse ≥ 90/90/90/95, robots.txt / sitemap.xml audits.
 - **Synx QA Engineer:** Playwright (E2E) + Vitest (unit); produces structured verdicts with `issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction` per finding; auto-routes failures back to the originating expert.
+- **Synx Release Manager:** Builds release-candidate dossier with readiness checks, smoke checks, packaging guidance, rollback plan, and stabilization mode activation.
+- **Synx Incident Triage:** Converts release-blocking failures into structured incident intake with severity, suspected components, and immediate containment actions.
+- **Synx Customer Feedback Synthesizer:** Aggregates release/incident/QA signals into post-release themes, stabilization checklist, and follow-up task suggestions.
 
 ## QA & Quality Gates
 
 - QA failure context is cumulative across retries (previous findings carried forward).
 - QA retry loop capped at 3 (default). Exceeded cap → `waiting_human` escalation.
+- QA pass handoff routes to `Synx Release Manager` before final human sign-off.
 - Root-cause intelligence: QA surfaced hints map to source files and git-changed files.
 - Post-edit sanity checks after every expert stage (lint, TypeScript compile, build).
 - E2E enforcement for `Feature`, `Bug`, `Refactor`, `Mixed` tasks. `Research` and `Documentation` tasks skip E2E questions automatically.
@@ -46,6 +50,15 @@
 - Interrupted task requeue logic.
 - Task cancellation (graceful, mid-stage).
 - `doctor`, `resume`, `fix` for full repair coverage.
+
+## MVP-to-Production Delivery Loop (Phase 6)
+
+- Release candidate flow after QA pass: `Synx QA Engineer -> Synx Release Manager`.
+- Environment readiness checks are re-run during release candidate gating.
+- Preview/deployment packaging guidance is generated from workspace signals (Docker/build/source bundle strategy).
+- Smoke checks and rollback hints are recorded in `artifacts/release-candidate.json`.
+- If release gates fail, the flow routes to `Synx Incident Triage` and stores `artifacts/production-incident-intake.json`.
+- Post-release synthesis writes `artifacts/customer-feedback-summary.json` and updates runtime stabilization state in `.ai-agents/runtime/release-state.json`.
 
 ## Research (On-demand)
 

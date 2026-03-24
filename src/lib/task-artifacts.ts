@@ -16,6 +16,10 @@ export const ARTIFACT_FILES = {
   researchLog: "research-log.json",
   researchContext: "research-context.json",
   agentConsultationLog: "agent-consultation-log.json",
+  // Phase 6
+  releaseCandidate: "release-candidate.json",
+  productionIncidentIntake: "production-incident-intake.json",
+  customerFeedbackSummary: "customer-feedback-summary.json",
 } as const;
 
 function artifactPath(taskId: string, fileName: string): string {
