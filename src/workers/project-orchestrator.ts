@@ -34,6 +34,37 @@ const orchestratorOutputSchema = z.object({
 
 type OrchestratorOutput = z.infer<typeof orchestratorOutputSchema>;
 
+const projectBriefSchema = z.object({
+  problemStatement: z.string().min(1),
+  targetUsers: z.array(z.string().min(1)).min(1),
+  productGoals: z.array(z.string().min(1)).min(1),
+  inScope: z.array(z.string().min(1)).min(1),
+  outOfScope: z.array(z.string().min(1)).default([]),
+  assumptions: z.array(z.string().min(1)).default([]),
+  unknowns: z.array(z.string().min(1)).default([]),
+});
+
+const milestonePlanItemSchema = z.object({
+  milestone: z.string().min(1).max(120),
+  objective: z.string().min(1),
+  deliverables: z.array(z.string().min(1)).min(1),
+});
+
+const clarificationSchema = z.object({
+  required: z.boolean().default(false),
+  rationale: z.string().optional(),
+  questions: z.array(z.string().min(1)).default([]),
+});
+
+const prebuildPlanningSchema = z.object({
+  projectBrief: projectBriefSchema,
+  acceptanceCriteria: z.array(z.string().min(1)).min(1),
+  milestonePlan: z.array(milestonePlanItemSchema).min(1),
+  clarification: clarificationSchema,
+});
+
+type PrebuildPlanning = z.infer<typeof prebuildPlanningSchema>;
+
 function normalizeKey(value: string): string {
   return String(value || "")
     .trim()
@@ -50,7 +81,62 @@ function normalizeTaskKey(value: string | undefined, fallbackLabel: string, inde
   return `task-${index + 1}`;
 }
 
-function buildSystemPrompt(input: NewTaskInput): string {
+function buildPlanningSystemPrompt(input: NewTaskInput): string {
+  return `You are the pre-build planning squad for SYNX.
+
+You must collaborate as these roles before implementation starts:
+- Product Strategist
+- Requirements Analyst / PRD Writer
+- UX Flow Designer
+- Solution Architect
+- Delivery Planner
+
+Your goal is to transform a vague or high-level request into a build-ready plan.
+
+Output must include:
+1) projectBrief: product framing and scope boundaries
+2) acceptanceCriteria: testable acceptance criteria
+3) milestonePlan: MVP-first milestones, then later iterations
+4) clarification: whether human clarification is needed before implementation
+
+Rules:
+- Keep the plan implementation-oriented and specific.
+- Favor MVP scope when uncertain.
+- Surface assumptions and unknowns explicitly.
+- If requirements are underspecified, set clarification.required = true and provide focused questions.
+
+Project request:
+Title: ${input.title}
+Description: ${input.rawRequest}
+
+Respond with a JSON object matching this schema exactly:
+{
+  "projectBrief": {
+    "problemStatement": "string",
+    "targetUsers": ["string"],
+    "productGoals": ["string"],
+    "inScope": ["string"],
+    "outOfScope": ["string"],
+    "assumptions": ["string"],
+    "unknowns": ["string"]
+  },
+  "acceptanceCriteria": ["string"],
+  "milestonePlan": [
+    {
+      "milestone": "string",
+      "objective": "string",
+      "deliverables": ["string"]
+    }
+  ],
+  "clarification": {
+    "required": false,
+    "rationale": "string",
+    "questions": ["string"]
+  }
+}`;
+}
+
+function buildDecompositionSystemPrompt(input: NewTaskInput, planning: PrebuildPlanning): string {
   return `You are the Project Orchestrator for SYNX, a multi-agent software development system.
 
 Your job is to receive a high-level project or feature request and decompose it into a concrete execution plan of subtasks for specialized agents.
@@ -76,6 +162,20 @@ Rules for decomposition:
 Project request:
 Title: ${input.title}
 Description: ${input.rawRequest}
+
+Pre-build planning context:
+Project brief:
+${JSON.stringify(planning.projectBrief, null, 2)}
+
+Acceptance criteria:
+${planning.acceptanceCriteria.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+
+Milestone plan:
+${planning.milestonePlan.map((item, index) => `${index + 1}. ${item.milestone}: ${item.objective} | Deliverables: ${item.deliverables.join("; ")}`).join("\n")}
+
+Clarification request:
+Required: ${planning.clarification.required ? "yes" : "no"}
+${planning.clarification.rationale ? `Rationale: ${planning.clarification.rationale}\n` : ""}${planning.clarification.questions.length ? `Questions:\n${planning.clarification.questions.map((q, index) => `${index + 1}. ${q}`).join("\n")}` : "Questions: none"}
 
 Respond with a JSON object matching this schema exactly:
 {
@@ -114,7 +214,50 @@ export class ProjectOrchestrator extends WorkerBase {
     await logTaskEvent(taskDir(taskId), `Project Orchestrator: analysing request "${input.title}"...`);
     await logDaemon(`ProjectOrchestrator: decomposing task ${taskId}`);
 
-    const systemPrompt = buildSystemPrompt(input);
+    const planningPrompt = buildPlanningSystemPrompt(input);
+    const planningResult = await provider.generateStructured({
+      agent: ORCHESTRATOR_AGENT,
+      taskId,
+      stage: request.stage,
+      taskType: input.typeHint,
+      systemPrompt: planningPrompt,
+      input,
+      expectedJsonSchemaDescription:
+        '{ "projectBrief": { "problemStatement": "string", "targetUsers": ["string"], "productGoals": ["string"], "inScope": ["string"], "outOfScope": ["string"], "assumptions": ["string"], "unknowns": ["string"] }, "acceptanceCriteria": ["string"], "milestonePlan": [{ "milestone": "string", "objective": "string", "deliverables": ["string"] }], "clarification": { "required": "boolean", "rationale": "string?", "questions": ["string"] } }',
+    });
+    const planning = prebuildPlanningSchema.parse(planningResult.parsed) as PrebuildPlanning;
+
+    await saveTaskArtifact(taskId, ARTIFACT_FILES.projectBrief, {
+      projectTaskId: taskId,
+      rootProjectId,
+      createdAt: nowIso(),
+      ...planning.projectBrief,
+    });
+    await saveTaskArtifact(taskId, ARTIFACT_FILES.acceptanceCriteria, {
+      projectTaskId: taskId,
+      rootProjectId,
+      createdAt: nowIso(),
+      acceptanceCriteria: planning.acceptanceCriteria,
+    });
+    await saveTaskArtifact(taskId, ARTIFACT_FILES.milestonePlan, {
+      projectTaskId: taskId,
+      rootProjectId,
+      createdAt: nowIso(),
+      milestones: planning.milestonePlan,
+    });
+    if (planning.clarification.required || planning.clarification.questions.length > 0) {
+      await saveTaskArtifact(taskId, ARTIFACT_FILES.clarificationRequest, {
+        projectTaskId: taskId,
+        rootProjectId,
+        createdAt: nowIso(),
+        required: planning.clarification.required,
+        rationale: planning.clarification.rationale,
+        questions: planning.clarification.questions,
+      });
+      await logTaskEvent(taskDir(taskId), "Project Orchestrator: clarification questions were generated for this project.");
+    }
+
+    const systemPrompt = buildDecompositionSystemPrompt(input, planning);
 
     const result = await provider.generateStructured({
       agent: ORCHESTRATOR_AGENT,
@@ -169,6 +312,8 @@ export class ProjectOrchestrator extends WorkerBase {
             `Priority: ${subtask.priority}`,
             `Parallelizable: ${subtask.parallelizable ? "yes" : "no"}`,
             ...(subtask.milestone ? [`Milestone: ${subtask.milestone}`] : []),
+            `Acceptance criteria: ${planning.acceptanceCriteria.slice(0, 5).join(" | ")}`,
+            "Planning artifacts available: project-brief.json, acceptance-criteria.json, milestone-plan.json",
             `Subtask ${index + 1} of ${output.tasks.length}`,
           ],
           qaPreferences: {
@@ -248,6 +393,18 @@ export class ProjectOrchestrator extends WorkerBase {
         "",
         output.projectSummary,
         "",
+        "## Pre-build planning artifacts",
+        "- project-brief.json",
+        "- acceptance-criteria.json",
+        "- milestone-plan.json",
+        ...(planning.clarification.required || planning.clarification.questions.length
+          ? ["- clarification-request.json"]
+          : []),
+        "",
+        planning.clarification.required
+          ? `Clarification required before implementation confidence is high. Questions: ${planning.clarification.questions.length}`
+          : "No clarification required by planning loop.",
+        "",
         "## Subtasks created",
         ...keyedTasks.map((t, i) => {
           const dependencyKeys = t.dependsOn.length ? t.dependsOn.join(", ") : "none";
@@ -265,6 +422,7 @@ export class ProjectOrchestrator extends WorkerBase {
             .filter((dependencyTaskId): dependencyTaskId is string => Boolean(dependencyTaskId)),
         })),
         rootProjectId,
+        prebuildPlanning: planning,
         createdTaskIds: createdIds,
       },
       // No nextAgent — intake stays open for project tracking while subtasks execute.
