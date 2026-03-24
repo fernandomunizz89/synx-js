@@ -119,6 +119,9 @@ const KNOWN_AGENT_ROUTES: Record<string, { stage: string; requestFileName: strin
   "Synx Documentation Writer": { stage: "synx-docs-writer", requestFileName: STAGE_FILE_NAMES.synxDocsWriter },
   "Synx DB Architect": { stage: "synx-db-architect", requestFileName: STAGE_FILE_NAMES.synxDbArchitect },
   "Synx Performance Optimizer": { stage: "synx-performance-optimizer", requestFileName: STAGE_FILE_NAMES.synxPerfOptimizer },
+  "Synx Release Manager": { stage: "synx-release-manager", requestFileName: STAGE_FILE_NAMES.synxReleaseManager },
+  "Synx Incident Triage": { stage: "synx-incident-triage", requestFileName: STAGE_FILE_NAMES.synxIncidentTriage },
+  "Synx Customer Feedback Synthesizer": { stage: "synx-customer-feedback-synthesizer", requestFileName: STAGE_FILE_NAMES.synxFeedbackSynth },
   "Dispatcher": { stage: "dispatcher", requestFileName: STAGE_FILE_NAMES.dispatcher },
 };
 

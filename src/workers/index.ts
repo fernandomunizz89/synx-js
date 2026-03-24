@@ -10,6 +10,9 @@ import { SynxSecurityAuditor } from "./experts/synx-security-auditor.js";
 import { SynxDocsWriter } from "./experts/synx-docs-writer.js";
 import { SynxDbArchitect } from "./experts/synx-db-architect.js";
 import { SynxPerformanceOptimizer } from "./experts/synx-performance-optimizer.js";
+import { SynxReleaseManager } from "./experts/synx-release-manager.js";
+import { SynxIncidentTriage } from "./experts/synx-incident-triage.js";
+import { SynxCustomerFeedbackSynthesizer } from "./experts/synx-customer-feedback-synthesizer.js";
 import { GenericAgent } from "./generic-agent.js";
 import { PipelineExecutor } from "./pipeline-executor.js";
 import { ProjectOrchestrator } from "./project-orchestrator.js";
@@ -30,6 +33,9 @@ export const workers = {
   docsWriter: new SynxDocsWriter(),
   dbArchitect: new SynxDbArchitect(),
   perfOptimizer: new SynxPerformanceOptimizer(),
+  releaseManager: new SynxReleaseManager(),
+  incidentTriage: new SynxIncidentTriage(),
+  customerFeedbackSynthesizer: new SynxCustomerFeedbackSynthesizer(),
   pipelineExecutor: new PipelineExecutor(),
 };
 

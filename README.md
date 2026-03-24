@@ -23,6 +23,9 @@ Expert Squad:
 - `Synx Back Expert` – NestJS/Fastify, Prisma ORM, Strict TypeScript
 - `Synx SEO Specialist` – Core Web Vitals, JSON-LD, Next.js Metadata API
 - `Synx QA Engineer` – Playwright E2E + Vitest; auto-routes failures back to the originating expert
+- `Synx Release Manager` – release candidate gating, packaging, smoke checks, rollback planning
+- `Synx Incident Triage` – release/production incident intake and containment guidance
+- `Synx Customer Feedback Synthesizer` – post-release signal synthesis and stabilization checklist
 
 
 **Key architectural points:**
@@ -50,7 +53,8 @@ The pipeline is file-driven: every stage writes a JSON handoff to `.ai-agents/ta
 ## ✨ Features
 
 - **Domain Expert Squad:** Specialized agents for web (Next.js), mobile (Expo/RN), backend (NestJS/Fastify), and SEO (Core Web Vitals / JSON-LD).
-- **Smart QA Loop:** QA Engineer runs Playwright (E2E) or Vitest (unit) and automatically routes failures back to the originating expert, capped at 3 retries.
+- **Smart QA Loop:** QA Engineer runs Playwright (E2E) or Vitest (unit), routes failures back to the originating expert, and sends pass verdicts to Release Manager.
+- **MVP-to-Production Loop:** Release Manager validates readiness/smoke checks, emits packaging/rollback guidance, and drives incident triage + feedback synthesis before human sign-off.
 - **Root Cause Intelligence:** QA carries structured failure context (`issue`, `expectedResult`, `receivedResult`, `evidence`, `recommendedAction`) in every handoff.
 - **Provider Agnostic:** Supports LM Studio (local) and any OpenAI-compatible cloud endpoint.
 - **Real Workspace Edits:** Agents create, replace, patch, and delete real files in target directories (protected paths blocked).
@@ -206,7 +210,8 @@ Project prompt (web UI prompt bar or /api/project):
   Project Intake ──► Project Orchestrator ──► creates N subtasks
 
 Subtask execution:
-  Dispatcher ──► Expert ──► QA Engineer ──► Human Review
+  Dispatcher ──► Expert ──► QA Engineer ──► Release Manager ──► Feedback Synthesizer ──► Human Review
+                                 └─────────────(on release-blocking signals)──► Incident Triage ─► Feedback Synthesizer
 ```
 
 Project intake tasks are marked complete after decomposition. Project-level aggregation/final-review tracking across child tasks is planned in later phases.
@@ -220,6 +225,9 @@ Project intake tasks are marked complete after decomposition. Project-level aggr
 | `Synx Back Expert` | NestJS / Fastify · Prisma ORM · Strict TypeScript · Vitest integration |
 | `Synx SEO Specialist` | Core Web Vitals · JSON-LD / Schema.org · Next.js Metadata API · Lighthouse ≥ 90 |
 | `Synx QA Engineer` | Playwright E2E · Vitest unit · auto-routes failures to originating expert |
+| `Synx Release Manager` | Release candidate flow · readiness gates · packaging guidance · smoke/rollback workflow |
+| `Synx Incident Triage` | Incident severity classification · containment actions · rollback recommendation |
+| `Synx Customer Feedback Synthesizer` | Post-release signal synthesis · stabilization checklist · follow-up priorities |
 
 ### QA Failure Loop
 
@@ -245,7 +253,7 @@ npm run test:coverage # generate coverage report
 npm run check         # TypeScript type check
 ```
 
-**Current status (2026-03-24):** 126 test files · 823 tests · 100% pass
+**Current status (2026-03-24):** 130 test files · 848 tests · 100% pass
 
 ---
 

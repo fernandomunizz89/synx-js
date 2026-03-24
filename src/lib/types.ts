@@ -28,7 +28,10 @@ export type AgentName =
   | "Synx Security Auditor"
   | "Synx Documentation Writer"
   | "Synx DB Architect"
-  | "Synx Performance Optimizer";
+  | "Synx Performance Optimizer"
+  | "Synx Release Manager"
+  | "Synx Incident Triage"
+  | "Synx Customer Feedback Synthesizer";
 
 export type ProviderType = "mock" | "openai-compatible" | "lmstudio" | "google" | "anthropic";
 

@@ -38,6 +38,9 @@ export const agentNameSchema = z.enum([
   "Synx Documentation Writer",
   "Synx DB Architect",
   "Synx Performance Optimizer",
+  "Synx Release Manager",
+  "Synx Incident Triage",
+  "Synx Customer Feedback Synthesizer",
 ]);
 const legacyHistoryAgentSchema = z
   .union([agentNameSchema, z.literal("System"), z.string()])
@@ -475,6 +478,7 @@ export const qaReturnHistoryEntrySchema = z.object({
     z.literal("Synx Mobile Expert"),
     z.literal("Synx Back Expert"),
     z.literal("Synx SEO Specialist"),
+    z.literal("Synx Release Manager"),
     z.literal("Human Review"),
   ]),
   summary: z.string(),
@@ -496,6 +500,7 @@ export const qaHandoffContextSchema = z.object({
   maxRetries: z.number().int().positive(),
   returnedTo: z.union([
     z.literal("Human Review"),
+    z.literal("Synx Release Manager"),
     // Expert Squad
     z.literal("Synx Front Expert"),
     z.literal("Synx Mobile Expert"),
@@ -538,6 +543,7 @@ export const qaOutputSchema = z.object({
   qaHandoffContext: qaHandoffContextSchema.optional(),
   nextAgent: z.union([
     z.literal("Human Review"),
+    z.literal("Synx Release Manager"),
     // Expert Squad return routing
     z.literal("Synx Front Expert"),
     z.literal("Synx Mobile Expert"),

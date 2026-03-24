@@ -386,6 +386,23 @@ Exit criteria:
 
 - SYNX can take a feature from implementation through validation, packaging, release, and post-release follow-up
 
+Implementation notes (2026-03-24):
+
+- Added release delivery workers:
+  - `src/workers/experts/synx-release-manager.ts`
+  - `src/workers/experts/synx-incident-triage.ts`
+  - `src/workers/experts/synx-customer-feedback-synthesizer.ts`
+- Added runtime stabilization state:
+  - `src/lib/release-state.ts`
+- Added release artifacts:
+  - `artifacts/release-candidate.json`
+  - `artifacts/production-incident-intake.json`
+  - `artifacts/customer-feedback-summary.json`
+- Updated QA pass routing to feed the release flow:
+  - `Synx QA Engineer -> Synx Release Manager -> Synx Customer Feedback Synthesizer -> Human Review`
+  - blocked release path:
+    `Synx Release Manager -> Synx Incident Triage -> Synx Customer Feedback Synthesizer -> Human Review`
+
 ### Phase 7 - Unify Learning Across All Workflows
 
 Goal:

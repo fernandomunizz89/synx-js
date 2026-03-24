@@ -36,6 +36,9 @@ describe.sequential("workers/index", () => {
       "Synx Documentation Writer",
       "Synx DB Architect",
       "Synx Performance Optimizer",
+      "Synx Release Manager",
+      "Synx Incident Triage",
+      "Synx Customer Feedback Synthesizer",
       "Pipeline Executor",
     ]);
   });
@@ -54,4 +57,3 @@ describe.sequential("workers/index", () => {
     expect(workerList.length).toBeGreaterThanOrEqual(initialCount);
   });
 });
-

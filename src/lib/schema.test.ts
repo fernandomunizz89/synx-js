@@ -159,7 +159,7 @@ describe("schema", () => {
       acceptanceChecklist: ["Timer starts when clicking start"],
       failures: [],
       verdict: "pass",
-      nextAgent: "Human Review",
+      nextAgent: "Synx Release Manager",
     });
     expect(passParsed.validationMode).toBe("executed_checks");
     expect(passParsed.testCases).toEqual([]);

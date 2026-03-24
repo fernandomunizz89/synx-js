@@ -13,6 +13,9 @@ const KNOWN_AGENT_PROMPTS: Record<string, string> = {
   "Synx Back Expert": "synx-back-expert.md",
   "Synx QA Engineer": "synx-qa-engineer.md",
   "Synx SEO Specialist": "synx-seo-specialist.md",
+  "Synx Release Manager": "synx-release-manager.md",
+  "Synx Incident Triage": "synx-incident-triage.md",
+  "Synx Customer Feedback Synthesizer": "synx-customer-feedback-synthesizer.md",
 };
 
 export async function resolveStepPrompt(stepAgent: string): Promise<string> {
