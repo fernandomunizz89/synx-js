@@ -72,6 +72,24 @@ export const providerStageConfigSchema = z.object({
 });
 
 export const agentOutputSchemaSchema = z.enum(["generic", "builder"]);
+export const agentRiskProfileSchema = z.enum(["low", "medium", "high"]);
+export const agentVerificationModeSchema = z.enum([
+  "static_review",
+  "unit_tests",
+  "integration_tests",
+  "e2e_tests",
+  "security_checks",
+  "performance_checks",
+  "manual_review",
+]);
+export const agentCapabilitiesSchema = z.object({
+  domain: z.array(z.string().min(1)).default([]),
+  frameworks: z.array(z.string().min(1)).default([]),
+  languages: z.array(z.string().min(1)).default([]),
+  taskTypes: z.array(taskTypeSchema).default([]),
+  riskProfile: agentRiskProfileSchema.default("medium"),
+  preferredVerificationModes: z.array(agentVerificationModeSchema).default([]),
+});
 
 export const agentDefinitionSchema = z.object({
   id: z.string().min(1),
@@ -80,6 +98,7 @@ export const agentDefinitionSchema = z.object({
   provider: providerStageConfigSchema,
   outputSchema: agentOutputSchemaSchema,
   defaultNextAgent: z.string().optional(),
+  capabilities: agentCapabilitiesSchema.optional(),
 });
 
 export const pipelineRoutingSchema = z.enum(["sequential", "dynamic", "conditional"]);
@@ -284,18 +303,7 @@ export const dispatcherOutputSchema = z.object({
    * Injected into every expert's context so they know what comes next.
    */
   suggestedChain: z.array(z.string()).optional(),
-  nextAgent: z.union([
-    // Dream Stack 2026 – Expert Squad routing
-    z.literal("Synx Front Expert"),
-    z.literal("Synx Mobile Expert"),
-    z.literal("Synx Back Expert"),
-    z.literal("Synx QA Engineer"),
-    z.literal("Synx SEO Specialist"),
-    z.literal("Synx DevOps Expert"),
-    z.literal("Synx Documentation Writer"),
-    z.literal("Synx DB Architect"),
-    z.literal("Synx Performance Optimizer"),
-  ]),
+  nextAgent: z.string().min(1),
 });
 
 const riskLevelSchema = z.enum(["low", "medium", "high", "unknown"]);

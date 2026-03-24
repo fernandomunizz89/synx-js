@@ -43,6 +43,24 @@ export type E2EPolicy = "auto" | "required" | "skip";
 export type E2EFramework = "auto" | "playwright" | "other";
 
 export type AgentOutputSchema = "generic" | "builder";
+export type AgentRiskProfile = "low" | "medium" | "high";
+export type AgentVerificationMode =
+  | "static_review"
+  | "unit_tests"
+  | "integration_tests"
+  | "e2e_tests"
+  | "security_checks"
+  | "performance_checks"
+  | "manual_review";
+
+export interface AgentCapabilities {
+  domain: string[];
+  frameworks: string[];
+  languages: string[];
+  taskTypes: TaskType[];
+  riskProfile: AgentRiskProfile;
+  preferredVerificationModes: AgentVerificationMode[];
+}
 
 export interface AgentDefinition {
   id: string;
@@ -51,6 +69,7 @@ export interface AgentDefinition {
   provider: ProviderStageConfig;
   outputSchema: AgentOutputSchema;
   defaultNextAgent?: string;
+  capabilities?: AgentCapabilities;
 }
 
 export type PipelineRouting = "sequential" | "dynamic" | "conditional";

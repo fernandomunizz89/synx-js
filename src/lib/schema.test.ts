@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   agentNameSchema,
+  agentDefinitionSchema,
+  dispatcherOutputSchema,
   fallbackModelSchema,
   localProjectConfigSchema,
   providerStageConfigSchema,
@@ -113,6 +115,42 @@ describe("schema", () => {
 
     expect(() => localProjectConfigSchema.parse({ ...base, autoApproveThreshold: 1.5 })).toThrow();
     expect(() => localProjectConfigSchema.parse({ ...base, autoApproveThreshold: -0.1 })).toThrow();
+  });
+
+  it("parses agent capabilities in custom agent definitions", () => {
+    const parsed = agentDefinitionSchema.parse({
+      id: "backend-specialist",
+      name: "Backend Specialist",
+      prompt: ".ai-agents/prompts/backend-specialist.md",
+      provider: { type: "mock", model: "static-mock" },
+      outputSchema: "builder",
+      capabilities: {
+        domain: ["backend", "api"],
+        frameworks: ["Node"],
+        languages: ["TypeScript"],
+        taskTypes: ["Feature", "Bug", "Refactor"],
+        riskProfile: "high",
+        preferredVerificationModes: ["integration_tests", "security_checks"],
+      },
+    });
+
+    expect(parsed.capabilities?.domain).toEqual(["backend", "api"]);
+    expect(parsed.capabilities?.riskProfile).toBe("high");
+  });
+
+  it("accepts dispatcher nextAgent as a generic specialist name", () => {
+    const parsed = dispatcherOutputSchema.parse({
+      type: "Feature",
+      goal: "Implement API endpoint",
+      context: "Backend work",
+      knownFacts: [],
+      unknowns: [],
+      assumptions: [],
+      constraints: [],
+      requiresHumanInput: false,
+      nextAgent: "Backend Specialist",
+    });
+    expect(parsed.nextAgent).toBe("Backend Specialist");
   });
 
   it("parses QA output with defaults and optional handoff context", () => {

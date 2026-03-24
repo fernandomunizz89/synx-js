@@ -348,5 +348,35 @@ describe("commands/agent", () => {
       expect(content).toContain("edits");
       expect(content).toContain("implementationSummary");
     });
+
+    it("writes capability metadata when capability flags are provided", async () => {
+      await runAgent([
+        "create",
+        "--id", "cap-agent",
+        "--name", "Capability Agent",
+        "--provider", "mock",
+        "--model", "static",
+        "--domains", "backend,api",
+        "--frameworks", "Node,Express",
+        "--languages", "TypeScript,JavaScript",
+        "--task-types", "Feature,Bug",
+        "--risk-profile", "high",
+        "--verification-modes", "integration_tests,security_checks",
+      ]);
+
+      expect(writeJson).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          capabilities: {
+            domain: ["backend", "api"],
+            frameworks: ["Node", "Express"],
+            languages: ["TypeScript", "JavaScript"],
+            taskTypes: ["Feature", "Bug"],
+            riskProfile: "high",
+            preferredVerificationModes: ["integration_tests", "security_checks"],
+          },
+        }),
+      );
+    });
   });
 });

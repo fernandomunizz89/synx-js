@@ -57,9 +57,10 @@
 ## Custom Agents & Pipelines
 
 - **`synx agent list/show/create`** — manage custom agent definitions stored in `.ai-agents/agents/*.json`.
-- **Interactive wizard** (`synx agent create`) or fully non-interactive via `--id`, `--name`, `--provider`, `--model`, `--output-schema`, `--default-next-agent`, `--no-prompt-file` flags.
+- **Interactive wizard** (`synx agent create`) or fully non-interactive via `--id`, `--name`, `--provider`, `--model`, `--output-schema`, `--default-next-agent`, `--domains`, `--frameworks`, `--languages`, `--task-types`, `--risk-profile`, `--verification-modes`, `--no-prompt-file` flags.
 - **Starter prompt generation** — `create` writes a pre-structured `.md` prompt to `.ai-agents/prompts/<id>.md` with role, responsibilities, context, and output format sections.
 - **Output schemas**: `generic` (`summary`, `result`, `nextAgent`) or `builder` (`implementationSummary`, `filesChanged`, `edits`, `nextAgent`).
+- **Capability-based registry** — custom agents can declare domain/framework/language/task/risk/verification capabilities and become eligible for autonomous Dispatcher routing.
 - **Provider defaults per type** — `anthropic`, `openai-compatible`, `google`, `lmstudio`, `mock` each get smart defaults (apiKeyEnv, baseUrl, autoDiscoverModel).
 - **`synx pipeline list/show`** — browse pipeline definitions in `.ai-agents/pipelines/*.json`.
 - **`synx pipeline run <id> <input>`** — start a pipeline; creates a task and queues the Pipeline Executor worker.

@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readText } from "../lib/fs.js";
+import { STAGE_FILE_NAMES } from "../lib/constants.js";
 import { repoRoot } from "../lib/paths.js";
 import { builderOutputSchema, genericAgentOutputSchema } from "../lib/schema.js";
 import type { AgentDefinition, StageEnvelope } from "../lib/types.js";
@@ -58,8 +59,8 @@ export class GenericAgent extends WorkerBase {
         viewContent: `# ${this.definition.name}\n\n${parsed.implementationSummary}`,
         output: parsed,
         nextAgent: nextAgent as any,
-        nextStage: nextAgent.toLowerCase().replace(/\s+/g, "-"),
-        nextRequestFileName: `custom-${nextAgent.toLowerCase().replace(/\s+/g, "-")}.request.json`,
+        nextStage: resolveNextStage(nextAgent),
+        nextRequestFileName: resolveNextRequestFileName(nextAgent),
         nextInputRef: `done/${stage}.done.json`,
         startedAt,
         provider: result.provider,
@@ -86,7 +87,7 @@ export class GenericAgent extends WorkerBase {
         viewContent: `# ${this.definition.name}\n\n${parsed.summary}`,
         output: parsed,
         nextAgent: nextAgent as any,
-        nextStage: nextAgent.toLowerCase().replace(/\s+/g, "-"),
+        nextStage: resolveNextStage(nextAgent),
         nextRequestFileName: resolveNextRequestFileName(nextAgent),
         nextInputRef: `done/${stage}.done.json`,
         startedAt,
@@ -106,20 +107,34 @@ export class GenericAgent extends WorkerBase {
   }
 }
 
-const KNOWN_AGENT_REQUEST_FILES: Record<string, string> = {
-  "Synx Front Expert": "04-synx-front-expert.request.json",
-  "Synx Mobile Expert": "04-synx-mobile-expert.request.json",
-  "Synx Back Expert": "04-synx-back-expert.request.json",
-  "Synx QA Engineer": "06-synx-qa-engineer.request.json",
-  "Synx SEO Specialist": "04-synx-seo-specialist.request.json",
-  "Dispatcher": "00-dispatcher.request.json",
+const KNOWN_AGENT_ROUTES: Record<string, { stage: string; requestFileName: string }> = {
+  "Synx Front Expert": { stage: "synx-front-expert", requestFileName: STAGE_FILE_NAMES.synxFrontExpert },
+  "Synx Mobile Expert": { stage: "synx-mobile-expert", requestFileName: STAGE_FILE_NAMES.synxMobileExpert },
+  "Synx Back Expert": { stage: "synx-back-expert", requestFileName: STAGE_FILE_NAMES.synxBackExpert },
+  "Synx QA Engineer": { stage: "synx-qa-engineer", requestFileName: STAGE_FILE_NAMES.synxQaEngineer },
+  "Synx SEO Specialist": { stage: "synx-seo-specialist", requestFileName: STAGE_FILE_NAMES.synxSeoSpecialist },
+  "Synx DevOps Expert": { stage: "synx-devops-expert", requestFileName: STAGE_FILE_NAMES.synxDevopsExpert },
+  "Synx Code Reviewer": { stage: "synx-code-reviewer", requestFileName: STAGE_FILE_NAMES.synxCodeReviewer },
+  "Synx Security Auditor": { stage: "synx-security-auditor", requestFileName: STAGE_FILE_NAMES.synxSecurityAuditor },
+  "Synx Documentation Writer": { stage: "synx-docs-writer", requestFileName: STAGE_FILE_NAMES.synxDocsWriter },
+  "Synx DB Architect": { stage: "synx-db-architect", requestFileName: STAGE_FILE_NAMES.synxDbArchitect },
+  "Synx Performance Optimizer": { stage: "synx-performance-optimizer", requestFileName: STAGE_FILE_NAMES.synxPerfOptimizer },
+  "Dispatcher": { stage: "dispatcher", requestFileName: STAGE_FILE_NAMES.dispatcher },
 };
 
 function resolveNextRequestFileName(nextAgent: string): string {
-  if (KNOWN_AGENT_REQUEST_FILES[nextAgent]) {
-    return KNOWN_AGENT_REQUEST_FILES[nextAgent];
+  if (KNOWN_AGENT_ROUTES[nextAgent]) {
+    return KNOWN_AGENT_ROUTES[nextAgent].requestFileName;
   }
   // Custom agent: derive from name
   const id = nextAgent.toLowerCase().replace(/\s+/g, "-");
   return `custom-${id}.request.json`;
+}
+
+function resolveNextStage(nextAgent: string): string {
+  if (KNOWN_AGENT_ROUTES[nextAgent]) {
+    return KNOWN_AGENT_ROUTES[nextAgent].stage;
+  }
+  const id = nextAgent.toLowerCase().replace(/\s+/g, "-");
+  return `custom-${id}`;
 }
