@@ -22,14 +22,20 @@ export interface TaskSummaryDto {
   taskId: string;
   title: string;
   type: TaskMeta["type"];
+  typeHint: TaskMeta["type"];
   project: string;
   status: TaskMeta["status"];
   currentStage: string;
+  stage: string;
   currentAgent: string;
   nextAgent: string;
   humanApprovalRequired: boolean;
   createdAt: string;
   updatedAt: string;
+  parentTaskId?: string;
+  rootProjectId: string;
+  sourceKind: TaskMeta["sourceKind"];
+  childTaskIds: string[];
   consumption: TaskConsumptionDto;
 }
 
@@ -38,12 +44,19 @@ export interface ReviewQueueItemDto extends TaskSummaryDto {
 }
 
 export interface TaskDetailDto extends TaskSummaryDto {
+  rawRequest?: string;
   history: TaskMetaHistoryItem[];
   recentEvents: string[];
   views: string[];
   artifacts: string[];
   doneArtifacts: string[];
   humanArtifacts: string[];
+  childTasks: Array<{
+    taskId: string;
+    title: string;
+    status: TaskMeta["status"];
+    type: TaskMeta["type"];
+  }>;
   pipelineState: PipelineState | null;
   cancelRequest: TaskCancelRequest | null;
 }

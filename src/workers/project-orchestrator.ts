@@ -5,12 +5,13 @@ import { loadResolvedProjectConfig, resolveProviderConfigForAgent } from "../lib
 import { taskDir } from "../lib/paths.js";
 import { createProvider } from "../providers/factory.js";
 import { createTaskService } from "../lib/services/task-services.js";
-import { logDaemon, logRuntimeEvent, logTaskEvent } from "../lib/logging.js";
+import { logDaemon, logTaskEvent } from "../lib/logging.js";
+import { ARTIFACT_FILES, saveTaskArtifact } from "../lib/task-artifacts.js";
 import { nowIso } from "../lib/utils.js";
 import { WorkerBase } from "./base.js";
 import type { NewTaskInput, StageEnvelope, TaskType } from "../lib/types.js";
 import { z } from "zod";
-import { loadTaskMeta, saveTaskMeta } from "../lib/task.js";
+import { loadTaskMeta } from "../lib/task.js";
 
 const ORCHESTRATOR_AGENT = "Project Orchestrator" as const;
 const MAX_SUBTASKS = 10;
@@ -77,6 +78,8 @@ export class ProjectOrchestrator extends WorkerBase {
     const provider = createProvider(resolveProviderConfigForAgent(config, "Dispatcher"));
 
     const input = await readJson<NewTaskInput>(path.join(taskDir(taskId), "input", "new-task.json"));
+    const parentMeta = await loadTaskMeta(taskId);
+    const rootProjectId = parentMeta.rootProjectId || taskId;
 
     await logTaskEvent(taskDir(taskId), `Project Orchestrator: analysing request "${input.title}"...`);
     await logDaemon(`ProjectOrchestrator: decomposing task ${taskId}`);
@@ -111,6 +114,7 @@ export class ProjectOrchestrator extends WorkerBase {
             `Part of project: ${input.title}`,
             `Project summary: ${output.projectSummary}`,
             `Parent project intake task: ${taskId}`,
+            `Root project id: ${rootProjectId}`,
             `Subtask ${index + 1} of ${output.tasks.length}`,
           ],
           qaPreferences: {
@@ -120,10 +124,30 @@ export class ProjectOrchestrator extends WorkerBase {
           },
         },
       };
-      const created = await createTaskService(subtaskInput);
+      const created = await createTaskService({
+        ...subtaskInput,
+        project: input.project,
+        metadata: {
+          sourceKind: "project-subtask",
+          parentTaskId: taskId,
+          rootProjectId,
+        },
+      });
       createdIds.push(created.taskId);
       await logTaskEvent(taskDir(taskId), `Created subtask: ${subtask.title} → ${created.taskId}`);
     }
+
+    await saveTaskArtifact(taskId, ARTIFACT_FILES.projectDecomposition, {
+      projectTaskId: taskId,
+      rootProjectId,
+      projectSummary: output.projectSummary,
+      tasks: output.tasks.map((task, index) => ({
+        ...task,
+        taskId: createdIds[index],
+      })),
+      createdTaskIds: createdIds,
+      createdAt: nowIso(),
+    });
 
     await logDaemon(`ProjectOrchestrator: created ${createdIds.length} subtasks for ${taskId}: ${createdIds.join(", ")}`);
 
@@ -142,9 +166,10 @@ export class ProjectOrchestrator extends WorkerBase {
       ].join("\n"),
       output: {
         ...output,
+        rootProjectId,
         createdTaskIds: createdIds,
       },
-      // No nextAgent — the orchestrator task itself is done after creating subtasks
+      // No nextAgent — intake stays open for project tracking while subtasks execute.
       startedAt,
       provider: result.provider,
       model: result.model,
@@ -160,24 +185,6 @@ export class ProjectOrchestrator extends WorkerBase {
       estimatedCostUsd: result.estimatedCostUsd,
     });
 
-    // Intake tasks are complete once decomposition succeeds and child tasks are queued.
-    const meta = await loadTaskMeta(taskId);
-    meta.status = "done";
-    await saveTaskMeta(taskId, meta);
-    await logRuntimeEvent({
-      event: "task.updated",
-      source: "project-orchestrator",
-      taskId,
-      stage: "project-orchestrator",
-      agent: ORCHESTRATOR_AGENT,
-      payload: {
-        status: meta.status,
-        currentStage: meta.currentStage,
-        currentAgent: String(meta.currentAgent || ""),
-        nextAgent: String(meta.nextAgent || ""),
-      },
-    });
-
-    await logTaskEvent(taskDir(taskId), `Project Orchestrator: done. ${createdIds.length} subtask(s) are now queued and running in parallel.`);
+    await logTaskEvent(taskDir(taskId), `Project Orchestrator: decomposition complete. ${createdIds.length} subtask(s) are now queued.`);
   }
 }

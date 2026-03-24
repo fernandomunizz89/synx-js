@@ -4,6 +4,7 @@ import { taskDir } from "./paths.js";
 
 export const ARTIFACT_FILES = {
   projectProfile: "project-profile.json",
+  projectDecomposition: "project-decomposition.json",
   bugBrief: "bug-brief.json",
   featureBrief: "feature-brief.json",
   symbolContract: "symbol-contract.json",

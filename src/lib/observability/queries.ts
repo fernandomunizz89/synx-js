@@ -7,7 +7,7 @@ import { loadPipelineState } from "../pipeline-state.js";
 import { loadTaskCancelRequest } from "../task-cancel.js";
 import { nowIso } from "../utils.js";
 import { buildCollaborationMetricsReport } from "../collaboration-metrics.js";
-import type { TaskMeta } from "../types.js";
+import type { NewTaskInput, TaskMeta } from "../types.js";
 import type { CollaborationMetricsReport } from "../metrics-helpers.js";
 import type {
   OverviewDto,
@@ -30,19 +30,25 @@ function sumTaskConsumption(meta: TaskMeta): TaskConsumptionDto {
   };
 }
 
-function mapTaskSummary(meta: TaskMeta): TaskSummaryDto {
+function mapTaskSummary(meta: TaskMeta, childTaskIds: string[] = []): TaskSummaryDto {
   return {
     taskId: meta.taskId,
     title: meta.title,
     type: meta.type,
+    typeHint: meta.type,
     project: meta.project,
     status: meta.status,
     currentStage: meta.currentStage,
+    stage: meta.currentStage,
     currentAgent: meta.currentAgent || "",
     nextAgent: meta.nextAgent || "",
     humanApprovalRequired: meta.humanApprovalRequired,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
+    parentTaskId: meta.parentTaskId,
+    rootProjectId: meta.rootProjectId,
+    sourceKind: meta.sourceKind,
+    childTaskIds,
     consumption: sumTaskConsumption(meta),
   };
 }
@@ -77,9 +83,30 @@ async function readLastLinesSafe(filePath: string, maxLines: number): Promise<st
 export async function listTaskSummaries(): Promise<TaskSummaryDto[]> {
   const taskIds = await allTaskIds();
   const settled = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
-  return settled
+  const metas = settled
     .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
-    .map((item) => mapTaskSummary(item.value))
+    .map((item) => item.value);
+
+  const childIdsByParent = new Map<string, string[]>();
+  const metaById = new Map(metas.map((meta) => [meta.taskId, meta]));
+  for (const meta of metas) {
+    if (!meta.parentTaskId) continue;
+    const list = childIdsByParent.get(meta.parentTaskId) || [];
+    list.push(meta.taskId);
+    childIdsByParent.set(meta.parentTaskId, list);
+  }
+
+  for (const [parentTaskId, childIds] of childIdsByParent.entries()) {
+    childIds.sort((a, b) => {
+      const aMeta = metaById.get(a);
+      const bMeta = metaById.get(b);
+      return Date.parse(aMeta?.createdAt || "") - Date.parse(bMeta?.createdAt || "");
+    });
+    childIdsByParent.set(parentTaskId, childIds);
+  }
+
+  return metas
+    .map((meta) => mapTaskSummary(meta, childIdsByParent.get(meta.taskId) || []))
     .sort(byUpdatedDesc);
 }
 
@@ -167,13 +194,15 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
   }
 
   const base = taskDir(taskId);
-  const [views, artifacts, doneArtifacts, humanArtifacts, recentEvents, cancelRequest] = await Promise.all([
+  const [views, artifacts, doneArtifacts, humanArtifacts, recentEvents, cancelRequest, inputPayload, summaries] = await Promise.all([
     listFilesSafe(path.join(base, "views")),
     listFilesSafe(path.join(base, "artifacts")),
     listFilesSafe(path.join(base, "done")),
     listFilesSafe(path.join(base, "human")),
     readLastLinesSafe(path.join(base, "logs", "events.log"), 60),
     loadTaskCancelRequest(taskId),
+    readJson<NewTaskInput>(path.join(base, "input", "new-task.json")).catch(() => null),
+    listTaskSummaries(),
   ]);
 
   let pipelineState = null;
@@ -183,14 +212,27 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
     pipelineState = null;
   }
 
+  const detailSummary = summaries.find((item) => item.taskId === taskId)
+    || mapTaskSummary(meta, summaries.filter((item) => item.parentTaskId === taskId).map((item) => item.taskId));
+  const childTasks = summaries
+    .filter((item) => item.parentTaskId === taskId)
+    .map((item) => ({
+      taskId: item.taskId,
+      title: item.title,
+      status: item.status,
+      type: item.type,
+    }));
+
   return {
-    ...mapTaskSummary(meta),
+    ...detailSummary,
+    rawRequest: inputPayload?.rawRequest,
     history: meta.history,
     recentEvents,
     views,
     artifacts,
     doneArtifacts,
     humanArtifacts,
+    childTasks,
     pipelineState,
     cancelRequest,
   };

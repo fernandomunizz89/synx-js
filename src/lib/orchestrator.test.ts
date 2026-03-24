@@ -57,6 +57,8 @@ function buildMeta(): TaskMeta {
     humanApprovalRequired: false,
     createdAt: "2026-03-16T00:00:00.000Z",
     updatedAt: "2026-03-16T00:00:00.000Z",
+    rootProjectId: "task-1",
+    sourceKind: "standalone",
     history: [],
   };
 }

@@ -1,4 +1,5 @@
 export type TaskType = "Feature" | "Bug" | "Refactor" | "Research" | "Documentation" | "Mixed" | "Project";
+export type TaskSourceKind = "standalone" | "project-intake" | "project-subtask";
 export type TaskStatus =
   | "new"
   | "in_progress"
@@ -211,6 +212,12 @@ export interface NewTaskInput {
   };
 }
 
+export interface TaskCreationMetadata {
+  parentTaskId?: string;
+  rootProjectId?: string;
+  sourceKind?: TaskSourceKind;
+}
+
 export interface StageEnvelope<T = unknown> {
   taskId: string;
   stage: string;
@@ -255,6 +262,9 @@ export interface TaskMeta {
   humanApprovalRequired: boolean;
   createdAt: string;
   updatedAt: string;
+  parentTaskId?: string;
+  rootProjectId: string;
+  sourceKind: TaskSourceKind;
   history: TaskMetaHistoryItem[];
   securityAuditRequired?: boolean;
   /** Phase 4.3 — ordered list of agents the Dispatcher suggests for this task */

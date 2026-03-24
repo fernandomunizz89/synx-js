@@ -116,6 +116,8 @@ describe.sequential("WorkerBase auto-approve", () => {
       humanApprovalRequired: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      rootProjectId: taskId,
+      sourceKind: "standalone",
       history: [],
     });
     vi.mocked(saveTaskMeta).mockResolvedValue(undefined);

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   loadResolvedProjectConfig: vi.fn<() => Promise<{ projectName: string }>>(),
-  createTask: vi.fn<(input: unknown) => Promise<{ taskId: string; taskPath: string }>>(),
+  createTask: vi.fn<(input: unknown, metadata?: unknown) => Promise<{ taskId: string; taskPath: string }>>(),
   loadTaskMeta: vi.fn<(taskId: string) => Promise<any>>(),
   saveTaskMeta: vi.fn<(taskId: string, meta: unknown) => Promise<void>>(),
   writeJson: vi.fn<(filePath: string, value: unknown) => Promise<void>>(),
@@ -109,6 +109,10 @@ describe("lib/services/task-services", () => {
     mocks.loadResolvedProjectConfig.mockResolvedValueOnce({ projectName: "   " });
     const fromRepo = await resolveProjectName(undefined);
     expect(fromRepo).toEqual({ project: "synx-repo", source: "repository" });
+
+    mocks.loadResolvedProjectConfig.mockRejectedValueOnce(new Error("missing config"));
+    const fromRepoWithoutConfig = await resolveProjectName(undefined);
+    expect(fromRepoWithoutConfig).toEqual({ project: "synx-repo", source: "repository" });
   });
 
   it("normalizes project in task creation service", async () => {
@@ -129,6 +133,37 @@ describe("lib/services/task-services", () => {
     }));
     expect(created.project).toBe("resolved-project");
     expect(created.projectSource).toBe("resolved-config");
+  });
+
+  it("forwards relationship metadata to createTask when provided", async () => {
+    await createTaskService({
+      title: "Subtask",
+      typeHint: "Feature",
+      rawRequest: "Implement project subtask",
+      project: "parent-project",
+      metadata: {
+        sourceKind: "project-subtask",
+        parentTaskId: "task-parent",
+        rootProjectId: "task-root",
+      },
+      extraContext: {
+        relatedFiles: [],
+        logs: [],
+        notes: [],
+      },
+    });
+
+    expect(mocks.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Subtask",
+        project: "parent-project",
+      }),
+      expect.objectContaining({
+        sourceKind: "project-subtask",
+        parentTaskId: "task-parent",
+        rootProjectId: "task-root",
+      }),
+    );
   });
 
   it("records approved artifact and pipeline learning on approve", async () => {

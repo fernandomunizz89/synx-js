@@ -140,6 +140,34 @@ describe.sequential("lib/observability/queries", () => {
     expect(detail?.humanArtifacts).toContain("90-final-review.request.json");
     expect(detail?.recentEvents).toEqual(["event one", "event two"]);
     expect(detail?.cancelRequest?.reason).toBe("Stop now");
+    expect(detail?.rawRequest).toBe("Detail task");
+  });
+
+  it("maps parent/child project relationships in summaries and task detail", async () => {
+    const parent = await createTask({
+      ...baseTaskInput("Build project MVP"),
+      typeHint: "Project",
+    });
+    const child = await createTask(baseTaskInput("Implement API"), {
+      sourceKind: "project-subtask",
+      parentTaskId: parent.taskId,
+      rootProjectId: parent.taskId,
+    });
+
+    const summaries = await listTaskSummaries();
+    const parentSummary = summaries.find((item) => item.taskId === parent.taskId);
+    const childSummary = summaries.find((item) => item.taskId === child.taskId);
+
+    expect(parentSummary?.sourceKind).toBe("project-intake");
+    expect(parentSummary?.childTaskIds).toContain(child.taskId);
+    expect(parentSummary?.rootProjectId).toBe(parent.taskId);
+
+    expect(childSummary?.sourceKind).toBe("project-subtask");
+    expect(childSummary?.parentTaskId).toBe(parent.taskId);
+    expect(childSummary?.rootProjectId).toBe(parent.taskId);
+
+    const parentDetail = await getTaskDetail(parent.taskId);
+    expect(parentDetail?.childTasks.map((entry) => entry.taskId)).toContain(child.taskId);
   });
 
   it("returns runtime as not alive when daemon state is absent", async () => {
