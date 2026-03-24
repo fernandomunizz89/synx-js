@@ -1,12 +1,17 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import path from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "./bootstrap.js";
-import { exists, writeJson, writeText, ensureDir } from "./fs.js";
-import { globalConfigPath } from "./paths.js";
+import { appendText, ensureDir, exists, readText, writeJson, writeText } from "./fs.js";
+
+const pathMocks = vi.hoisted(() => ({
+  repoRoot: vi.fn<() => string>(() => "/target/repo"),
+}));
 
 vi.mock("./fs.js", () => ({
   exists: vi.fn(),
   writeJson: vi.fn(),
   writeText: vi.fn(),
+  readText: vi.fn(),
   ensureDir: vi.fn(),
   appendText: vi.fn(),
 }));
@@ -14,16 +19,18 @@ vi.mock("./fs.js", () => ({
 vi.mock("./paths.js", () => ({
   globalAiRoot: () => "/global/ai",
   globalConfigPath: () => "/global/ai/config.json",
-  configDir: () => "/project/.ai-agents/config",
-  promptsDir: () => "/project/.ai-agents/prompts",
-  runtimeDir: () => "/project/.ai-agents/runtime",
-  logsDir: () => "/project/.ai-agents/logs",
-  tasksDir: () => "/project/.ai-agents/tasks",
+  repoRoot: pathMocks.repoRoot,
+  configDir: () => path.join(pathMocks.repoRoot(), ".ai-agents/config"),
+  promptsDir: () => path.join(pathMocks.repoRoot(), ".ai-agents/prompts"),
+  runtimeDir: () => path.join(pathMocks.repoRoot(), ".ai-agents/runtime"),
+  logsDir: () => path.join(pathMocks.repoRoot(), ".ai-agents/logs"),
+  tasksDir: () => path.join(pathMocks.repoRoot(), ".ai-agents/tasks"),
 }));
 
 describe("lib/bootstrap", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    pathMocks.repoRoot.mockReset().mockReturnValue("/target/repo");
   });
 
   describe("ensureGlobalInitialized", () => {
@@ -42,12 +49,27 @@ describe("lib/bootstrap", () => {
   });
 
   describe("ensureProjectInitialized", () => {
-    it("creates project structure and default prompts", async () => {
+    it("creates .gitignore with .ai-agents/ when missing in target repo", async () => {
+      vi.mocked(exists).mockImplementation(async (filePath: string) => filePath !== "/target/repo/.gitignore");
+      await ensureProjectInitialized();
+      expect(writeText).toHaveBeenCalledWith("/target/repo/.gitignore", ".ai-agents/\n");
+    });
+
+    it("appends .ai-agents/ when target gitignore exists without the entry", async () => {
+      vi.mocked(exists).mockImplementation(async (filePath: string) => filePath === "/target/repo/.gitignore");
+      vi.mocked(readText).mockResolvedValue("# Dependencies\nnode_modules/\n");
+      await ensureProjectInitialized();
+      expect(appendText).toHaveBeenCalledWith("/target/repo/.gitignore", ".ai-agents/\n");
+    });
+
+    it("never updates .gitignore when bootstrapping inside synx repository", async () => {
+      const synxRepoRoot = process.cwd();
+      pathMocks.repoRoot.mockReturnValue(synxRepoRoot);
       vi.mocked(exists).mockResolvedValue(false);
       await ensureProjectInitialized();
-      expect(ensureDir).toHaveBeenCalled();
-      expect(writeJson).toHaveBeenCalled();
-      expect(writeText).toHaveBeenCalled();
+      expect(writeText).not.toHaveBeenCalledWith(path.join(synxRepoRoot, ".gitignore"), expect.any(String));
+      expect(readText).not.toHaveBeenCalledWith(path.join(synxRepoRoot, ".gitignore"));
+      expect(appendText).not.toHaveBeenCalledWith(path.join(synxRepoRoot, ".gitignore"), expect.any(String));
     });
   });
 });
