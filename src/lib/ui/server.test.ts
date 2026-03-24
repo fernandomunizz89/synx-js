@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import type { NewTaskInput } from "../types.js";
 import { startUiServer } from "./server.js";
@@ -249,6 +249,46 @@ describe.sequential("lib/ui/server", () => {
         body: JSON.stringify({ title: "test", rawRequest: "test" }),
       });
       expect(res.status).toBe(405);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("POST /api/provider-health returns provider health data", async () => {
+    // Write a minimal config with a mock provider so the endpoint has something to check
+    const configPath = path.join(fixture.repoRoot, ".ai-agents", "config");
+    await fs.mkdir(configPath, { recursive: true });
+    await writeJson(path.join(configPath, "global.json"), {
+      humanReviewer: "test",
+      providers: {
+        dispatcher: { type: "mock", model: "mock-model" },
+      },
+    });
+    await writeJson(path.join(configPath, "project.json"), {
+      projectName: "test-project",
+      language: "TypeScript",
+      framework: "Node.js",
+      humanReviewer: "test",
+      tasksDir: ".ai-agents/tasks",
+    });
+
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: false,
+    });
+
+    try {
+      const res = await fetch(`${server.baseUrl}/api/provider-health`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      const payload = await res.json() as { ok: boolean; data: { dispatcher?: { reachable: boolean; latencyMs?: number; message: string } } };
+      expect(payload.ok).toBe(true);
+      expect(payload.data.dispatcher).toBeDefined();
+      expect(payload.data.dispatcher?.reachable).toBe(true);
+      expect(typeof payload.data.dispatcher?.latencyMs).toBe("number");
     } finally {
       await server.close();
     }

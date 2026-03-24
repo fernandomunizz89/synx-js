@@ -20,8 +20,9 @@ import { runInlineCommand } from "../start/command-handler.js";
 import { exists, listFiles, readJson, readText, writeJson } from "../fs.js";
 import { exportTask } from "../export.js";
 import { configDir, taskDir } from "../paths.js";
-import { loadGlobalConfig, loadLocalProjectConfig } from "../config.js";
+import { loadGlobalConfig, loadLocalProjectConfig, loadResolvedProjectConfig } from "../config.js";
 import { localProjectConfigSchema } from "../schema.js";
+import { checkProviderHealth } from "../provider-health.js";
 
 export interface UiServerOptions {
   host?: string;
@@ -468,6 +469,31 @@ export function createUiRequestHandler(options: {
             lines,
           },
         });
+        return;
+      }
+
+      // ── POST /api/provider-health ─────────────────────────────────────────────
+      if (method === "POST" && pathname === "/api/provider-health") {
+        const config = await loadResolvedProjectConfig();
+        const results: Record<string, unknown> = {};
+
+        if (config.providers.dispatcher) {
+          results["dispatcher"] = await checkProviderHealth(config.providers.dispatcher);
+        }
+        if (config.providers.planner) {
+          results["planner"] = await checkProviderHealth(config.providers.planner);
+        }
+
+        const agentEntries = Object.entries(config.agentProviders ?? {}).slice(0, 3);
+        const agentResults: Record<string, unknown> = {};
+        for (const [agentName, agentConfig] of agentEntries) {
+          if (agentConfig) {
+            agentResults[agentName] = await checkProviderHealth(agentConfig);
+          }
+        }
+        results["agents"] = agentResults;
+
+        sendJson(res, 200, { ok: true, data: results });
         return;
       }
 

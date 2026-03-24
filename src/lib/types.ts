@@ -321,4 +321,5 @@ export interface ProviderHealth {
   message: string;
   modelFound?: boolean;
   listedModels?: string[];
+  latencyMs?: number;
 }

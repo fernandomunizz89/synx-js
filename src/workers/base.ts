@@ -16,6 +16,7 @@ import { loadLocalProjectConfig } from "../lib/config.js";
 import { approveTaskService } from "../lib/services/task-services.js";
 import { loadProjectMemory, type ProjectMemory } from "../lib/project-memory.js";
 import { requestAgentConsultation, type ConsultationRequest, type ConsultationDecision } from "../lib/agent-consultation.js";
+import { releaseFileLocks } from "../lib/file-locks.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -394,6 +395,11 @@ export abstract class WorkerBase {
         nextStage: args.nextStage,
         inputRef: args.nextInputRef,
       });
+    }
+
+    // Phase 1.4 — Release file locks when task stage completes (terminal states only)
+    if (args.humanApprovalRequired || !args.nextAgent) {
+      await releaseFileLocks(args.taskId).catch(() => {});
     }
   }
 

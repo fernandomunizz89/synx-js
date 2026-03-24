@@ -299,21 +299,30 @@ describe("provider-health", () => {
          baseUrlEnv: "",
          apiKeyEnv: "",
        });
- 
+
        // Mock findDiscoveredModelMatch to return no match
        vi.spyOn(modelSupport, "findDiscoveredModelMatch").mockReturnValue(null);
- 
+
        const mockFetch = vi.fn().mockResolvedValue({
          ok: true,
          json: () => Promise.resolve({ data: [{ id: "some-other-model" }] }),
        });
        vi.stubGlobal("fetch", mockFetch);
- 
+
        const config = { type: "lmstudio" as const, model: "AUTO" };
        const result = await checkProviderHealth(config);
        expect(result.reachable).toBe(true);
        expect(result.modelFound).toBe(false);
        expect(result.message).toContain("no fixed loaded model could be resolved");
      });
+
+    it("checkProviderHealth returns latencyMs for mock provider", async () => {
+      const config = { type: "mock" as const, model: "mock-model" };
+      const result = await checkProviderHealth(config);
+      expect(result.latencyMs).toBeDefined();
+      expect(typeof result.latencyMs).toBe("number");
+      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(result.reachable).toBe(true);
+    });
   });
 });

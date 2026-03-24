@@ -4,6 +4,7 @@ import { ensureDir, exists } from "./fs.js";
 import { envBoolean } from "./env.js";
 import { unique } from "./text-utils.js";
 import { isBlockedPath, normalizeInputPath } from "./workspace-scanner.js";
+import { acquireFileLocks } from "./file-locks.js";
 
 export type WorkspaceEditAction = "create" | "replace" | "replace_snippet" | "delete";
 
@@ -53,6 +54,7 @@ export async function applyWorkspaceEdits(args: {
   workspaceRoot: string;
   edits: WorkspaceEdit[];
   dryRun?: boolean;
+  taskId?: string;
 }): Promise<AppliedWorkspaceEdits> {
   const dryRun = typeof args.dryRun === "boolean" ? args.dryRun : envBoolean("AI_AGENTS_DRY_RUN", false);
   const appliedFiles: string[] = [];
@@ -62,6 +64,24 @@ export async function applyWorkspaceEdits(args: {
 
   if (dryRun) {
     warnings.push("Dry-run mode is enabled. Workspace edits are simulated and no files are written.");
+  }
+
+  // Phase 1.4 — File conflict detection (advisory; does not block edits)
+  const taskId = args.taskId ?? "";
+  if (taskId && !dryRun) {
+    const plannedFiles = args.edits
+      .filter((e) => e.path)
+      .map((e) => { try { return resolveWorkspacePath(args.workspaceRoot, e.path).relativePath; } catch { return ""; } })
+      .filter(Boolean);
+
+    if (plannedFiles.length > 0) {
+      const lockResult = await acquireFileLocks(taskId, plannedFiles);
+      if (lockResult.conflicts.length > 0) {
+        for (const c of lockResult.conflicts) {
+          warnings.push(`[file-lock] Conflict on "${c.file}" — held by task ${c.heldBy}. Proceeding but results may conflict.`);
+        }
+      }
+    }
   }
 
   for (const edit of args.edits) {

@@ -323,16 +323,21 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
       message: "Mock provider is ready.",
       modelFound: true,
       listedModels: [config.model],
+      latencyMs: 0,
     };
   }
 
+  const t0 = Date.now();
   const discovery = await discoverProviderModels(config);
+  const latencyMs = Date.now() - t0;
+
   if (!discovery.reachable) {
     return {
       reachable: false,
       message: discovery.message,
       modelFound: false,
       listedModels: [],
+      latencyMs,
     };
   }
 
@@ -345,6 +350,7 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
         : "Provider is reachable, but it returned no models. The configured model could not be validated.",
       modelFound: false,
       listedModels: [],
+      latencyMs,
     };
   }
 
@@ -358,6 +364,7 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
         message: `LM Studio is reachable and auto-discovery selected model: ${selected}`,
         modelFound: true,
         listedModels: models,
+        latencyMs,
       };
     }
 
@@ -370,6 +377,7 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
             message: `LM Studio is reachable and fallback model is loaded: ${fallbackMatch.matchedModel}`,
             modelFound: true,
             listedModels: models,
+            latencyMs,
           };
         }
       }
@@ -378,6 +386,7 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
         message: "LM Studio autodiscovery is disabled, but no fixed loaded model could be resolved from model/fallback settings.",
         modelFound: false,
         listedModels: models,
+        latencyMs,
       };
     }
   }
@@ -392,6 +401,7 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
         : modelFoundMessage(config, selected),
       modelFound: Boolean(selected),
       listedModels: models,
+      latencyMs,
     };
   }
 
@@ -405,6 +415,7 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
         : modelFoundMessage(config, selected),
       modelFound: Boolean(selected),
       listedModels: models,
+      latencyMs,
     };
   }
 
@@ -424,5 +435,6 @@ export async function checkProviderHealth(config: ProviderStageConfig): Promise<
       : modelFoundMessage(config, closeMatch),
     modelFound,
     listedModels: models,
+    latencyMs,
   };
 }

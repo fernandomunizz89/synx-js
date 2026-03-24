@@ -858,6 +858,13 @@ export function buildWebUiHtml(): string {
         </div>
       </div>
       <div class="settings-section">
+        <div class="settings-section-head">🩺 Provider Health</div>
+        <div class="settings-section-body">
+          <button onclick="testProviders()" class="btn-action">Test Providers</button>
+          <div id="provider-health-results" style="margin-top:8px;font-size:12px;white-space:pre-wrap;font-family:var(--mono);"></div>
+        </div>
+      </div>
+      <div class="settings-section">
         <div class="settings-section-head">📋 Project Info</div>
         <div class="settings-section-body" id="cfg-project-info"><div class="empty">Loading…</div></div>
       </div>
@@ -1528,6 +1535,24 @@ export function buildWebUiHtml(): string {
           msgEl.className = 'settings-msg err'; msgEl.textContent = res.b.error || 'Error';
         }
       }).catch(function () { msgEl.className = 'settings-msg err'; msgEl.textContent = 'Network error'; });
+  };
+
+  window.testProviders = function () {
+    var el = document.getElementById('provider-health-results');
+    if (!el) return;
+    el.textContent = 'Testing…';
+    fetch('/api/provider-health', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        if (!j.ok) { el.textContent = 'Error: ' + (j.error || 'unknown'); return; }
+        var d = j.data;
+        var lines = [];
+        if (d.dispatcher) lines.push('Dispatcher: ' + (d.dispatcher.reachable ? '✓' : '✗') + (d.dispatcher.latencyMs != null ? ' ' + d.dispatcher.latencyMs + 'ms' : '') + ' — ' + d.dispatcher.message);
+        if (d.planner) lines.push('Planner: ' + (d.planner.reachable ? '✓' : '✗') + (d.planner.latencyMs != null ? ' ' + d.planner.latencyMs + 'ms' : '') + ' — ' + d.planner.message);
+        if (d.agents) Object.entries(d.agents).forEach(function(entry) { var name = entry[0]; var h = entry[1]; lines.push(name + ': ' + (h.reachable ? '✓' : '✗') + (h.latencyMs != null ? ' ' + h.latencyMs + 'ms' : '') + ' — ' + h.message); });
+        el.textContent = lines.join('\\n') || 'No providers configured.';
+      })
+      .catch(function(e) { el.textContent = 'Request failed: ' + e.message; });
   };
 
   /* ── metrics ── */

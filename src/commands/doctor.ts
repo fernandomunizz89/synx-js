@@ -118,23 +118,43 @@ export const doctorCommand = new Command("doctor")
         : `Missing reviewer name. Run \`${commandExample("setup")}\` to set it explicitly.`,
     });
 
+    let dispatcherLatencyMs: number | undefined;
+    let plannerLatencyMs: number | undefined;
+
     if (config.providers.dispatcher) {
       checks.push(buildProviderEnvCheck("Dispatcher provider", config.providers.dispatcher));
       const dispatcherHealth = await checkProviderHealth(config.providers.dispatcher);
+      dispatcherLatencyMs = dispatcherHealth.latencyMs;
+      const latencyNote = dispatcherHealth.latencyMs != null ? ` (${dispatcherHealth.latencyMs}ms)` : "";
       checks.push({
         label: "Dispatcher provider",
         ok: dispatcherHealth.reachable && (dispatcherHealth.modelFound ?? true),
-        message: providerHealthToHuman(dispatcherHealth.message),
+        message: `${providerHealthToHuman(dispatcherHealth.message)}${latencyNote}`,
       });
     }
 
     if (config.providers.planner) {
       checks.push(buildProviderEnvCheck("Planner provider", config.providers.planner));
       const plannerHealth = await checkProviderHealth(config.providers.planner);
+      plannerLatencyMs = plannerHealth.latencyMs;
+      const latencyNote = plannerHealth.latencyMs != null ? ` (${plannerHealth.latencyMs}ms)` : "";
       checks.push({
         label: "Planner provider",
         ok: plannerHealth.reachable && (plannerHealth.modelFound ?? true),
-        message: providerHealthToHuman(plannerHealth.message),
+        message: `${providerHealthToHuman(plannerHealth.message)}${latencyNote}`,
+      });
+    }
+
+    // Check agent providers (at most 5 to avoid spamming output)
+    const agentProviderEntries = Object.entries(config.agentProviders ?? {}).slice(0, 5);
+    for (const [agentName, agentConfig] of agentProviderEntries) {
+      if (!agentConfig) continue;
+      const agentHealth = await checkProviderHealth(agentConfig);
+      const latencyNote = agentHealth.latencyMs != null ? ` (${agentHealth.latencyMs}ms)` : "";
+      checks.push({
+        label: `${agentName} provider`,
+        ok: agentHealth.reachable && (agentHealth.modelFound ?? true),
+        message: `${providerHealthToHuman(agentHealth.message)}${latencyNote}`,
       });
     }
 
@@ -173,6 +193,14 @@ export const doctorCommand = new Command("doctor")
     console.log("\nDoctor results");
     for (const check of checks) {
       console.log(`${check.ok ? "✓" : "✗"} ${check.label}: ${check.message}`);
+    }
+
+    // Provider latency summary
+    const latencyParts: string[] = [];
+    if (dispatcherLatencyMs != null) latencyParts.push(`Dispatcher ${dispatcherLatencyMs}ms`);
+    if (plannerLatencyMs != null) latencyParts.push(`Planner ${plannerLatencyMs}ms`);
+    if (latencyParts.length > 0) {
+      console.log(`\nProvider latency: ${latencyParts.join(" | ")}`);
     }
 
     const hasIssues = checks.some((check) => !check.ok);
