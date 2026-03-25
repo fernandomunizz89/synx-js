@@ -45,6 +45,13 @@ vi.mock("../lib/cli-command.js", () => ({
   commandExample: mocks.commandExample,
 }));
 
+vi.mock("../lib/setup-providers.js", () => ({
+  configureGoogle: vi.fn().mockResolvedValue({ type: "google", model: "gemini-pro" }),
+  configureAnthropic: vi.fn().mockResolvedValue({ type: "anthropic", model: "claude-3-5" }),
+  configureLmStudio: vi.fn(),
+  configureOpenAiCompatible: vi.fn(),
+}));
+
 import { setupCommand } from "./setup.js";
 
 describe.sequential("commands/setup", () => {
@@ -112,5 +119,90 @@ describe.sequential("commands/setup", () => {
     const output = consoleSpy.mock.calls.flat().join("\n");
     expect(output).toContain("Setup complete.");
     expect(output).toContain("synx start");
+  });
+
+  it("handles expert provider configuration", async () => {
+    mocks.confirmAction.mockResolvedValueOnce(true) // Configure experts
+      .mockResolvedValueOnce(false); // Enable auto-approve
+
+    mocks.selectOption.mockResolvedValueOnce("mock") // Dispatcher choice
+      .mockResolvedValueOnce("configure") // Expert 1 choice
+      .mockResolvedValueOnce("mock") // Expert 1 provider choice
+      .mockResolvedValueOnce("keep") // Expert 2 choice
+      .mockResolvedValueOnce("keep") // Expert 3 choice
+      .mockResolvedValueOnce("keep") // Expert 4 choice
+      .mockResolvedValueOnce("keep"); // Expert 5 choice
+
+    await setupCommand.parseAsync(["node", "synx"]);
+
+    expect(mocks.writeJson).toHaveBeenCalledTimes(2);
+    const globalConfig = mocks.writeJson.mock.calls[0]?.[1] as any;
+    expect(globalConfig.agentProviders).toBeDefined();
+    expect(globalConfig.agentProviders["Synx Front Expert"]).toBeDefined();
+  });
+
+  it("handles auto-approve configuration", async () => {
+    mocks.confirmAction.mockResolvedValueOnce(false) // Configure experts
+      .mockResolvedValueOnce(true); // Enable auto-approve
+    mocks.promptTextWithDefault.mockResolvedValueOnce("0.9");
+
+    await setupCommand.parseAsync(["node", "synx"]);
+
+    const localConfig = mocks.writeJson.mock.calls[1]?.[1] as any;
+    expect(localConfig.autoApproveThreshold).toBe(0.9);
+  });
+
+  it("handles validation failure and allows switching to mock", async () => {
+    mocks.checkProviderHealth.mockResolvedValueOnce({
+      reachable: false,
+      modelFound: false,
+      message: "Connection failed",
+    });
+
+    mocks.selectOption.mockResolvedValueOnce("mock") // Initial choice
+      .mockResolvedValueOnce("mock"); // Recovery choice (already mocked in beforeEach, but being explicit)
+
+    await setupCommand.parseAsync(["node", "synx"]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Setup complete with mock provider."));
+  });
+
+  it("handles validation failure and allows canceling", async () => {
+    mocks.checkProviderHealth.mockResolvedValueOnce({
+      reachable: false,
+      modelFound: false,
+      message: "Connection failed",
+    });
+
+    mocks.selectOption.mockResolvedValueOnce("mock") // Initial choice
+      .mockResolvedValueOnce("cancel"); // Recovery choice
+    
+    mocks.confirmAction.mockResolvedValueOnce(true); // Confirm cancel
+
+    await setupCommand.parseAsync(["node", "synx"]);
+
+    const output = consoleSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Setup canceled.");
+  });
+
+  it("handles google provider choice", async () => {
+    mocks.selectOption.mockResolvedValueOnce("google") // Dispatcher choice
+      .mockResolvedValueOnce("retry") // Just to loop if it didn't finish (but it should since googleConfig is mocked)
+      .mockResolvedValueOnce("mock");
+
+    await setupCommand.parseAsync(["node", "synx"]);
+
+    const globalConfig = mocks.writeJson.mock.calls[0]?.[1] as any;
+    expect(globalConfig.providers.dispatcher.type).toBe("google");
+  });
+
+  it("handles invalid auto-approve threshold", async () => {
+    mocks.confirmAction.mockResolvedValueOnce(false) // Configure experts
+      .mockResolvedValueOnce(true); // Enable auto-approve
+    mocks.promptTextWithDefault.mockResolvedValueOnce("invalid");
+
+    await setupCommand.parseAsync(["node", "synx"]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid threshold value"));
   });
 });

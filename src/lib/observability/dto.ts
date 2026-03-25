@@ -17,6 +17,7 @@ export interface TaskConsumptionDto {
   estimatedOutputTokens: number;
   estimatedTotalTokens: number;
   estimatedCostUsd: number;
+  totalDurationMs: number;
 }
 
 export interface TaskSummaryDto {
@@ -79,6 +80,26 @@ export interface TaskDetailDto extends TaskSummaryDto {
   pipelineState: PipelineState | null;
   cancelRequest: TaskCancelRequest | null;
 }
+
+export interface KanbanCardDto {
+  taskId: string;
+  title: string;
+  type: TaskMeta["type"];
+  status: TaskMeta["status"];
+  project: string;
+  priority: number;
+  milestone?: string;
+  currentAgent: string;
+  humanApprovalRequired: boolean;
+  parentTaskId?: string;
+  sourceKind: TaskMeta["sourceKind"];
+  childTaskIds: string[];
+  totalDurationMs: number;
+  totalCostUsd: number;
+  updatedAt: string;
+}
+
+export type KanbanBoardDto = Record<TaskMeta["status"], KanbanCardDto[]>;
 
 export interface OverviewDto {
   runtime: RuntimeStatusDto;

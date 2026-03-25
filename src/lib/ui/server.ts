@@ -1,8 +1,9 @@
 import http from "node:http";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 import { approveTaskService, cancelTaskService, reproveTaskService, createTaskService } from "../services/task-services.js";
-import { getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
+import { getKanbanBoard, getMetricsOverview, getOverview, getTaskDetail, invalidateQueryCache, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
 import { applyTaskRollback } from "../services/task-rollback.js";
 import { loadTaskMeta } from "../task.js";
 import { createUiRealtime, type UiStreamEvent } from "./realtime.js";
@@ -28,6 +29,7 @@ import { handleAgentApiRequest } from "./agent-api.js";
 export interface UiServerOptions {
   host?: string;
   port?: number;
+  /** @deprecated Inline HTML is no longer used; the SPA is served from dist/ui/ */
   html?: string;
   enableMutations?: boolean;
 }
@@ -122,8 +124,43 @@ async function assertTaskExists(taskId: string): Promise<void> {
   }
 }
 
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js":   "application/javascript; charset=utf-8",
+  ".mjs":  "application/javascript; charset=utf-8",
+  ".css":  "text/css; charset=utf-8",
+  ".svg":  "image/svg+xml",
+  ".png":  "image/png",
+  ".ico":  "image/x-icon",
+  ".json": "application/json; charset=utf-8",
+  ".woff2": "font/woff2",
+  ".woff":  "font/woff",
+};
+
+async function serveStaticFile(res: http.ServerResponse, filePath: string): Promise<boolean> {
+  if (!(await exists(filePath))) return false;
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+  const content = await fs.readFile(filePath);
+  res.statusCode = 200;
+  res.setHeader("content-type", contentType);
+  res.setHeader("cache-control", ext === ".html" ? "no-store" : "public, max-age=31536000, immutable");
+  res.end(content);
+  return true;
+}
+
+async function serveSpaSentinel(res: http.ServerResponse): Promise<void> {
+  const indexPath = path.join(process.cwd(), "dist", "ui", "index.html");
+  if (await exists(indexPath)) {
+    const html = await readText(indexPath);
+    sendHtml(res, 200, html);
+  } else {
+    sendHtml(res, 200, "<!doctype html><html><body><p>UI not built. Run <code>npm run build:ui</code>.</p></body></html>");
+  }
+}
+
 export function createUiRequestHandler(options: {
-  html: string;
+  html?: string;
   enableMutations: boolean;
   realtime: ReturnType<typeof createUiRealtime>;
 }): http.RequestListener {
@@ -139,22 +176,16 @@ export function createUiRequestHandler(options: {
         return;
       }
 
-      if (method === "GET" && pathname === "/ui-assets/task-assistant.react.js") {
-        const assetPath = path.join(process.cwd(), "dist", "ui-assets", "task-assistant.react.js");
-        if (!(await exists(assetPath))) {
-          res.statusCode = 404;
-          res.end("Not found");
-          return;
-        }
-        const source = await readText(assetPath);
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/javascript; charset=utf-8");
-        res.end(source);
+      // Serve Vite-built static assets (JS/CSS bundles)
+      if (method === "GET" && pathname.startsWith("/assets/")) {
+        const assetPath = path.join(process.cwd(), "dist", "ui", pathname);
+        if (await serveStaticFile(res, assetPath)) return;
+        notFound(res);
         return;
       }
 
       if (method === "GET" && (pathname === "/" || pathname === "/index.html")) {
-        sendHtml(res, 200, options.html);
+        await serveSpaSentinel(res);
         return;
       }
 
@@ -229,6 +260,11 @@ export function createUiRequestHandler(options: {
 
       if (method === "GET" && pathname === "/api/review-queue") {
         sendJson(res, 200, { ok: true, data: await listReviewQueue() });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/kanban") {
+        sendJson(res, 200, { ok: true, data: await getKanbanBoard() });
         return;
       }
 
@@ -373,6 +409,7 @@ export function createUiRequestHandler(options: {
         const taskId = decodeURIComponent(approveMatch[1]);
         await assertTaskExists(taskId);
         await approveTaskService(taskId);
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId, status: "approved" } });
         return;
       }
@@ -386,6 +423,7 @@ export function createUiRequestHandler(options: {
         const rollbackMode = normalizeString(body.rollbackMode) === "task" ? "task" : "none";
         const rollbackSummary = rollbackMode === "task" ? await applyTaskRollback(taskId) : null;
         const result = await reproveTaskService({ taskId, reason, rollbackMode, rollbackStep, rollbackSummary });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { ...result, status: "reproved", rollbackSummary, rollbackStep } });
         return;
       }
@@ -409,6 +447,7 @@ export function createUiRequestHandler(options: {
           taskId,
           reason: normalizeString(body.reason),
         });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId, status: "cancel_requested" } });
         return;
       }
@@ -808,6 +847,7 @@ export function createUiRequestHandler(options: {
             qaPreferences: { e2ePolicy: e2ePolicy as "auto" | "required" | "skip", e2eFramework: "auto", objective: "" },
           },
         });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId: created.taskId, taskPath: created.taskPath } });
         return;
       }
@@ -834,12 +874,14 @@ export function createUiRequestHandler(options: {
             qaPreferences: { e2ePolicy: "auto", e2eFramework: "auto", objective: "" },
           },
         });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId: created.taskId, taskPath: created.taskPath } });
         return;
       }
 
-      if (method === "GET" && pathname.startsWith("/app")) {
-        sendHtml(res, 200, options.html);
+      // SPA fallback — any unrecognized GET that isn't an API route serves the React app
+      if (method === "GET" && !pathname.startsWith("/api/")) {
+        await serveSpaSentinel(res);
         return;
       }
 
@@ -858,12 +900,10 @@ export function createUiRequestHandler(options: {
 export async function startUiServer(options: UiServerOptions): Promise<StartedUiServer> {
   const host = options.host || "127.0.0.1";
   const port = options.port ?? 4317;
-  const html = options.html || "<!doctype html><html><body><h1>SYNX Web UI</h1></body></html>";
   const enableMutations = Boolean(options.enableMutations);
   const realtime = createUiRealtime();
 
   const server = http.createServer(createUiRequestHandler({
-    html,
     enableMutations,
     realtime,
   }));

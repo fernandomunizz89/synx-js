@@ -2,6 +2,24 @@ import { describe, expect, it } from "vitest";
 import { MockProvider } from "./mock-provider.js";
 
 describe("providers/mock-provider", () => {
+  it("returns mock response for Synx QA Engineer", async () => {
+    const provider = new MockProvider("m1");
+    const res = await provider.generateStructured({ agent: "Synx QA Engineer", taskId: "t", input: {} } as any);
+    expect(res.parsed).toHaveProperty("verdict", "pass");
+  });
+
+  it("returns mock response for Human Review", async () => {
+    const provider = new MockProvider("m1");
+    const res = await provider.generateStructured({ agent: "Human Review", taskId: "t", input: {} } as any);
+    expect(res.parsed).toHaveProperty("accepted", true);
+  });
+
+  it("returns empty object for unknown agent", async () => {
+    const provider = new MockProvider("m1");
+    const res = await provider.generateStructured({ agent: "UnknownAgent" as any, taskId: "t", input: {} } as any);
+    expect(res.parsed).toEqual({});
+  });
+
   it("routes bug tasks from Dispatcher to Synx Front Expert", async () => {
     const provider = new MockProvider("mock-v1");
     const result = await provider.generateStructured({

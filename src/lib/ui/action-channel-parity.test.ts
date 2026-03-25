@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   getAdvancedAnalyticsReport: vi.fn<(args: unknown) => Promise<any>>(),
   writeRuntimeControl: vi.fn<(args: unknown) => Promise<any>>(),
   applyTaskRollback: vi.fn<(taskId: string) => Promise<any>>(),
+  invalidateQueryCache: vi.fn<() => void>(),
 }));
 
 vi.mock("../bootstrap.js", () => ({
@@ -55,6 +56,7 @@ vi.mock("../observability/queries.js", () => ({
   listReviewQueue: mocks.listReviewQueue,
   getTaskDetail: mocks.getTaskDetail,
   getMetricsOverview: mocks.getMetricsOverview,
+  invalidateQueryCache: mocks.invalidateQueryCache,
 }));
 
 vi.mock("../observability/analytics.js", () => ({

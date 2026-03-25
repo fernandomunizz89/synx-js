@@ -114,25 +114,122 @@ describe.sequential("providers/lmstudio-provider", () => {
     expect(result.model).toBe("google/gemma-3-27b");
   });
 
-  it("uses fixed model when autodiscovery is disabled", async () => {
+  it("picks configured model when it matches a loaded model", async () => {
+    mocks.discoverProviderModels.mockResolvedValue({
+      reachable: true,
+      models: ["model-a", "model-b"],
+      message: "ok",
+    });
+
     const provider = new LmStudioProvider({
       type: "lmstudio",
-      model: "mistralai/devstral-small-2-2512",
+      model: "model-b",
+      autoDiscoverModel: true,
+    });
+
+    const result = await provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any);
+    expect(result.model).toBe("model-b");
+  });
+
+  it("picks fallback model when autodiscovery is true and configured is auto", async () => {
+    mocks.discoverProviderModels.mockResolvedValue({
+      reachable: true,
+      models: ["other", "fallback-id"],
+      message: "ok",
+    });
+
+    const provider = new LmStudioProvider({
+      type: "lmstudio",
+      model: "auto",
+      fallbackModel: "fallback-id",
+      autoDiscoverModel: true,
+    });
+
+    const result = await provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any);
+    expect(result.model).toBe("fallback-id");
+  });
+
+  it("reuses lastAutoModel when it still exists in discovered models", async () => {
+    mocks.discoverProviderModels.mockResolvedValueOnce({
+      reachable: true,
+      models: ["model-1", "model-2"],
+      message: "ok",
+    });
+
+    const provider = new LmStudioProvider({
+      type: "lmstudio",
+      model: "auto",
+      autoDiscoverModel: true,
+    });
+
+    // First call sets lastAutoModel to model-1
+    await provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any);
+    
+    // Change models but keep model-1
+    mocks.discoverProviderModels.mockResolvedValueOnce({
+      reachable: true,
+      models: ["model-3", "model-1"],
+      message: "ok",
+    });
+
+    const result = await provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any);
+    expect(result.model).toBe("model-1"); // Sticky
+  });
+
+  it("throws if discovery returns no models", async () => {
+    mocks.discoverProviderModels.mockResolvedValue({
+      reachable: true,
+      models: [],
+      message: "ok",
+    });
+
+    const provider = new LmStudioProvider({
+      type: "lmstudio",
+      model: "auto",
+      autoDiscoverModel: true,
+    });
+
+    await expect(provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any))
+      .rejects.toThrow(/LM Studio model autodiscovery failed: ok/);
+  });
+
+  it("uses fallback model when discovery is disabled and model is auto", async () => {
+    const provider = new LmStudioProvider({
+      type: "lmstudio",
+      model: "auto",
+      fallbackModel: "fixed-fallback",
       autoDiscoverModel: false,
-      baseUrl: "http://127.0.0.1:1234/v1",
-      apiKey: "lm-studio-local",
     });
 
-    const result = await provider.generateStructured({
-      agent: "Synx QA Engineer",
-      taskId: "task-3",
-      stage: "synx-qa-engineer",
-      systemPrompt: "x",
-      input: {},
-      expectedJsonSchemaDescription: "{}",
+    const result = await provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any);
+    expect(result.model).toBe("fixed-fallback");
+  });
+
+  it("throws when discovery is disabled, model is auto, and no fallback is set", async () => {
+    const provider = new LmStudioProvider({
+      type: "lmstudio",
+      model: "auto",
+      autoDiscoverModel: false,
     });
 
-    expect(result.model).toBe("mistralai/devstral-small-2-2512");
-    expect(mocks.discoverProviderModels).not.toHaveBeenCalled();
+    await expect(provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any))
+      .rejects.toThrow("LM Studio autodiscovery is disabled but no fixed model is configured");
+  });
+
+  it("throws when autodiscovery fails and no fallback is available", async () => {
+    mocks.discoverProviderModels.mockResolvedValue({
+      reachable: false,
+      models: [],
+      message: "no connection",
+    });
+
+    const provider = new LmStudioProvider({
+      type: "lmstudio",
+      model: "auto",
+      autoDiscoverModel: true,
+    });
+
+    await expect(provider.generateStructured({ agent: "A", taskId: "t", input: {} } as any))
+      .rejects.toThrow(/LM Studio model autodiscovery failed: no connection/);
   });
 });

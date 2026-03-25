@@ -12,6 +12,8 @@ import { listFileLocks } from "../file-locks.js";
 import type { NewTaskInput, TaskMeta } from "../types.js";
 import type { CollaborationMetricsReport } from "../metrics-helpers.js";
 import type {
+  KanbanBoardDto,
+  KanbanCardDto,
   OverviewDto,
   ReviewQueueItemDto,
   RuntimeStatusDto,
@@ -20,15 +22,45 @@ import type {
   TaskSummaryDto,
 } from "./dto.js";
 
+// ── TTL cache ──────────────────────────────────────────────────────────────────
+//
+// Simple in-memory cache to avoid re-reading all task files on every HTTP request.
+// Bypassed entirely in test environments to prevent cross-test pollution.
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const _cache = new Map<string, CacheEntry<unknown>>();
+
+async function withTTL<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  if (process.env.NODE_ENV === "test") return fn();
+  const entry = _cache.get(key) as CacheEntry<T> | undefined;
+  if (entry && entry.expiresAt > Date.now()) return entry.data;
+  const data = await fn();
+  _cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  return data;
+}
+
+/** Call after any mutation so the next read reflects the new state. */
+export function invalidateQueryCache(): void {
+  _cache.clear();
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
 function sumTaskConsumption(meta: TaskMeta): TaskConsumptionDto {
   const estimatedInputTokens = meta.history.reduce((sum, item) => sum + Number(item.estimatedInputTokens || 0), 0);
   const estimatedOutputTokens = meta.history.reduce((sum, item) => sum + Number(item.estimatedOutputTokens || 0), 0);
   const estimatedCostUsd = meta.history.reduce((sum, item) => sum + Number(item.estimatedCostUsd || 0), 0);
+  const totalDurationMs = meta.history.reduce((sum, item) => sum + Number(item.durationMs || 0), 0);
   return {
     estimatedInputTokens,
     estimatedOutputTokens,
     estimatedTotalTokens: estimatedInputTokens + estimatedOutputTokens,
     estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
+    totalDurationMs,
   };
 }
 
@@ -106,26 +138,28 @@ async function readLastLinesSafe(filePath: string, maxLines: number): Promise<st
 }
 
 export async function listTaskSummaries(): Promise<TaskSummaryDto[]> {
-  const taskIds = await allTaskIds();
-  const settled = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
-  const metas = settled
-    .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
-    .map((item) => item.value);
+  return withTTL("listTaskSummaries", 3_000, async () => {
+    const taskIds = await allTaskIds();
+    const settled = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
+    const metas = settled
+      .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
+      .map((item) => item.value);
 
-  const lockMap = await listFileLocks().catch(() => ({ version: 1 as const, locks: {}, byTask: {}, updatedAt: nowIso() }));
-  const snapshot = buildProjectGraphSnapshot(metas, { lockMap });
+    const lockMap = await listFileLocks().catch(() => ({ version: 1 as const, locks: {}, byTask: {}, updatedAt: nowIso() }));
+    const snapshot = buildProjectGraphSnapshot(metas, { lockMap });
 
-  return metas
-    .map((meta) => mapTaskSummary({
-      meta,
-      childTaskIds: snapshot.childTaskIdsByParent.get(meta.taskId) || [],
-      blockedBy: snapshot.nodeByTaskId.get(meta.taskId)?.blockedBy || [],
-      ready: snapshot.nodeByTaskId.get(meta.taskId)?.ready || false,
-      ownershipBoundaries: snapshot.nodeByTaskId.get(meta.taskId)?.ownershipBoundaries || [],
-      mergeStrategy: snapshot.nodeByTaskId.get(meta.taskId)?.mergeStrategy || "auto-rebase",
-      projectProgress: snapshot.projectProgressByParent.get(meta.taskId) || null,
-    }))
-    .sort(byUpdatedDesc);
+    return metas
+      .map((meta) => mapTaskSummary({
+        meta,
+        childTaskIds: snapshot.childTaskIdsByParent.get(meta.taskId) || [],
+        blockedBy: snapshot.nodeByTaskId.get(meta.taskId)?.blockedBy || [],
+        ready: snapshot.nodeByTaskId.get(meta.taskId)?.ready || false,
+        ownershipBoundaries: snapshot.nodeByTaskId.get(meta.taskId)?.ownershipBoundaries || [],
+        mergeStrategy: snapshot.nodeByTaskId.get(meta.taskId)?.mergeStrategy || "auto-rebase",
+        projectProgress: snapshot.projectProgressByParent.get(meta.taskId) || null,
+      }))
+      .sort(byUpdatedDesc);
+  });
 }
 
 export async function listReviewQueue(): Promise<ReviewQueueItemDto[]> {
@@ -198,6 +232,7 @@ export async function getOverview(): Promise<OverviewDto> {
       estimatedOutputTokens,
       estimatedTotalTokens: estimatedInputTokens + estimatedOutputTokens,
       estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
+      totalDurationMs: 0,
     },
     updatedAt: nowIso(),
   };
@@ -268,9 +303,44 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
   };
 }
 
+const ALL_STATUSES: TaskMeta["status"][] = [
+  "new", "in_progress", "waiting_agent", "waiting_human", "blocked", "failed", "done", "archived",
+];
+
+export async function getKanbanBoard(): Promise<KanbanBoardDto> {
+  const summaries = await listTaskSummaries();
+
+  const board = Object.fromEntries(ALL_STATUSES.map((s) => [s, []])) as unknown as KanbanBoardDto;
+
+  for (const task of summaries) {
+    const card: KanbanCardDto = {
+      taskId: task.taskId,
+      title: task.title,
+      type: task.type,
+      status: task.status,
+      project: task.project,
+      priority: task.priority,
+      milestone: task.milestone,
+      currentAgent: task.currentAgent,
+      humanApprovalRequired: task.humanApprovalRequired,
+      parentTaskId: task.parentTaskId,
+      sourceKind: task.sourceKind,
+      childTaskIds: task.childTaskIds,
+      totalDurationMs: task.consumption.totalDurationMs,
+      totalCostUsd: task.consumption.estimatedCostUsd,
+      updatedAt: task.updatedAt,
+    };
+    board[task.status].push(card);
+  }
+
+  return board;
+}
+
 export async function getMetricsOverview(hours = 24): Promise<CollaborationMetricsReport> {
-  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : 24;
-  const untilMs = Date.now();
-  const sinceMs = untilMs - Math.round(safeHours * 60 * 60 * 1000);
-  return buildCollaborationMetricsReport({ sinceMs, untilMs });
+  return withTTL(`getMetricsOverview:${hours}`, 15_000, async () => {
+    const safeHours = Number.isFinite(hours) && hours > 0 ? hours : 24;
+    const untilMs = Date.now();
+    const sinceMs = untilMs - Math.round(safeHours * 60 * 60 * 1000);
+    return buildCollaborationMetricsReport({ sinceMs, untilMs });
+  });
 }

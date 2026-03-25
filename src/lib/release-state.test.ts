@@ -1,66 +1,121 @@
-import os from "node:os";
-import path from "node:path";
-import { promises as fs } from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  activateStabilizationMode,
-  loadReleaseState,
-  recordReleaseIncident,
-  updateStabilizationFocus,
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { 
+  loadReleaseState, 
+  saveReleaseState, 
+  activateStabilizationMode, 
+  recordReleaseIncident, 
+  updateStabilizationFocus 
 } from "./release-state.js";
+import { ensureDir, exists, readJson, writeJson } from "./fs.js";
+import { runtimeDir } from "./paths.js";
+import { nowIso } from "./utils.js";
 
-const originalCwd = process.cwd();
+vi.mock("./fs.js", () => ({
+  ensureDir: vi.fn(),
+  exists: vi.fn(),
+  readJson: vi.fn(),
+  writeJson: vi.fn(),
+}));
 
-describe.sequential("lib/release-state", () => {
-  let root = "";
+vi.mock("./paths.js", () => ({
+  runtimeDir: vi.fn(() => "/tmp/synx-runtime"),
+}));
 
-  beforeEach(async () => {
-    root = await fs.mkdtemp(path.join(os.tmpdir(), "synx-release-state-test-"));
-    await fs.writeFile(path.join(root, "package.json"), JSON.stringify({ name: "release-state-test" }, null, 2), "utf8");
-    process.chdir(root);
+vi.mock("./utils.js", () => ({
+  nowIso: vi.fn(() => "2024-01-01T00:00:00.000Z"),
+}));
+
+describe("lib/release-state", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  afterEach(async () => {
-    process.chdir(originalCwd);
-    if (root) await fs.rm(root, { recursive: true, force: true });
+  describe("loadReleaseState", () => {
+    it("returns default state if file does not exist", async () => {
+      vi.mocked(exists).mockResolvedValue(false);
+      const state = await loadReleaseState();
+      expect(state.version).toBe(1);
+      expect(state.stabilization.active).toBe(false);
+      expect(state.history).toEqual([]);
+    });
+
+    it("returns parsed state if version and stabilization match", async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+      const mockState = { version: 1, stabilization: { active: true }, history: [] };
+      vi.mocked(readJson).mockResolvedValue(mockState);
+      
+      const state = await loadReleaseState();
+      expect(state).toEqual(mockState);
+    });
+
+    it("returns default state on parse error", async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+      vi.mocked(readJson).mockRejectedValue(new Error("Corrupt"));
+      
+      const state = await loadReleaseState();
+      expect(state.version).toBe(1);
+      expect(state.stabilization.active).toBe(false);
+    });
   });
 
-  it("activates stabilization mode and persists release metadata", async () => {
-    await activateStabilizationMode({
-      taskId: "task-1",
-      summary: "Release candidate accepted",
-      focusAreas: ["src/app.ts"],
-      windowHours: 12,
+  describe("saveReleaseState", () => {
+    it("ensures runtime dir and writes json", async () => {
+      const state = { version: 1 } as any;
+      await saveReleaseState(state);
+      expect(ensureDir).toHaveBeenCalledWith("/tmp/synx-runtime");
+      expect(writeJson).toHaveBeenCalledWith("/tmp/synx-runtime/release-state.json", state);
     });
-
-    const state = await loadReleaseState();
-    expect(state.stabilization.active).toBe(true);
-    expect(state.stabilization.releaseTaskId).toBe("task-1");
-    expect(state.stabilization.focusAreas).toContain("src/app.ts");
-    expect(state.history.some((event) => event.event === "stabilization_started")).toBe(true);
   });
 
-  it("records incidents and updates stabilization focus", async () => {
-    await activateStabilizationMode({
-      taskId: "task-2",
-      summary: "Stabilization started",
-    });
-    await recordReleaseIncident({
-      taskId: "task-2",
-      summary: "Smoke check failed in production-like env",
-      severity: "high",
-      focusAreas: ["npm run build"],
-    });
-    await updateStabilizationFocus({
-      taskId: "task-2",
-      summary: "Updated from customer feedback synthesis",
-      focusAreas: ["src/api/orders.ts", "npm run build"],
-    });
+  describe("activateStabilizationMode", () => {
+    it("sets stabilization to active and adds history event", async () => {
+      vi.mocked(exists).mockResolvedValue(false);
+      const res = await activateStabilizationMode({
+        taskId: "t1",
+        summary: "Stabilizing",
+        focusAreas: ["UI", "  API  ", ""],
+        windowHours: 48
+      });
 
-    const state = await loadReleaseState();
-    expect(state.stabilization.incidents).toBeGreaterThanOrEqual(1);
-    expect(state.stabilization.focusAreas).toContain("src/api/orders.ts");
-    expect(state.history.some((event) => event.event === "incident_recorded")).toBe(true);
-    expect(state.history.some((event) => event.event === "stabilization_updated")).toBe(true);
+      expect(res.stabilization.active).toBe(true);
+      expect(res.stabilization.releaseTaskId).toBe("t1");
+      expect(res.stabilization.summary).toBe("Stabilizing");
+      expect(res.stabilization.focusAreas).toEqual(["UI", "API"]);
+      expect(res.history).toHaveLength(1);
+      expect(res.history[0].event).toBe("stabilization_started");
+      expect(writeJson).toHaveBeenCalled();
+    });
+  });
+
+  describe("recordReleaseIncident", () => {
+    it("increments incidents and adds focus areas", async () => {
+      vi.mocked(exists).mockResolvedValue(false);
+      const res = await recordReleaseIncident({
+        taskId: "t2",
+        summary: "Bug found",
+        severity: "critical",
+        focusAreas: ["DB"]
+      });
+
+      expect(res.stabilization.incidents).toBe(1);
+      expect(res.stabilization.focusAreas).toContain("DB");
+      expect(res.history[0].event).toBe("incident_recorded");
+      expect(res.history[0].severity).toBe("critical");
+    });
+  });
+
+  describe("updateStabilizationFocus", () => {
+    it("updates focus areas and summary", async () => {
+      vi.mocked(exists).mockResolvedValue(false);
+      const res = await updateStabilizationFocus({
+        taskId: "t3",
+        summary: "New summary",
+        focusAreas: ["Security"]
+      });
+
+      expect(res.stabilization.summary).toBe("New summary");
+      expect(res.stabilization.focusAreas).toEqual(["Security"]);
+      expect(res.history[0].event).toBe("stabilization_updated");
+    });
   });
 });

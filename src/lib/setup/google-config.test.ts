@@ -39,4 +39,18 @@ describe("lib/setup/google-config", () => {
     expect(config.apiKey).toBe("google-key");
     expect(config.model).toBe("gemini-1.5-pro");
   });
+
+  it("configures google in env mode with default variable names", async () => {
+    vi.mocked(selectOption)
+      .mockResolvedValueOnce("env")           // connection mode: env
+      .mockResolvedValueOnce("default");      // env var mode: default
+    vi.mocked(chooseOpenAiCompatibleModel).mockResolvedValue("gemini-1.5-pro");
+
+    const config = await configureGoogle(currentGlobal);
+
+    expect(config.type).toBe("google");
+    expect(config.baseUrl).toBeDefined();   // preset base URL set in env mode
+    expect(config.apiKey).toBeUndefined();
+    expect(config.model).toBe("gemini-1.5-pro");
+  });
 });

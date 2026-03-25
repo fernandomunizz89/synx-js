@@ -9,7 +9,7 @@
 - Task type flags for `new`: `Feature`, `Bug`, `Refactor`, `Research`, `Documentation`, `Mixed`.
 - Per-task E2E preferences via `--e2e`, `--e2e-framework`, `--qa-objective`.
 - `status` defaults to focused view (current or latest task); `--all` for full history.
-- `ui` starts a local observability and human-review web surface with three tabs — **Tasks** (searchable, inline approve/reprove/cancel), **Review** (focused `waiting_human` queue), and **Stream** (live SSE event log) — with optional `--read-only` mode.
+- `ui` starts a local React SPA with four tabs — **Tasks** (searchable table, inline approve/reprove/cancel, Review sub-tab), **Kanban** (7-column drag-and-drop board with real-time SSE updates), **Metrics** (KPI cards, timeline charts, agent/project/operational dashboards via Recharts, 60 s auto-refresh), and **Stream** (live SSE event log) — with optional `--read-only` mode. SSE reconnects automatically with exponential backoff; each tab is isolated by an error boundary.
 
 ## Setup & Configuration
 

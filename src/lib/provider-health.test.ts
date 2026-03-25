@@ -153,6 +153,27 @@ describe("provider-health", () => {
       expect(result.reachable).toBe(true);
       expect(result.models).toEqual(["lms-model"]);
     });
+
+    it("should handle missing API key for google", async () => {
+      vi.stubGlobal("process", { env: {} });
+      const config = { type: "google" as const, model: "gemini-pro" };
+      const result = await discoverProviderModels(config);
+      expect(result.reachable).toBe(false);
+      expect(result.message).toContain("Missing Google provider API key");
+    });
+
+    it("should fetch google models successfully", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ name: "gemini-pro" }] }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const config = { type: "google" as const, model: "gemini-pro", apiKey: "g-key" };
+      const result = await discoverProviderModels(config);
+      expect(result.reachable).toBe(true);
+      expect(result.models).toEqual(["gemini-pro"]);
+    });
   });
 
   describe("checkProviderHealth", () => {
@@ -255,6 +276,20 @@ describe("provider-health", () => {
       expect(result.reachable).toBe(true);
       expect(result.modelFound).toBe(true);
       expect(result.message).toContain("discovered model: claude-code");
+    });
+
+    it("should validate google model", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ models: [{ name: "gemini-pro" }] }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      const config = { type: "google" as const, model: "gemini-pro", apiKey: "g-key" };
+      const result = await checkProviderHealth(config);
+      expect(result.reachable).toBe(true);
+      expect(result.modelFound).toBe(true);
+      expect(result.message).toContain("discovered model: gemini-pro");
     });
 
     it("should handle lmstudio fallback when target is auto and auto-discovery is disabled", async () => {

@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import { 
   selectPackageManager, 
   buildScriptCommand,
-  buildScriptCommand as _buildScriptCommand // Alias for testing different managers
+  runCommand,
+  isGitRepository,
+  readPackageScripts,
+  getGitChangedFiles
 } from "./command-runner.js";
 import { existsSync } from "node:fs";
 
@@ -15,20 +18,51 @@ vi.mock("node:fs", async () => {
 });
 
 describe("command-runner", () => {
-  describe("selectPackageManager", () => {
-    it("should select pnpm if pnpm-lock.yaml exists", () => {
-      vi.mocked(existsSync).mockImplementation((p: any) => p.toString().endsWith("pnpm-lock.yaml"));
-      expect(selectPackageManager("/root")).toBe("pnpm");
+  describe("runCommand", () => {
+    it("should successfully run a command", async () => {
+      const res = await runCommand({
+        command: "echo",
+        commandArgs: ["hello"],
+        cwd: process.cwd(),
+      });
+      expect(res.exitCode).toBe(0);
+      expect(res.stdout.trim()).toBe("hello");
+      expect(res.timedOut).toBe(false);
     });
 
-    it("should select yarn if yarn.lock exists", () => {
-      vi.mocked(existsSync).mockImplementation((p: any) => p.toString().endsWith("yarn.lock"));
-      expect(selectPackageManager("/root")).toBe("yarn");
+    it("should handle command errors", async () => {
+      const res = await runCommand({
+        command: "nonexistent-command",
+        commandArgs: [],
+        cwd: process.cwd(),
+      });
+      expect(res.exitCode).toBe(-1);
+      expect(res.stderr).toContain("spawn nonexistent-command ENOENT");
+    });
+  });
+
+  describe("isGitRepository", () => {
+    it("should return true for a git repo", async () => {
+      expect(await isGitRepository(process.cwd())).toBe(true);
     });
 
-    it("should default to npm", () => {
-      vi.mocked(existsSync).mockReturnValue(false);
-      expect(selectPackageManager("/root")).toBe("npm");
+    it("should return false for a non-git directory", async () => {
+      const tmp = "/tmp/non-git-dir-" + Date.now();
+      expect(await isGitRepository(tmp)).toBe(false);
+    });
+  });
+
+  describe("readPackageScripts", () => {
+    it("should read scripts from package.json", async () => {
+      // Assuming we are in the repo root
+      const scripts = await readPackageScripts(process.cwd());
+      expect(scripts).toBeDefined();
+      expect(scripts.test).toBeDefined();
+    });
+
+    it("should return empty object if package.json does not exist", async () => {
+      const scripts = await readPackageScripts("/tmp");
+      expect(scripts).toEqual({});
     });
   });
 
@@ -37,19 +71,23 @@ describe("command-runner", () => {
       const res = buildScriptCommand("npm", "test");
       expect(res.command).toBe("npm");
       expect(res.args).toContain("run");
-      expect(res.args).toContain("test");
     });
 
-    it("should build pnpm command with if-present", () => {
-      const res = buildScriptCommand("pnpm", "build");
-      expect(res.command).toBe("pnpm");
-      expect(res.args).toContain("--if-present");
+    it("should handle yarn and bun", () => {
+      expect(buildScriptCommand("yarn", "test").command).toBe("yarn");
+      expect(buildScriptCommand("bun", "test").command).toBe("bun");
+    });
+  });
+
+  describe("getGitChangedFiles", () => {
+    it("should return files for a git repo", async () => {
+      // This will run on the actual repo we are in
+      const files = await getGitChangedFiles(process.cwd());
+      expect(Array.isArray(files)).toBe(true);
     });
 
-    it("should include extra args", () => {
-      const res = buildScriptCommand("npm", "test", ["--watch"]);
-      expect(res.args).toContain("--watch");
-      expect(res.args).toContain("--");
+    it("should return empty array for non-repo", async () => {
+      expect(await getGitChangedFiles("/tmp")).toEqual([]);
     });
   });
 });

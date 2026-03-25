@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { startUiServer } from "../lib/ui/server.js";
-import { buildWebUiHtml } from "../lib/ui/web-app.js";
 
 function parsePort(value: string): number {
   const parsed = Number(value);
@@ -23,7 +22,6 @@ export const uiCommand = new Command("ui")
     const started = await startUiServer({
       host: options.host,
       port: options.port,
-      html: buildWebUiHtml(),
       enableMutations: !Boolean(options.readOnly),
     });
 
