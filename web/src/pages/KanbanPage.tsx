@@ -1,4 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { fetchKanban, approveTask, reproveTask, cancelTask } from "../api/tasks.js";
 import { useStreamTaskUpdates } from "../api/stream.js";
 import { TypeBadge, PriorityDot } from "../components/layout/StatusBadge.js";
@@ -21,6 +32,12 @@ const COLUMNS: ColumnDef[] = [
   { id: "failed",         label: "Failed",         color: "var(--red)" },
   { id: "done",           label: "Done",           color: "var(--green)" },
 ];
+
+// Valid drop targets for waiting_human cards (status → action)
+const WAITING_HUMAN_TARGETS: Partial<Record<TaskStatus, "approve" | "reprove">> = {
+  done:        "approve",
+  in_progress: "reprove",
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -105,11 +122,13 @@ function Card({
   onApprove,
   onReprove,
   onCancel,
+  style: extraStyle,
 }: {
   card: KanbanCard;
   onApprove: (id: string) => void;
   onReprove: (id: string) => void;
   onCancel: (id: string) => void;
+  style?: React.CSSProperties;
 }) {
   const dur = formatDuration(card.totalDurationMs);
   const cost = formatCost(card.totalCostUsd);
@@ -126,6 +145,7 @@ function Card({
       gap: 8,
       cursor: "default",
       transition: "border-color 0.15s",
+      ...extraStyle,
     }}
       onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--muted)")}
       onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
@@ -215,6 +235,48 @@ function iconBtn(color: string): React.CSSProperties {
   };
 }
 
+// ── Draggable card wrapper ─────────────────────────────────────────────────────
+
+function DraggableCard(props: {
+  card: KanbanCard;
+  onApprove: (id: string) => void;
+  onReprove: (id: string) => void;
+  onCancel: (id: string) => void;
+}) {
+  const { card } = props;
+  const draggable = card.status === "waiting_human";
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: card.taskId,
+    data: { card },
+    disabled: !draggable,
+  });
+
+  const wrapStyle: React.CSSProperties = {
+    opacity: isDragging ? 0.35 : 1,
+    transform: transform
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      : undefined,
+    cursor: draggable ? (isDragging ? "grabbing" : "grab") : "default",
+    userSelect: "none",
+  };
+
+  return (
+    <div ref={setNodeRef} style={wrapStyle} {...attributes} {...(draggable ? listeners : {})}>
+      {draggable && (
+        <div style={{
+          textAlign: "center", color: "var(--border)", fontSize: 10,
+          letterSpacing: 3, lineHeight: 1, paddingBottom: 4,
+          cursor: "grab",
+        }}>
+          ⠿⠿⠿
+        </div>
+      )}
+      <Card {...props} />
+    </div>
+  );
+}
+
 // ── Column ────────────────────────────────────────────────────────────────────
 
 function Column({
@@ -224,6 +286,8 @@ function Column({
   onReprove,
   onCancel,
   hidden,
+  isDragTarget,
+  isInvalidTarget,
 }: {
   def: ColumnDef;
   cards: KanbanCard[];
@@ -231,8 +295,15 @@ function Column({
   onReprove: (id: string) => void;
   onCancel: (id: string) => void;
   hidden: boolean;
+  isDragTarget: boolean;
+  isInvalidTarget: boolean;
 }) {
+  const { isOver, setNodeRef } = useDroppable({ id: def.id });
+
   if (hidden) return null;
+
+  const dropActive = isDragTarget && isOver;
+  const dropInvalid = isInvalidTarget && isOver;
 
   return (
     <div style={{
@@ -244,6 +315,12 @@ function Column({
       borderRadius: 10,
       border: "1px solid var(--border)",
       overflow: "hidden",
+      transition: "box-shadow 0.15s",
+      boxShadow: dropActive
+        ? "0 0 0 2px var(--teal)"
+        : dropInvalid
+          ? "0 0 0 2px var(--red)"
+          : "none",
     }}>
       {/* Column header */}
       <div style={{
@@ -274,34 +351,55 @@ function Column({
         </span>
       </div>
 
-      {/* Cards */}
-      <div style={{
-        flex: 1,
-        overflowY: "auto",
-        padding: 8,
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        minHeight: 80,
-      }}>
-        {cards.length === 0 ? (
+      {/* Cards — droppable area */}
+      <div
+        ref={setNodeRef}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: 8,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          minHeight: 80,
+          background: dropActive
+            ? "color-mix(in srgb, var(--teal) 8%, transparent)"
+            : dropInvalid
+              ? "color-mix(in srgb, var(--red) 6%, transparent)"
+              : "transparent",
+          transition: "background 0.15s",
+        }}
+      >
+        {/* Drop hint when column is a valid target and nothing is in it */}
+        {isDragTarget && cards.length === 0 && (
+          <div style={{
+            textAlign: "center", padding: "20px 8px",
+            color: isOver ? "var(--teal)" : "var(--border)",
+            fontSize: 11,
+            border: `2px dashed ${isOver ? "var(--teal)" : "var(--border)"}`,
+            borderRadius: 6,
+            transition: "color 0.15s, border-color 0.15s",
+          }}>
+            Drop here
+          </div>
+        )}
+        {!(isDragTarget && cards.length === 0) && cards.length === 0 && (
           <div style={{
             textAlign: "center", padding: "20px 8px",
             color: "var(--border)", fontSize: 11,
           }}>
             —
           </div>
-        ) : (
-          cards.map((card) => (
-            <Card
-              key={card.taskId}
-              card={card}
-              onApprove={onApprove}
-              onReprove={onReprove}
-              onCancel={onCancel}
-            />
-          ))
         )}
+        {cards.map((card) => (
+          <DraggableCard
+            key={card.taskId}
+            card={card}
+            onApprove={onApprove}
+            onReprove={onReprove}
+            onCancel={onCancel}
+          />
+        ))}
       </div>
     </div>
   );
@@ -398,6 +496,11 @@ export function KanbanPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("status");
   const [filter, setFilter] = useState("");
   const [hideDone, setHideDone] = useState(false);
+  const [draggingCard, setDraggingCard] = useState<KanbanCard | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   const load = useCallback(async () => {
     try {
@@ -423,6 +526,30 @@ export function KanbanPage() {
       setActionError(e instanceof Error ? e.message : "Action failed");
     }
   };
+
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    const card = active.data.current?.card as KanbanCard | undefined;
+    setDraggingCard(card ?? null);
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setDraggingCard(null);
+    if (!over || !active.data.current) return;
+
+    const card = active.data.current.card as KanbanCard;
+    const targetStatus = over.id as TaskStatus;
+    const action = WAITING_HUMAN_TARGETS[targetStatus];
+
+    if (card.status !== "waiting_human" || !action) return;
+
+    if (action === "approve") {
+      void handle(() => approveTask(card.taskId));
+    } else if (action === "reprove") {
+      setReproveTarget(card.taskId);
+    }
+  };
+
+  const handleDragCancel = () => setDraggingCard(null);
 
   // Flatten all cards and apply filter
   const allCards = Object.values(board).flat();
@@ -473,6 +600,18 @@ export function KanbanPage() {
 
   const totalCards = filteredCards.length;
 
+  // Determine per-column drag state (only relevant in status groupBy)
+  const isDragTarget = (colId: string) =>
+    draggingCard?.status === "waiting_human" &&
+    groupBy === "status" &&
+    Object.prototype.hasOwnProperty.call(WAITING_HUMAN_TARGETS, colId);
+
+  const isInvalidTarget = (colId: string) =>
+    draggingCard?.status === "waiting_human" &&
+    groupBy === "status" &&
+    !Object.prototype.hasOwnProperty.call(WAITING_HUMAN_TARGETS, colId) &&
+    colId !== "waiting_human";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {reproveTarget && (
@@ -519,27 +658,50 @@ export function KanbanPage() {
       )}
 
       {!loading && !error && (
-        <div style={{
-          flex: 1,
-          overflowX: "auto",
-          overflowY: "hidden",
-          padding: "16px 20px",
-          display: "flex",
-          gap: 12,
-          alignItems: "flex-start",
-        }}>
-          {columns.map((col) => (
-            <Column
-              key={col.id}
-              def={{ id: col.id as TaskStatus, label: col.label, color: col.color }}
-              cards={col.cards}
-              hidden={isHidden(col.id)}
-              onApprove={(id) => void handle(() => approveTask(id))}
-              onReprove={(id) => setReproveTarget(id)}
-              onCancel={(id) => void handle(() => cancelTask(id))}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div style={{
+            flex: 1,
+            overflowX: "auto",
+            overflowY: "hidden",
+            padding: "16px 20px",
+            display: "flex",
+            gap: 12,
+            alignItems: "flex-start",
+          }}>
+            {columns.map((col) => (
+              <Column
+                key={col.id}
+                def={{ id: col.id as TaskStatus, label: col.label, color: col.color }}
+                cards={col.cards}
+                hidden={isHidden(col.id)}
+                isDragTarget={isDragTarget(col.id)}
+                isInvalidTarget={isInvalidTarget(col.id)}
+                onApprove={(id) => void handle(() => approveTask(id))}
+                onReprove={(id) => setReproveTarget(id)}
+                onCancel={(id) => void handle(() => cancelTask(id))}
+              />
+            ))}
+          </div>
+
+          <DragOverlay dropAnimation={null}>
+            {draggingCard && (
+              <div style={{ width: 240, transform: "rotate(2deg)", opacity: 0.92 }}>
+                <Card
+                  card={draggingCard}
+                  onApprove={() => {}}
+                  onReprove={() => {}}
+                  onCancel={() => {}}
+                  style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.5)", cursor: "grabbing" }}
+                />
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
     </div>
   );
