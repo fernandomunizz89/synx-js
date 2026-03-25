@@ -131,6 +131,15 @@ describe("provider-health", () => {
       const result = await discoverProviderModels(config);
       expect(result.reachable).toBe(true);
       expect(result.models).toEqual(["claude-code"]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.anthropic.com/v1/models",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "x-api-key": "sk-anthropic",
+            "anthropic-version": "2023-06-01",
+          }),
+        }),
+      );
     });
 
     it("should handle lmstudio provider", async () => {

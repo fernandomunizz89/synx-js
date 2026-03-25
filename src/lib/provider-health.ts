@@ -27,6 +27,8 @@ const GOOGLE_API_KEY_ENV = "AI_AGENTS_GOOGLE_API_KEY";
 const ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com";
 const ANTHROPIC_BASE_URL_ENV = "AI_AGENTS_ANTHROPIC_BASE_URL";
 const ANTHROPIC_API_KEY_ENV = "AI_AGENTS_ANTHROPIC_API_KEY";
+const ANTHROPIC_VERSION_ENV = "AI_AGENTS_ANTHROPIC_VERSION";
+const ANTHROPIC_DEFAULT_VERSION = "2023-06-01";
 
 interface GoogleConnection {
   baseUrl: string;
@@ -104,6 +106,7 @@ async function fetchGoogleModels(connection: GoogleConnection): Promise<Provider
 async function fetchAnthropicModels(connection: AnthropicConnection): Promise<ProviderModelDiscovery> {
   const timeoutMs = resolveDiscoveryTimeoutMs();
   const url = new URL(`${connection.baseUrl}/v1/models`);
+  const anthropicVersion = (process.env[ANTHROPIC_VERSION_ENV] || ANTHROPIC_DEFAULT_VERSION).trim() || ANTHROPIC_DEFAULT_VERSION;
 
   let response: Response;
   try {
@@ -111,6 +114,7 @@ async function fetchAnthropicModels(connection: AnthropicConnection): Promise<Pr
       headers: {
         Accept: "application/json",
         "x-api-key": connection.apiKey,
+        "anthropic-version": anthropicVersion,
       },
       signal: AbortSignal.timeout(timeoutMs),
     });
