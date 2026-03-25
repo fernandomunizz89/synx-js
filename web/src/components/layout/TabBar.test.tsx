@@ -4,12 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { TabBar } from "./TabBar.js";
 
 describe("TabBar", () => {
-  it("renders all four tabs", () => {
+  it("renders all tabs", () => {
     render(<TabBar active="tasks" onChange={vi.fn()} reviewCount={0} />);
     expect(screen.getByRole("button", { name: /tasks/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /kanban/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /metrics/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /stream/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /setup/i })).toBeInTheDocument();
   });
 
   it("calls onChange with the clicked tab id", async () => {

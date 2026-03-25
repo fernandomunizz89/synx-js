@@ -1,10 +1,11 @@
-export type TabId = "tasks" | "kanban" | "metrics" | "stream";
+export type TabId = "tasks" | "kanban" | "metrics" | "stream" | "setup";
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
   { id: "tasks",   label: "Tasks",   icon: "☰" },
   { id: "kanban",  label: "Kanban",  icon: "⬜" },
   { id: "metrics", label: "Metrics", icon: "◈" },
   { id: "stream",  label: "Stream",  icon: "⌁" },
+  { id: "setup",   label: "Setup",   icon: "⚙" },
 ];
 
 export function TabBar({
