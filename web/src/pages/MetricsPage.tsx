@@ -249,6 +249,11 @@ export function MetricsPage() {
 
   useEffect(() => { void load(days); }, [load, days]);
 
+  useEffect(() => {
+    const interval = setInterval(() => void load(days), 60_000);
+    return () => clearInterval(interval);
+  }, [load, days]);
+
   const tm = overview?.taskMetrics;
 
   // Agents sorted by approval rate descending (top 12)

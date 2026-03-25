@@ -1,17 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Header } from "./components/layout/Header.js";
 import { TabBar, type TabId } from "./components/layout/TabBar.js";
 import { TasksPage } from "./pages/TasksPage.js";
 import { KanbanPage } from "./pages/KanbanPage.js";
-import { MetricsPage } from "./pages/MetricsPage.js";
 import { StreamPage } from "./pages/StreamPage.js";
 import { fetchOverview, fetchTasks } from "./api/tasks.js";
 
+const MetricsPage = lazy(() =>
+  import("./pages/MetricsPage.js").then((m) => ({ default: m.MetricsPage }))
+);
+
+const VALID_TABS = new Set<TabId>(["tasks", "kanban", "metrics", "stream"]);
+
+function hashTab(): TabId {
+  const h = window.location.hash.slice(1) as TabId;
+  return VALID_TABS.has(h) ? h : "tasks";
+}
+
 export function App() {
-  const [tab, setTab] = useState<TabId>("tasks");
+  const [tab, setTab] = useState<TabId>(hashTab);
   const [taskCount, setTaskCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   const [runtimeStatus, setRuntimeStatus] = useState("unknown");
+
+  // Sync tab → hash and hash → tab (browser back/forward)
+  const changeTab = useCallback((next: TabId) => {
+    window.location.hash = next;
+    setTab(next);
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => setTab(hashTab());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -41,11 +63,19 @@ export function App() {
       fontFamily: "var(--font)",
     }}>
       <Header taskCount={taskCount} runtimeStatus={runtimeStatus} />
-      <TabBar active={tab} onChange={setTab} reviewCount={reviewCount} />
+      <TabBar active={tab} onChange={changeTab} reviewCount={reviewCount} />
       <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {tab === "tasks"   && <TasksPage />}
         {tab === "kanban"  && <KanbanPage />}
-        {tab === "metrics" && <MetricsPage />}
+        {tab === "metrics" && (
+          <Suspense fallback={
+            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 13 }}>
+              Loading metrics…
+            </div>
+          }>
+            <MetricsPage />
+          </Suspense>
+        )}
         {tab === "stream"  && <StreamPage />}
       </main>
     </div>
