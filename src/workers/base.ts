@@ -12,6 +12,7 @@ import { nowIso, sleep } from "../lib/utils.js";
 import { newTaskInputSchema, stageEnvelopeSchema } from "../lib/schema.js";
 import { clearTaskCancelRequest, isTaskCancelRequested, loadTaskCancelRequest } from "../lib/task-cancel.js";
 import { formatSynxStreamLog } from "../lib/synx-ui.js";
+import { consultAgent as consultAgentFn, type ConsultationResponse } from "../lib/agent-consultation.js";
 
 function isTaskCancellationError(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("errorCode" in error)) return false;
@@ -382,5 +383,24 @@ export abstract class WorkerBase {
       request,
       previousStage,
     };
+  }
+
+  /**
+   * Phase 4.2 — Consult a specialist agent in-process.
+   * Returns null on failure (best-effort, never throws).
+   */
+  protected async consultAgent(
+    taskId: string,
+    specialistAgent: AgentName,
+    question: string,
+    context: string,
+  ): Promise<ConsultationResponse | null> {
+    return consultAgentFn({
+      taskId,
+      requestingAgent: this.agent as AgentName,
+      specialistAgent,
+      question,
+      context,
+    });
   }
 }
