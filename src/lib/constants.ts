@@ -86,14 +86,4 @@ export const REQUIRED_PROMPT_FILES = [
   "synx-back-expert.md",
   "synx-qa-engineer.md",
   "synx-seo-specialist.md",
-  // Phase 2 – Extended Squad (optional – built-in defaults are used when absent)
-  "synx-code-reviewer.md",
-  "synx-devops-expert.md",
-  // Phase 2.3 / 2.4 (optional – built-in defaults are used when absent)
-  "synx-security-auditor.md",
-  "synx-docs-writer.md",
-  // Phase 2.5 (optional – built-in default used when absent)
-  "synx-db-architect.md",
-  // Phase 2.6 (optional – built-in default used when absent)
-  "synx-performance-optimizer.md",
 ] as const;
