@@ -71,7 +71,7 @@ export function StreamPage() {
           boxShadow: connected ? "0 0 6px var(--green)" : "none",
         }} />
         <span style={{ fontSize: 12, color: "var(--muted)" }}>
-          {connected ? "Connected to event stream" : "Connecting…"}
+          {connected ? "Connected to event stream" : "Reconnecting…"}
         </span>
         <span style={{ fontSize: 11, color: "var(--muted)", marginLeft: "auto" }}>
           {events.length} event{events.length !== 1 ? "s" : ""}

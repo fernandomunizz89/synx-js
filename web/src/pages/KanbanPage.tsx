@@ -13,6 +13,7 @@ import {
 import { fetchKanban, approveTask, reproveTask, cancelTask } from "../api/tasks.js";
 import { useStreamTaskUpdates } from "../api/stream.js";
 import { TypeBadge, PriorityDot } from "../components/layout/StatusBadge.js";
+import { DisconnectedBanner } from "../components/layout/DisconnectedBanner.js";
 import type { KanbanBoard, KanbanCard, TaskStatus } from "../types.js";
 
 // ── Column config ─────────────────────────────────────────────────────────────
@@ -515,7 +516,7 @@ export function KanbanPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-  useStreamTaskUpdates(load);
+  const { connected, reconnectIn, reconnect } = useStreamTaskUpdates(load);
 
   const handle = async (fn: () => Promise<void>) => {
     setActionError(null);
@@ -634,6 +635,10 @@ export function KanbanPage() {
         setHideDone={setHideDone}
         totalCards={totalCards}
       />
+
+      {!connected && (
+        <DisconnectedBanner reconnectIn={reconnectIn} onReconnect={reconnect} />
+      )}
 
       {actionError && (
         <div style={{

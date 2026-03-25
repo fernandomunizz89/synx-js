@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchTasks, approveTask, reproveTask, cancelTask } from "../api/tasks.js";
 import { useStreamTaskUpdates } from "../api/stream.js";
 import { StatusBadge, TypeBadge, PriorityDot } from "../components/layout/StatusBadge.js";
+import { DisconnectedBanner } from "../components/layout/DisconnectedBanner.js";
 import type { TaskSummary } from "../types.js";
 
 type SubTab = "all" | "review";
@@ -200,7 +201,7 @@ export function TasksPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
-  useStreamTaskUpdates(load);
+  const { connected, reconnectIn, reconnect } = useStreamTaskUpdates(load);
 
   const handle = async (fn: () => Promise<void>) => {
     setActionError(null);
@@ -229,6 +230,10 @@ export function TasksPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {!connected && (
+        <DisconnectedBanner reconnectIn={reconnectIn} onReconnect={reconnect} />
+      )}
+
       {reproveTarget && (
         <ReproveModal
           taskId={reproveTarget}
