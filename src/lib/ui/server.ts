@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 import { approveTaskService, cancelTaskService, reproveTaskService, createTaskService } from "../services/task-services.js";
-import { getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
+import { getKanbanBoard, getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
 import { applyTaskRollback } from "../services/task-rollback.js";
 import { loadTaskMeta } from "../task.js";
 import { createUiRealtime, type UiStreamEvent } from "./realtime.js";
@@ -260,6 +260,11 @@ export function createUiRequestHandler(options: {
 
       if (method === "GET" && pathname === "/api/review-queue") {
         sendJson(res, 200, { ok: true, data: await listReviewQueue() });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/kanban") {
+        sendJson(res, 200, { ok: true, data: await getKanbanBoard() });
         return;
       }
 

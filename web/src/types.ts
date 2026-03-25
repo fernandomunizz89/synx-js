@@ -69,6 +69,26 @@ export interface OverviewData {
   taskCounts?: Record<TaskStatus, number>;
 }
 
+export interface KanbanCard {
+  taskId: string;
+  title: string;
+  type: TaskType;
+  status: TaskStatus;
+  project: string;
+  priority: number;
+  milestone?: string;
+  currentAgent: string;
+  humanApprovalRequired: boolean;
+  parentTaskId?: string;
+  sourceKind: "standalone" | "project-intake" | "project-subtask";
+  childTaskIds: string[];
+  totalDurationMs: number;
+  totalCostUsd: number;
+  updatedAt: string;
+}
+
+export type KanbanBoard = Record<TaskStatus, KanbanCard[]>;
+
 export interface StreamEvent {
   id: number;
   at: string;

@@ -12,6 +12,8 @@ import { listFileLocks } from "../file-locks.js";
 import type { NewTaskInput, TaskMeta } from "../types.js";
 import type { CollaborationMetricsReport } from "../metrics-helpers.js";
 import type {
+  KanbanBoardDto,
+  KanbanCardDto,
   OverviewDto,
   ReviewQueueItemDto,
   RuntimeStatusDto,
@@ -24,11 +26,13 @@ function sumTaskConsumption(meta: TaskMeta): TaskConsumptionDto {
   const estimatedInputTokens = meta.history.reduce((sum, item) => sum + Number(item.estimatedInputTokens || 0), 0);
   const estimatedOutputTokens = meta.history.reduce((sum, item) => sum + Number(item.estimatedOutputTokens || 0), 0);
   const estimatedCostUsd = meta.history.reduce((sum, item) => sum + Number(item.estimatedCostUsd || 0), 0);
+  const totalDurationMs = meta.history.reduce((sum, item) => sum + Number(item.durationMs || 0), 0);
   return {
     estimatedInputTokens,
     estimatedOutputTokens,
     estimatedTotalTokens: estimatedInputTokens + estimatedOutputTokens,
     estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
+    totalDurationMs,
   };
 }
 
@@ -198,6 +202,7 @@ export async function getOverview(): Promise<OverviewDto> {
       estimatedOutputTokens,
       estimatedTotalTokens: estimatedInputTokens + estimatedOutputTokens,
       estimatedCostUsd: Number(estimatedCostUsd.toFixed(6)),
+      totalDurationMs: 0,
     },
     updatedAt: nowIso(),
   };
@@ -266,6 +271,39 @@ export async function getTaskDetail(taskId: string): Promise<TaskDetailDto | nul
     pipelineState,
     cancelRequest,
   };
+}
+
+const ALL_STATUSES: TaskMeta["status"][] = [
+  "new", "in_progress", "waiting_agent", "waiting_human", "blocked", "failed", "done", "archived",
+];
+
+export async function getKanbanBoard(): Promise<KanbanBoardDto> {
+  const summaries = await listTaskSummaries();
+
+  const board = Object.fromEntries(ALL_STATUSES.map((s) => [s, []])) as unknown as KanbanBoardDto;
+
+  for (const task of summaries) {
+    const card: KanbanCardDto = {
+      taskId: task.taskId,
+      title: task.title,
+      type: task.type,
+      status: task.status,
+      project: task.project,
+      priority: task.priority,
+      milestone: task.milestone,
+      currentAgent: task.currentAgent,
+      humanApprovalRequired: task.humanApprovalRequired,
+      parentTaskId: task.parentTaskId,
+      sourceKind: task.sourceKind,
+      childTaskIds: task.childTaskIds,
+      totalDurationMs: task.consumption.totalDurationMs,
+      totalCostUsd: task.consumption.estimatedCostUsd,
+      updatedAt: task.updatedAt,
+    };
+    board[task.status].push(card);
+  }
+
+  return board;
 }
 
 export async function getMetricsOverview(hours = 24): Promise<CollaborationMetricsReport> {

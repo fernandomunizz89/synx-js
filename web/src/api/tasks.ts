@@ -1,4 +1,4 @@
-import type { TaskSummary, ReviewQueueItem, OverviewData } from "../types.js";
+import type { TaskSummary, ReviewQueueItem, OverviewData, KanbanBoard } from "../types.js";
 
 const BASE = "";
 
@@ -31,6 +31,10 @@ export async function reproveTask(taskId: string, reason: string): Promise<void>
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ reason }),
   });
+}
+
+export async function fetchKanban(): Promise<KanbanBoard> {
+  return apiFetch<KanbanBoard>("/api/kanban");
 }
 
 export async function cancelTask(taskId: string): Promise<void> {

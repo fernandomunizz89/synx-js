@@ -35,6 +35,7 @@ function makeDetail(overrides: Partial<TaskDetailDto> = {}): TaskDetailDto {
       estimatedOutputTokens: 0,
       estimatedTotalTokens: 0,
       estimatedCostUsd: 0,
+      totalDurationMs: 0,
     },
     rawRequest: overrides.rawRequest || "Do the sample work",
     history: overrides.history || [],
