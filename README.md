@@ -120,10 +120,11 @@ synx ui --read-only          # disable mutations (safe for sharing)
 synx ui --port 4317
 ```
 
-Three tabs:
+Four tabs:
 
-- **Tasks** — searchable table with per-task Approve / Reprove / Cancel.
-- **Review** — focused queue of tasks waiting for your decision.
+- **Tasks** — searchable table with per-task Approve / Reprove / Cancel and a Review sub-tab for the `waiting_human` queue.
+- **Kanban** — 7-column board (new → done) with drag-and-drop approve/reprove/cancel, group by status / project / milestone, text filter, and real-time SSE updates.
+- **Metrics** — KPI cards with sparklines, timeline charts (tasks + cost/tokens), agent approval rates, project health, and operational stats. Auto-refreshes every 60 s.
 - **Stream** — real-time SSE event log.
 
 The **prompt bar** at the top lets you describe a feature or project in plain text. SYNX creates project subtasks automatically and runs them in parallel.
@@ -253,24 +254,26 @@ npm run test:coverage # generate coverage report
 npm run check         # TypeScript type check
 ```
 
-**Current status (2026-03-24):** 130 test files · 848 tests · 100% pass
+**Current status (2026-03-25):** 140 test files · 891 tests · 100% pass
 
 ---
 
 ## 🧩 Web UI
 
-`synx ui` starts a local web interface with three tabs:
+`synx ui` starts a local React SPA with four tabs:
 
-- **Tasks** — searchable table, click to expand with inline Approve / Reprove / Cancel.
-- **Review** — focused queue of `waiting_human` tasks.
+- **Tasks** — searchable table with inline Approve / Reprove / Cancel and a Review sub-tab for the `waiting_human` queue.
+- **Kanban** — 7-column drag-and-drop board with real-time SSE updates.
+- **Metrics** — KPI cards, timeline charts, agent/project/operational dashboards powered by Recharts.
 - **Stream** — real-time SSE event log.
 
-No build step required for the UI — `npm run build` compiles TypeScript only.
+The React SPA (`web/`) is compiled separately from the TypeScript daemon and must be built before running `synx ui`:
 
 ```bash
-npm run build
-npm run check
-npm test
+npm run build       # TypeScript daemon + React SPA
+npm run build:ui    # React SPA only (web/ → dist/ui/)
+npm run check       # TypeScript type check
+npm test            # full test suite
 ```
 
 See [docs/WEB-UI.md](docs/WEB-UI.md) for full usage and API reference.
