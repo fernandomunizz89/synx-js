@@ -9,7 +9,7 @@ import { providerHealthToHuman } from "../lib/human-messages.js";
 import { confirmAction } from "../lib/interactive.js";
 import { clearStaleLocks, detectInterruptedTasks, detectStaleLocks, detectWorkingOrphans, recoverInterruptedTasks, recoverWorkingFiles } from "../lib/runtime.js";
 import { commandExample } from "../lib/cli-command.js";
-import { STAGE_FILE_NAMES } from "../lib/constants.js";
+import { REQUIRED_PROMPT_FILES } from "../lib/constants.js";
 import path from "node:path";
 import type { ProviderStageConfig } from "../lib/types.js";
 
@@ -101,13 +101,22 @@ export const doctorCommand = new Command("doctor")
     });
 
     const promptsDirValue = promptsDir();
-    checks.push(
-      { label: "Synx Front Expert", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxFrontExpert)), message: "Prompt file missing" },
-      { label: "Synx Mobile Expert", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxMobileExpert)), message: "Prompt file missing" },
-      { label: "Synx Back Expert", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxBackExpert)), message: "Prompt file missing" },
-      { label: "Synx SEO Specialist", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxSeoSpecialist)), message: "Prompt file missing" },
-      { label: "Synx QA Engineer", ok: await exists(path.join(promptsDirValue, STAGE_FILE_NAMES.synxQaEngineer)), message: "Prompt file missing" },
-    );
+    const promptLabels: Partial<Record<typeof REQUIRED_PROMPT_FILES[number], string>> = {
+      "synx-front-expert.md": "Synx Front Expert",
+      "synx-mobile-expert.md": "Synx Mobile Expert",
+      "synx-back-expert.md": "Synx Back Expert",
+      "synx-seo-specialist.md": "Synx SEO Specialist",
+      "synx-qa-engineer.md": "Synx QA Engineer",
+    };
+    for (const promptFile of REQUIRED_PROMPT_FILES) {
+      if (!(promptFile in promptLabels)) continue;
+      const promptExists = await exists(path.join(promptsDirValue, promptFile));
+      checks.push({
+        label: promptLabels[promptFile] || promptFile,
+        ok: promptExists,
+        message: promptExists ? "Prompt file found." : "Prompt file missing",
+      });
+    }
 
     const config = await loadResolvedProjectConfig();
     checks.push({

@@ -9,8 +9,17 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return json.data;
 }
 
+function normalizeTaskSummary(task: TaskSummary): TaskSummary {
+  return {
+    ...task,
+    history: Array.isArray(task.history) ? task.history : [],
+    children: Array.isArray(task.children) ? task.children.map((child) => normalizeTaskSummary(child)) : [],
+  };
+}
+
 export async function fetchTasks(): Promise<TaskSummary[]> {
-  return apiFetch<TaskSummary[]>("/api/tasks");
+  const tasks = await apiFetch<TaskSummary[]>("/api/tasks");
+  return tasks.map((task) => normalizeTaskSummary(task));
 }
 
 export async function fetchOverview(): Promise<OverviewData> {
@@ -19,6 +28,14 @@ export async function fetchOverview(): Promise<OverviewData> {
 
 export async function fetchReviewQueue(): Promise<ReviewQueueItem[]> {
   return apiFetch<ReviewQueueItem[]>("/api/review-queue");
+}
+
+export async function submitProjectPrompt(prompt: string): Promise<{ taskId: string }> {
+  return apiFetch<{ taskId: string }>("/api/project", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
 }
 
 export async function approveTask(taskId: string): Promise<void> {

@@ -1,7 +1,7 @@
 import http from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { URL } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { approveTaskService, cancelTaskService, reproveTaskService, createTaskService } from "../services/task-services.js";
 import { getKanbanBoard, getMetricsOverview, getOverview, getTaskDetail, invalidateQueryCache, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
 import { applyTaskRollback } from "../services/task-rollback.js";
@@ -149,9 +149,25 @@ async function serveStaticFile(res: http.ServerResponse, filePath: string): Prom
   return true;
 }
 
+function uiDistCandidates(): string[] {
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  return [
+    path.join(packageRoot, "dist", "ui"),
+    path.join(process.cwd(), "dist", "ui"),
+  ];
+}
+
+async function resolveUiAssetPath(relativePath: string): Promise<string | null> {
+  for (const distRoot of uiDistCandidates()) {
+    const candidate = path.join(distRoot, relativePath);
+    if (await exists(candidate)) return candidate;
+  }
+  return null;
+}
+
 async function serveSpaSentinel(res: http.ServerResponse): Promise<void> {
-  const indexPath = path.join(process.cwd(), "dist", "ui", "index.html");
-  if (await exists(indexPath)) {
+  const indexPath = await resolveUiAssetPath("index.html");
+  if (indexPath) {
     const html = await readText(indexPath);
     sendHtml(res, 200, html);
   } else {
@@ -178,8 +194,8 @@ export function createUiRequestHandler(options: {
 
       // Serve Vite-built static assets (JS/CSS bundles)
       if (method === "GET" && pathname.startsWith("/assets/")) {
-        const assetPath = path.join(process.cwd(), "dist", "ui", pathname);
-        if (await serveStaticFile(res, assetPath)) return;
+        const assetPath = await resolveUiAssetPath(pathname.replace(/^\/+/, ""));
+        if (assetPath && await serveStaticFile(res, assetPath)) return;
         notFound(res);
         return;
       }
@@ -764,11 +780,21 @@ export function createUiRequestHandler(options: {
           const globalPath = globalConfigPath();
           let rawGlobal: Record<string, unknown> = {};
           try { rawGlobal = await readJson<Record<string, unknown>>(globalPath); } catch { /* ignore */ }
-          type GShape = { providers?: { dispatcher?: DiscoveryCfg } };
+          type GShape = {
+            providers?: { dispatcher?: DiscoveryCfg; planner?: DiscoveryCfg };
+            agentProviders?: Record<string, DiscoveryCfg>;
+          };
           const eg = rawGlobal as GShape;
-          if (eg.providers?.dispatcher?.type === providerType && eg.providers.dispatcher.apiKey) {
-            cfg.apiKey = eg.providers.dispatcher.apiKey;
+          const keyCandidates: string[] = [];
+          const dispatcher = eg.providers?.dispatcher;
+          const planner = eg.providers?.planner;
+          if (dispatcher?.type === providerType && dispatcher.apiKey) keyCandidates.push(dispatcher.apiKey);
+          if (planner?.type === providerType && planner.apiKey) keyCandidates.push(planner.apiKey);
+          for (const value of Object.values(eg.agentProviders ?? {})) {
+            if (value?.type === providerType && value.apiKey) keyCandidates.push(value.apiKey);
           }
+          const firstKey = keyCandidates.find((value) => Boolean(normalizeString(value)));
+          if (firstKey) cfg.apiKey = firstKey;
         }
 
         const discovery = await discoverProviderModels(cfg as Parameters<typeof discoverProviderModels>[0]);

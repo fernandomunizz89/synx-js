@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { createServer } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTask, loadTaskMeta, saveTaskMeta } from "../task.js";
 import type { NewTaskInput } from "../types.js";
@@ -70,7 +71,7 @@ describe.sequential("lib/ui/server", () => {
     try {
       const rootResponse = await fetch(`${server.baseUrl}/`);
       expect(rootResponse.status).toBe(200);
-      expect(await rootResponse.text()).toContain("ui");
+      expect((await rootResponse.text()).toLowerCase()).toContain("<html");
 
       const reactAssetResponse = await fetch(`${server.baseUrl}/ui-assets/task-assistant.react.js`);
       expect([200, 404]).toContain(reactAssetResponse.status);
@@ -455,6 +456,70 @@ describe.sequential("lib/ui/server", () => {
     }
   });
 
+  it("POST /api/setup/discover-models reuses apiKey from agentProviders", async () => {
+    const originalHome = process.env.HOME;
+    process.env.HOME = fixture.root;
+    let providerServer: ReturnType<typeof createServer> | null = null;
+    let server: Awaited<ReturnType<typeof startUiServer>> | null = null;
+    try {
+      await fs.mkdir(path.dirname(globalConfigPath()), { recursive: true });
+      await writeJson(globalConfigPath(), {
+        providers: {
+          dispatcher: {
+            type: "openai-compatible",
+            model: "gpt-5.4",
+            baseUrlEnv: "AI_AGENTS_OPENAI_BASE_URL",
+            apiKeyEnv: "AI_AGENTS_OPENAI_API_KEY",
+          },
+        },
+        agentProviders: {
+          "Synx Front Expert": {
+            type: "openai-compatible",
+            model: "gpt-5.4-mini",
+            apiKey: "agent-key-123",
+          },
+        },
+        defaults: { humanReviewer: "tester" },
+      });
+
+      providerServer = createServer((req, res) => {
+        if (req.url === "/models" && req.headers.authorization === "Bearer agent-key-123") {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ data: [{ id: "gpt-5.4" }] }));
+          return;
+        }
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unauthorized" }));
+      });
+      await new Promise<void>((resolve) => providerServer!.listen(0, "127.0.0.1", () => resolve()));
+      const address = providerServer!.address();
+      const providerPort = typeof address === "object" && address ? address.port : 0;
+
+      server = await startUiServer({
+        host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+      });
+      const res = await fetch(`${server.baseUrl}/api/setup/discover-models`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          providerType: "openai-compatible",
+          baseUrl: `http://127.0.0.1:${providerPort}`,
+        }),
+      });
+      expect(res.status).toBe(200);
+      const payload = await res.json() as { ok: boolean; data: { reachable: boolean; message: string; models: string[] } };
+      expect(payload.ok).toBe(true);
+      expect(payload.data.reachable).toBe(true);
+      expect(payload.data.models).toContain("gpt-5.4");
+    } finally {
+      if (server) await server.close();
+      if (providerServer) {
+        await new Promise<void>((resolve, reject) => providerServer!.close((error) => error ? reject(error) : resolve()));
+      }
+      process.env.HOME = originalHome;
+    }
+  });
+
   it("serves static 404 for unknown routes", async () => {
     const server = await startUiServer({
       host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: false,
@@ -497,7 +562,7 @@ describe.sequential("lib/ui/server", () => {
     try {
       const res = await fetch(`${server.baseUrl}/some/random/route`);
       expect(res.status).toBe(200);
-      expect(await res.text()).toContain("UI not built"); // serveSpaSentinel fallback
+      expect((await res.text()).toLowerCase()).toContain("<html");
     } finally {
       await server.close();
     }

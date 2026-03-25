@@ -5,17 +5,19 @@ import userEvent from "@testing-library/user-event";
 vi.mock("./pages/TasksPage.js",   () => ({ TasksPage:   () => <div>tasks-page</div>   }));
 vi.mock("./pages/KanbanPage.js",  () => ({ KanbanPage:  () => <div>kanban-page</div>  }));
 vi.mock("./pages/StreamPage.js",  () => ({ StreamPage:  () => <div>stream-page</div>  }));
+vi.mock("./pages/SetupPage.js",   () => ({ SetupPage:   () => <div>setup-page</div>   }));
 vi.mock("./pages/MetricsPage.js", () => ({ MetricsPage: () => <div>metrics-page</div> }));
 vi.mock("./api/tasks.js", () => ({
   fetchOverview: vi.fn().mockResolvedValue({ runtime: { status: "idle" } }),
   fetchTasks:    vi.fn().mockResolvedValue([]),
+  submitProjectPrompt: vi.fn().mockResolvedValue({ taskId: "task-1" }),
 }));
 vi.mock("./components/layout/Header.js",  () => ({ Header:  () => <div /> }));
 vi.mock("./components/layout/TabBar.js",  () => ({
   TabBar: ({ active, onChange }: { active: string; onChange: (t: string) => void }) => (
     <nav>
       <span data-testid="active-tab">{active}</span>
-      {(["tasks", "kanban", "metrics", "stream"] as const).map((t) => (
+      {(["tasks", "kanban", "metrics", "stream", "setup"] as const).map((t) => (
         <button key={t} onClick={() => onChange(t)}>{t}</button>
       ))}
     </nav>
@@ -40,5 +42,10 @@ describe("App — hash-based tab navigation", () => {
     await userEvent.click(screen.getByRole("button", { name: "metrics" }));
     expect(window.location.hash).toBe("#metrics");
     expect(screen.getByTestId("active-tab")).toHaveTextContent("metrics");
+  });
+
+  it("renders project prompt input", () => {
+    render(<App />);
+    expect(screen.getByLabelText("Project prompt")).toBeInTheDocument();
   });
 });
