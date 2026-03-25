@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { uiCommand } from "./ui.js";
 import { ensureGlobalInitialized, ensureProjectInitialized } from "../lib/bootstrap.js";
 import { startUiServer } from "../lib/ui/server.js";
-import { buildWebUiHtml } from "../lib/ui/web-app.js";
 
 vi.mock("../lib/bootstrap.js", () => ({
   ensureGlobalInitialized: vi.fn(),
@@ -11,10 +10,6 @@ vi.mock("../lib/bootstrap.js", () => ({
 
 vi.mock("../lib/ui/server.js", () => ({
   startUiServer: vi.fn(),
-}));
-
-vi.mock("../lib/ui/web-app.js", () => ({
-  buildWebUiHtml: vi.fn(),
 }));
 
 describe("ui command", () => {
@@ -32,7 +27,6 @@ describe("ui command", () => {
     vi.clearAllMocks();
     vi.mocked(ensureGlobalInitialized).mockResolvedValue(undefined);
     vi.mocked(ensureProjectInitialized).mockResolvedValue(undefined);
-    vi.mocked(buildWebUiHtml).mockReturnValue("<!doctype html><html><body>ui</body></html>");
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
@@ -69,7 +63,6 @@ describe("ui command", () => {
     expect(startUiServer).toHaveBeenCalledWith({
       host: "127.0.0.1",
       port: 4317,
-      html: "<!doctype html><html><body>ui</body></html>",
       enableMutations: true,
     });
     expect(close).toHaveBeenCalledTimes(1);
@@ -103,7 +96,6 @@ describe("ui command", () => {
     expect(startUiServer).toHaveBeenCalledWith({
       host: "0.0.0.0",
       port: 4318,
-      html: "<!doctype html><html><body>ui</body></html>",
       enableMutations: false,
     });
     expect(close).toHaveBeenCalledTimes(1);

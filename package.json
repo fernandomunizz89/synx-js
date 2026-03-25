@@ -9,9 +9,11 @@
     "ai-agents": "./bin/ai-agents.js"
   },
   "scripts": {
-    "build": "npm run build:ts",
+    "build": "npm run build:ts && npm run build:ui",
     "build:ts": "tsc -p tsconfig.json",
+    "build:ui": "cd web && npm install --prefer-offline && npm run build",
     "dev": "tsx src/index.ts",
+    "dev:ui": "cd web && npm install --prefer-offline && npm run dev",
     "start": "node dist/index.js",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
