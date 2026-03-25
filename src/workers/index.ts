@@ -2,6 +2,8 @@ import { DispatcherWorker } from "./dispatcher.js";
 import { SynxFrontExpert } from "./experts/synx-front-expert.js";
 import { SynxMobileExpert } from "./experts/synx-mobile-expert.js";
 import { SynxBackExpert } from "./experts/synx-back-expert.js";
+import { SynxDevopsExpert } from "./experts/synx-devops-expert.js";
+import { SynxCodeReviewer } from "./experts/synx-code-reviewer.js";
 import { SynxQAEngineer } from "./experts/synx-qa-engineer.js";
 import { SynxSeoSpecialist } from "./experts/synx-seo-specialist.js";
 import { GenericAgent } from "./generic-agent.js";
@@ -14,6 +16,8 @@ export const workers = {
   front: new SynxFrontExpert(),
   mobile: new SynxMobileExpert(),
   back: new SynxBackExpert(),
+  devops: new SynxDevopsExpert(),
+  codeReviewer: new SynxCodeReviewer(),
   qa: new SynxQAEngineer(),
   seo: new SynxSeoSpecialist(),
   pipelineExecutor: new PipelineExecutor(),

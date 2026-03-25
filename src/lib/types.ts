@@ -17,6 +17,8 @@ export type AgentName =
   | "Synx Front Expert"
   | "Synx Mobile Expert"
   | "Synx Back Expert"
+  | "Synx DevOps Expert"
+  | "Synx Code Reviewer"
   | "Synx QA Engineer"
   | "Synx SEO Specialist";
 

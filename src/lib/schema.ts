@@ -20,6 +20,8 @@ export const agentNameSchema = z.enum([
   "Synx Front Expert",
   "Synx Mobile Expert",
   "Synx Back Expert",
+  "Synx DevOps Expert",
+  "Synx Code Reviewer",
   "Synx QA Engineer",
   "Synx SEO Specialist",
 ]);
@@ -221,6 +223,7 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx Front Expert"),
     z.literal("Synx Mobile Expert"),
     z.literal("Synx Back Expert"),
+    z.literal("Synx DevOps Expert"),
     z.literal("Synx SEO Specialist"),
   ]).optional(),
   nextAgent: z.union([
@@ -228,6 +231,7 @@ export const dispatcherOutputSchema = z.object({
     z.literal("Synx Front Expert"),
     z.literal("Synx Mobile Expert"),
     z.literal("Synx Back Expert"),
+    z.literal("Synx DevOps Expert"),
     z.literal("Synx QA Engineer"),
     z.literal("Synx SEO Specialist"),
   ]),
@@ -482,5 +486,20 @@ export const qaOutputSchema = z.object({
     z.literal("Synx SEO Specialist"),
   ]),
 });
+
+export const codeReviewOutputSchema = z.object({
+  reviewPassed: z.boolean(),
+  issues: z.array(z.object({
+    file: z.string(),
+    line: z.number().optional(),
+    severity: z.enum(["critical", "high", "medium", "low"]),
+    rule: z.string().optional(),
+    message: z.string(),
+    suggestion: z.string().optional(),
+  })),
+  summary: z.string(),
+  blockedReason: z.string().optional(),
+});
+export type CodeReviewOutput = z.infer<typeof codeReviewOutputSchema>;
 
 // Legacy agent output schemas were removed.

@@ -65,6 +65,8 @@ const AGENT_DEFAULT_TEMPERATURES: Record<AgentName, number> = {
   "Synx Front Expert": 0.05,
   "Synx Mobile Expert": 0.05,
   "Synx Back Expert": 0.05,
+  "Synx DevOps Expert": 0.05,
+  "Synx Code Reviewer": 0.05,
   "Synx QA Engineer": 0.05,
   "Synx SEO Specialist": 0.1,
 };
