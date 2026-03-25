@@ -125,6 +125,14 @@ vi.mock("../../lib/orchestrator.js", () => ({
   formatResearchContextTag: vi.fn().mockReturnValue(""),
 }));
 
+vi.mock("../../lib/file-locks.js", () => ({
+  reserveDispatchLocks: vi.fn().mockResolvedValue({ acquired: [], conflicts: [] }),
+  releaseFileLocks: vi.fn().mockResolvedValue([]),
+  acquireFileLocks: vi.fn().mockResolvedValue({ acquired: [], conflicts: [] }),
+  getFileConflicts: vi.fn().mockResolvedValue([]),
+  listFileLocks: vi.fn().mockResolvedValue({ version: 1, locks: {}, byTask: {}, updatedAt: new Date().toISOString() }),
+}));
+
 vi.mock("../../lib/qa-remediation.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/qa-remediation.js")>();
   return {
@@ -451,6 +459,127 @@ describe.sequential("workers/experts/synx-front-expert", () => {
     const expert = new SynxFrontExpert();
     const processed = await expert.tryProcess(task.taskId);
     expect(processed).toBe(false);
+  });
+
+  it("pre-flight: conflict with auto-rebase re-queues the stage and returns false", async () => {
+    const { reserveDispatchLocks } = await import("../../lib/file-locks.js");
+    vi.mocked(reserveDispatchLocks).mockResolvedValueOnce({
+      acquired: [],
+      conflicts: [{ file: "src/components", heldBy: "task-holder-123", lockTarget: "scope:src/components", kind: "scope" }],
+    });
+
+    const task = await createTask(
+      {
+        title: "Conflicting feature",
+        typeHint: "Feature",
+        project: "test-app",
+        rawRequest: "Edit components",
+        extraContext: { relatedFiles: [], logs: [], notes: [] },
+      },
+      { ownershipBoundaries: ["src/components"] },
+    );
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxFrontExpert);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-front-expert",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx Front Expert",
+    });
+
+    const expert = new SynxFrontExpert();
+    const processed = await expert.tryProcess(task.taskId);
+    expect(processed).toBe(false);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.status).toBe("waiting_agent");
+    expect(meta.nextAgent).toBe("Synx Front Expert");
+    expect(meta.blockedBy).toContain("task-holder-123");
+
+    // Stage re-queued in inbox for the next dispatch cycle
+    const requeued = await fs.readFile(inboxPath, "utf8").then(JSON.parse);
+    expect(requeued.stage).toBe("synx-front-expert");
+  });
+
+  it("pre-flight: conflict with manual-review escalates to human", async () => {
+    const { reserveDispatchLocks } = await import("../../lib/file-locks.js");
+    vi.mocked(reserveDispatchLocks).mockResolvedValueOnce({
+      acquired: [],
+      conflicts: [{ file: "src/components", heldBy: "task-holder-456", lockTarget: "scope:src/components", kind: "scope" }],
+    });
+
+    const task = await createTask(
+      {
+        title: "Manual review conflict",
+        typeHint: "Feature",
+        project: "test-app",
+        rawRequest: "Edit components",
+        extraContext: { relatedFiles: [], logs: [], notes: [] },
+      },
+      { ownershipBoundaries: ["src/components"], mergeStrategy: "manual-review" },
+    );
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxFrontExpert);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-front-expert",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx Front Expert",
+    });
+
+    const expert = new SynxFrontExpert();
+    const processed = await expert.tryProcess(task.taskId);
+    expect(processed).toBe(false);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.status).toBe("waiting_human");
+    expect(meta.nextAgent).toBe("Human Review");
+    expect(meta.humanApprovalRequired).toBe(true);
+  });
+
+  it("pre-flight: successful reservation writes dispatchLockReservation to meta", async () => {
+    const { reserveDispatchLocks } = await import("../../lib/file-locks.js");
+    const { getGitChangedFiles } = await import("../../lib/workspace-tools.js");
+
+    vi.mocked(reserveDispatchLocks).mockResolvedValueOnce({
+      acquired: ["scope:src/components"],
+      conflicts: [],
+    });
+    vi.mocked(getGitChangedFiles)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(["src/components/Toggle.tsx"]);
+
+    const task = await createTask(
+      {
+        title: "Lock reservation test",
+        typeHint: "Feature",
+        project: "test-app",
+        rawRequest: "Edit components",
+        extraContext: { relatedFiles: [], logs: [], notes: [] },
+      },
+      { ownershipBoundaries: ["src/components"] },
+    );
+
+    const inboxPath = path.join(task.taskPath, "inbox", STAGE_FILE_NAMES.synxFrontExpert);
+    await writeJson(inboxPath, {
+      taskId: task.taskId,
+      stage: "synx-front-expert",
+      status: "request",
+      createdAt: new Date().toISOString(),
+      agent: "Synx Front Expert",
+    });
+
+    const expert = new SynxFrontExpert();
+    const processed = await expert.tryProcess(task.taskId);
+    expect(processed).toBe(true);
+
+    const meta = await loadTaskMeta(task.taskId);
+    expect(meta.dispatchLockReservation).toMatchObject({
+      stage: "synx-front-expert",
+      reservedFiles: ["src/components"],
+    });
   });
 
   it("includes research context tag when available", async () => {
