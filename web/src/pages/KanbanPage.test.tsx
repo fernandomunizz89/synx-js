@@ -67,7 +67,7 @@ describe("KanbanPage", () => {
     await screen.findByText("Waiting Human Task");
     await userEvent.click(screen.getByTitle("Reprove"));
     expect(screen.getByText("Reprove task")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Reprove", exact: true }));
+    await userEvent.click(screen.getByRole("button", { name: "Reprove" }));
     expect(reproveTask).toHaveBeenCalledWith("wh-1", "");
   });
 

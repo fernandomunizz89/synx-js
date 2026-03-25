@@ -11,7 +11,9 @@ class MockEventSource {
   onmessage: ((e: MessageEvent) => void) | null = null;
   private _listeners = new Map<string, Array<(e: Event) => void>>();
 
-  constructor(public url: string) {
+  url: string;
+  constructor(url: string) {
+    this.url = url;
     MockEventSource.instances.push(this);
   }
 

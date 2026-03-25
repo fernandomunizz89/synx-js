@@ -52,7 +52,7 @@ describe("TasksPage", () => {
 
     await userEvent.type(screen.getByPlaceholderText("Reason for reproval (optional)"), "needs rework");
     // Click the modal's confirm button (exact name "Reprove", not "✗ Reprove")
-    await userEvent.click(screen.getByRole("button", { name: "Reprove", exact: true }));
+    await userEvent.click(screen.getByRole("button", { name: "Reprove" }));
 
     expect(reproveTask).toHaveBeenCalledWith("t-1", "needs rework");
   });
