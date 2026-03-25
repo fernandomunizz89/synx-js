@@ -116,7 +116,7 @@ describe.sequential("workers/experts/synx-release-manager", () => {
     const { activateStabilizationMode } = await import("../../lib/release-state.js");
 
     vi.mocked(runProjectChecks).mockResolvedValueOnce([
-      { command: "npm run test", status: "passed", exitCode: 0, diagnostics: [], timedOut: false, durationMs: 100 }
+      { command: "npm run test", status: "passed", exitCode: 0, diagnostics: [], timedOut: false, durationMs: 100, stdoutPreview: "", stderrPreview: "" }
     ]);
 
     const task = await createTask({
