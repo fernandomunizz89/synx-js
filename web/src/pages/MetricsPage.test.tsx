@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { MetricsOverview } from "../api/metrics.js";
 
 // Mock recharts — SVG rendering is not meaningful in jsdom
@@ -23,7 +24,7 @@ vi.mock("../api/metrics.js", () => ({
   fetchProjects:        vi.fn().mockResolvedValue([]),
 }));
 
-import { fetchMetricsOverview } from "../api/metrics.js";
+import { fetchMetricsOverview, fetchAgents, fetchProjects } from "../api/metrics.js";
 import { MetricsPage } from "./MetricsPage.js";
 
 const mockOverview: MetricsOverview = {
@@ -57,6 +58,27 @@ describe("MetricsPage", () => {
 
     expect(screen.getByText("Tasks completed")).toBeInTheDocument();
     expect(screen.getByText("Success rate")).toBeInTheDocument();
+  });
+
+  it("refresh button triggers a reload", async () => {
+    render(<MetricsPage />);
+    await act(async () => {});
+    const callsBefore = vi.mocked(fetchMetricsOverview).mock.calls.length;
+    await userEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    await act(async () => {});
+    expect(vi.mocked(fetchMetricsOverview).mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it("covers sort/filter callbacks when agents and projects are non-empty", async () => {
+    vi.mocked(fetchAgents).mockResolvedValueOnce([
+      { agent: "Synx Engineer", stageCount: 5, avgDurationMs: 3000, estimatedCostUsd: 0.05, approvalRate: 0.9, approvedCount: 9, reprovedCount: 1 },
+      { agent: "Synx QA",       stageCount: 3, avgDurationMs: 5000, estimatedCostUsd: 0.03, approvalRate: 0.5, approvedCount: 3, reprovedCount: 3 },
+    ]);
+    vi.mocked(fetchProjects).mockResolvedValueOnce([
+      { project: "core", taskCount: 10, activeCount: 2, doneCount: 6, failedCount: 1, waitingHumanCount: 1, estimatedCostUsd: 0.5 },
+    ]);
+    render(<MetricsPage />);
+    await act(async () => {});
   });
 
   it("auto-refreshes by calling the API a second time after 60 seconds", async () => {

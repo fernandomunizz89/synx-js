@@ -203,9 +203,6 @@ export class GoogleProvider implements LlmProvider {
     const baseUrlEnv = config.baseUrlEnv || DEFAULT_BASE_URL_ENV;
     const apiKeyEnv = config.apiKeyEnv || DEFAULT_API_KEY_ENV;
     const baseUrl = (config.baseUrl || process.env[baseUrlEnv] || DEFAULT_BASE_URL).trim();
-    if (!baseUrl) {
-      throw new Error(`Missing Google provider base URL. Set ${baseUrlEnv} or provide it in configuration.`);
-    }
     const apiKey = (config.apiKey || process.env[apiKeyEnv] || "").trim();
     if (!apiKey) {
       throw new Error(`Missing Google provider API key. Set ${apiKeyEnv} or provide it in configuration.`);

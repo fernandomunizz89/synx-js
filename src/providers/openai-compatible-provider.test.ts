@@ -94,6 +94,66 @@ describe.sequential("providers/openai-compatible-provider", () => {
     expect(result.estimatedTotalTokens).toBeGreaterThan(0);
   });
 
+  it("handles missing API key and omits Authorization header", async () => {
+    delete process.env.AI_AGENTS_OPENAI_API_KEY;
+    const fetchMock = vi.fn().mockResolvedValue(buildOkJsonResponse('{"ok":true}'));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+      apiKey: "",
+    });
+    await provider.generateStructured(requestBase());
+    
+    const secondArg = fetchMock.mock.calls[0][1];
+    expect(secondArg.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("uses environment variable overrides for resolution", async () => {
+    process.env.AI_AGENTS_TEMPERATURE_UNKNOWNAGENT_RESEARCH = "0.9";
+    process.env.AI_AGENTS_OPENAI_MAX_TOKENS = "1000";
+    process.env.AI_AGENTS_PROVIDER_TIMEOUT_MS = "10000";
+    
+    const fetchMock = vi.fn().mockResolvedValue(buildOkJsonResponse('{"ok":true}'));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+    });
+
+    await provider.generateStructured({ ...requestBase(), agent: "UnknownAgent", taskType: "Research" } as any);
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    
+    expect(payload.temperature).toBe(0.9);
+    expect(payload.max_tokens).toBe(1000);
+
+    // Clean up
+    delete process.env.AI_AGENTS_TEMPERATURE_UNKNOWNAGENT_RESEARCH;
+    delete process.env.AI_AGENTS_OPENAI_MAX_TOKENS;
+    delete process.env.AI_AGENTS_PROVIDER_TIMEOUT_MS;
+  });
+
+  it("resolves temperature based on task types", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(buildOkJsonResponse('{"ok":true}'));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const provider = new OpenAiCompatibleProvider({
+      type: "openai-compatible",
+      model: "gpt-5.3-codex",
+    });
+
+    const base = { ...requestBase(), agent: "UnknownAgent" };
+    await provider.generateStructured({ ...base, taskType: "Research" } as any);
+    let payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(payload.temperature).toBe(0.2);
+
+    await provider.generateStructured({ ...base, taskType: "Bug" } as any);
+    payload = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(payload.temperature).toBe(0.05);
+  });
+
   it("retries once when first response is invalid JSON and succeeds on second attempt", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(buildOkJsonResponse("not-json"))

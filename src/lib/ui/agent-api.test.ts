@@ -260,4 +260,104 @@ describe.sequential("ui/agent-api", () => {
       await server.close();
     }
   });
+
+  it("returns 404 for non-existent task or project", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: true,
+    });
+
+    try {
+      const taskRes = await fetch(`${server.baseUrl}/api/v1/agent/tasks/non-existent-task`);
+      expect(taskRes.status).toBe(404);
+
+      const graphRes = await fetch(`${server.baseUrl}/api/v1/agent/projects/non-existent-project/graph`);
+      expect(graphRes.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("returns 400 for invalid reproval or malformed JSON", async () => {
+    const task = await createTask(baseTaskInput("Reprove test"));
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: true,
+    });
+
+    try {
+      const reproveRes = await fetch(`${server.baseUrl}/api/v1/agent/tasks/${encodeURIComponent(task.taskId)}/reprove`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "" }),
+      });
+      expect(reproveRes.status).toBe(400);
+
+      const malformedRes = await fetch(`${server.baseUrl}/api/v1/agent/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{ invalid json }",
+      });
+      expect(malformedRes.status).toBe(400);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("dispatches nemo actions and handles validation errors", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1",
+      port: 0,
+      html: "<html><body>ui</body></html>",
+      enableMutations: true,
+    });
+
+    try {
+      const dispatchRes = await fetch(`${server.baseUrl}/api/v1/nemo/actions/synx_create_task`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          parameters: {
+            title: "Nemo Task",
+            rawRequest: "Created via Nemo",
+            project: "nemo-test",
+          },
+        }),
+      });
+      expect(dispatchRes.status).toBe(200);
+      const payload = await dispatchRes.json() as { ok: boolean; data: { taskId: string } };
+      expect(payload.ok).toBe(true);
+
+      const invalidRes = await fetch(`${server.baseUrl}/api/v1/nemo/actions/synx_create_task`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ parameters: { title: "" } }),
+      });
+      expect(invalidRes.status).toBe(200);
+      const invalidPayload = await invalidRes.json() as { ok: boolean; data: { ok: boolean } };
+      expect(invalidPayload.data.ok).toBe(false);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("filters tasks by status, project, and query", async () => {
+    await createTask({ ...baseTaskInput("Task A"), project: "Project-1" });
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+
+    try {
+      const res = await fetch(`${server.baseUrl}/api/v1/agent/tasks?project=Project-1&q=Task`);
+      const payload = await res.json() as { ok: boolean; data: any[] };
+      expect(payload.data.length).toBeGreaterThan(0);
+      expect(payload.data[0].project).toBe("Project-1");
+    } finally {
+      await server.close();
+    }
+  });
 });

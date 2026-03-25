@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   isGitRepository: vi.fn<() => Promise<boolean>>(),
   taskDir: vi.fn<(taskId: string) => string>(),
   repoRoot: vi.fn<() => string>(),
+  applyTaskRollback: vi.fn<() => Promise<any>>(),
 }));
 
 vi.mock("../lib/bootstrap.js", () => ({
@@ -56,6 +57,10 @@ vi.mock("../lib/command-runner.js", () => ({
 vi.mock("../lib/paths.js", () => ({
   taskDir: mocks.taskDir,
   repoRoot: mocks.repoRoot,
+}));
+
+vi.mock("../lib/services/task-rollback.js", () => ({
+  applyTaskRollback: mocks.applyTaskRollback,
 }));
 
 vi.mock("../lib/services/task-services.js", () => ({
@@ -101,6 +106,9 @@ describe.sequential("commands/reprove", () => {
     mocks.taskDir.mockReset().mockImplementation((taskId: string) => `/tmp/${taskId}`);
     mocks.repoRoot.mockReset().mockReturnValue("/tmp");
     consoleSpy.mockClear();
+    // Reset Commander option state between tests (Commander persists option values between parseAsync calls)
+    (reproveCommand as any)._optionValues = {};
+    (reproveCommand as any)._optionValueSources = {};
   });
 
   afterEach(() => {
@@ -162,5 +170,81 @@ describe.sequential("commands/reprove", () => {
       "all",
       "--yes",
     ])).rejects.toThrow(/Invalid --rollback value/);
+  });
+
+  it("auto-selects single waiting task when --task-id is omitted with --yes", async () => {
+    await reproveCommand.parseAsync([
+      "node",
+      "synx",
+      "reprove",
+      "--rollback",
+      "none",
+      "--yes",
+    ]);
+
+    expect(mocks.allTaskIds).toHaveBeenCalled();
+    expect(mocks.reproveTaskService).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: "task-1",
+      rollbackMode: "none",
+    }));
+  });
+
+  it("handles no tasks found", async () => {
+    mocks.allTaskIds.mockResolvedValueOnce([]);
+    await reproveCommand.parseAsync(["node", "synx", "reprove"]);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("No tasks found"));
+  });
+
+  it("handles no tasks waiting for review", async () => {
+    mocks.loadTaskMeta.mockResolvedValueOnce({
+      humanApprovalRequired: false,
+      status: "done",
+      createdAt: "2024"
+    });
+    await reproveCommand.parseAsync(["node", "synx", "reprove"]);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("No tasks are waiting for human review."));
+  });
+
+  it("handles reprove cancellation", async () => {
+    mocks.confirmAction.mockResolvedValueOnce(false);
+    await reproveCommand.parseAsync(["node", "synx", "reprove", "--task-id", "task-1"]);
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Reprove canceled."));
+    expect(mocks.reproveTaskService).not.toHaveBeenCalled();
+  });
+
+  it("handles task-scoped rollback and logs summary", async () => {
+    mocks.applyTaskRollback.mockResolvedValueOnce({
+      requested: 2,
+      trackedRestored: ["file1"],
+      untrackedRemoved: ["file2"],
+      skipped: [],
+      warnings: ["some warning"]
+    });
+
+    await reproveCommand.parseAsync([
+      "node", "synx", "reprove", "--task-id", "task-1", "--rollback", "task", "--yes"
+    ]);
+
+    expect(mocks.applyTaskRollback).toHaveBeenCalledWith("task-1");
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Rollback requested files: 2"));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Tracked files restored: 1"));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Rollback warning: some warning"));
+  });
+
+  it("returns to Synx Front Expert for non-bug tasks", async () => {
+    mocks.loadTaskMeta.mockResolvedValueOnce({
+      taskId: "task-1",
+      type: "Feature",
+      humanApprovalRequired: true,
+      createdAt: "2024"
+    });
+    mocks.confirmAction.mockResolvedValueOnce(true);
+
+    await reproveCommand.parseAsync(["node", "synx", "reprove", "--task-id", "task-1"]);
+
+    expect(mocks.confirmAction).toHaveBeenCalledWith(
+      expect.stringContaining("return it to Synx Front Expert"),
+      true
+    );
   });
 });

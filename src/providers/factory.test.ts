@@ -290,4 +290,53 @@ describe("executeWithFallback", () => {
     const result = await executeWithFallback(config, mockRequest);
     expect(result).toBe(fallbackResult);
   });
+
+  describe("isRecoverableError", () => {
+    // We can't easily export it if it's not exported, but we can test it through executeWithFallback
+    it("treats 404 as non-recoverable and rethrows immediately", async () => {
+      const configWithFallback: any = {
+        type: "mock",
+        model: "primary",
+        fallbackModel: "secondary"
+      };
+      
+      const genMock = vi.fn().mockRejectedValue({ statusCode: 404, transient: false });
+      vi.mocked(MockProvider).mockImplementation(class {
+        generateStructured = genMock;
+      } as any);
+
+      await expect(executeWithFallback(configWithFallback, {} as any))
+        .rejects.toMatchObject({ statusCode: 404 });
+      
+      expect(genMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats other errors as recoverable by default", async () => {
+      const configWithFallback: any = {
+        type: "mock",
+        model: "primary",
+        fallbackModel: "secondary"
+      };
+      
+      const primaryMock = vi.fn().mockRejectedValue(new Error("Generic"));
+      const secondaryMock = vi.fn().mockResolvedValue({ ok: true });
+      
+      vi.mocked(MockProvider)
+        .mockImplementationOnce(class { generateStructured = primaryMock; } as any)
+        .mockImplementationOnce(class { generateStructured = secondaryMock; } as any);
+
+      const res = await executeWithFallback(configWithFallback, {} as any);
+      expect(res).toEqual({ ok: true });
+    });
+
+    it("throws primary error if no fallbacks available", async () => {
+      const config: any = { type: "mock", model: "p" };
+      const genMock = vi.fn().mockRejectedValue(new Error("Fail"));
+      vi.mocked(MockProvider).mockImplementation(class {
+        generateStructured = genMock;
+      } as any);
+      
+      await expect(executeWithFallback(config, {} as any)).rejects.toThrow("Fail");
+    });
+  });
 });

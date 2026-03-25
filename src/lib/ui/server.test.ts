@@ -333,4 +333,189 @@ describe.sequential("lib/ui/server", () => {
       }
     }
   });
+
+  it("POST /api/runtime/pause/resume/stop manages daemon control", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/api/runtime/pause`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "Testing pause" }),
+      });
+      expect(res.status).toBe(200);
+      const payload = await res.json() as { ok: boolean; data: { command: string } };
+      expect(payload.data.command).toBe("pause");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("POST /api/command executes inline commands", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/api/command`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: "status", mode: "command" }),
+      });
+      expect(res.status).toBe(200);
+      const payload = await res.json() as { ok: boolean; data: { lines: any[] } };
+      expect(payload.ok).toBe(true);
+      expect(Array.isArray(payload.data.lines)).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("GET /api/tasks/:id/artifact returns 400 for traversal or invalid scope", async () => {
+    const task = await createTask(baseTaskInput("Artifact test"));
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+    try {
+      const traversal = await fetch(`${server.baseUrl}/api/tasks/${task.taskId}/artifact?scope=done&name=../meta.json`);
+      expect(traversal.status).toBe(400);
+
+      const badScope = await fetch(`${server.baseUrl}/api/tasks/${task.taskId}/artifact?scope=invalid&name=x.js`);
+      expect(badScope.status).toBe(400);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("POST /api/setup handles complex configurations and discovery", async () => {
+    const configPath = path.join(fixture.repoRoot, ".ai-agents", "config");
+    await fs.mkdir(configPath, { recursive: true });
+    await writeJson(path.join(configPath, "project.json"), {
+      projectName: "setup-test", language: "TS", framework: "Node", humanReviewer: "h", tasksDir: "t",
+    });
+
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+    try {
+      // Test different provider types
+      const providers = ["google", "anthropic", "lmstudio"];
+      for (const p of providers) {
+        const res = await fetch(`${server.baseUrl}/api/setup`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            providerType: p, humanReviewer: "tester", model: "model-v1", force: true,
+          }),
+        });
+        expect(res.status).toBe(200);
+      }
+
+      // Test plannerSeparate and agentProviders
+      const complexRes = await fetch(`${server.baseUrl}/api/setup`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          providerType: "openai-compatible",
+          humanReviewer: "tester",
+          model: "gpt-4",
+          force: true,
+          plannerSeparate: true,
+          plannerModel: "gpt-3.5",
+          agentProviders: [{ agentName: "Synx Front Expert", providerType: "mock", model: "m" }],
+        }),
+      });
+      expect(complexRes.status).toBe(200);
+
+      // Test discover-models (mock type)
+      const discoverRes = await fetch(`${server.baseUrl}/api/setup/discover-models`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ providerType: "lmstudio", baseUrl: "http://localhost:1234" }),
+      });
+      expect(discoverRes.status).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("POST /api/setup/discover-models returns 400 for invalid provider", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/api/setup/discover-models`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ providerType: "invalid" }),
+      });
+      expect(res.status).toBe(400);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves static 404 for unknown routes", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: false,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/api/unknown-route`);
+      expect(res.status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("POST /api/tasks and /api/project return 400 for missing fields", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: true,
+    });
+    try {
+      const taskRes = await fetch(`${server.baseUrl}/api/tasks`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "" }),
+      });
+      expect(taskRes.status).toBe(400);
+
+      const projectRes = await fetch(`${server.baseUrl}/api/project`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "" }),
+      });
+      expect(projectRes.status).toBe(400);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("serves SPA fallback for unrecognized GET routes", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: false,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/some/random/route`);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("UI not built"); // serveSpaSentinel fallback
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("POST /api/project blocked in read-only mode", async () => {
+    const server = await startUiServer({
+      host: "127.0.0.1", port: 0, html: "<html></html>", enableMutations: false,
+    });
+    try {
+      const res = await fetch(`${server.baseUrl}/api/project`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: "New setup" }),
+      });
+      expect(res.status).toBe(405);
+    } finally {
+      await server.close();
+    }
+  });
 });

@@ -25,7 +25,7 @@ vi.mock("../api/stream.js", () => ({
   useStreamTaskUpdates: () => ({ connected: true, reconnectIn: null, reconnect: vi.fn() }),
 }));
 
-import { fetchKanban, approveTask } from "../api/tasks.js";
+import { fetchKanban, approveTask, reproveTask } from "../api/tasks.js";
 import { KanbanPage } from "./KanbanPage.js";
 
 const EMPTY_BOARD: KanbanBoard = {
@@ -60,6 +60,15 @@ describe("KanbanPage", () => {
     await screen.findByText("Waiting Human Task");
     await userEvent.click(screen.getByTitle("Approve"));
     expect(approveTask).toHaveBeenCalledWith("wh-1");
+  });
+
+  it("reprove button opens the modal and calls reproveTask on confirm", async () => {
+    render(<KanbanPage />);
+    await screen.findByText("Waiting Human Task");
+    await userEvent.click(screen.getByTitle("Reprove"));
+    expect(screen.getByText("Reprove task")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reprove", exact: true }));
+    expect(reproveTask).toHaveBeenCalledWith("wh-1", "");
   });
 
   it("text filter hides cards that do not match the query", async () => {

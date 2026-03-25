@@ -16,6 +16,15 @@ export default defineConfig({
         "src/lib/types.ts",
         "src/lib/constants.ts",
         "**/*.test.ts",
+        // Pure barrel re-exports — no executable code of their own
+        "src/lib/logging.ts",
+        "src/lib/qa-context.ts",
+        "src/lib/runtime.ts",
+        "src/lib/workspace-tools.ts",
+        "src/lib/setup-providers.ts",
+        // Pure TypeScript type definitions — no executable statements
+        "src/lib/observability/dto.ts",
+        "src/providers/provider.ts",
       ],
       thresholds: {
         global: {

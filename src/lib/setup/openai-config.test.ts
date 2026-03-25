@@ -49,4 +49,26 @@ describe("lib/setup/openai-config", () => {
     expect(config.apiKey).toBe("sk-123");
     expect(config.model).toBe("gpt-4");
   });
+
+  it("configures openai compatible provider in env mode with default variable names", async () => {
+    vi.mocked(selectOption)
+      .mockResolvedValueOnce("openai")      // preset
+      .mockResolvedValueOnce("env")         // connection mode: env
+      .mockResolvedValueOnce("default");    // env var mode: default
+    vi.mocked(resolveOpenAiCompatiblePreset).mockReturnValue({
+      label: "OpenAI",
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyLabel: "Key",
+      modelExamples: ["gpt-4"],
+      defaultBaseUrlEnv: "OPENAI_BASE_URL",
+      defaultApiKeyEnv: "OPENAI_API_KEY",
+    } as any);
+    vi.mocked(chooseOpenAiCompatibleModel).mockResolvedValue("gpt-4");
+
+    const config = await configureOpenAiCompatible(currentGlobal);
+
+    expect(config.type).toBe("openai-compatible");
+    expect(config.apiKey).toBeUndefined();
+    expect(config.model).toBe("gpt-4");
+  });
 });

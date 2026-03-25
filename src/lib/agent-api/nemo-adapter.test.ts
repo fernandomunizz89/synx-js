@@ -68,4 +68,73 @@ describe("agent-api/nemo-adapter", () => {
       expect(sample).toContain(`${baseUrl}/api/v1/nemo/actions/${action.name}`);
     }
   });
+
+  it("dispatches synx_create_task and calls createTaskService with parsed params", async () => {
+    mocks.getTaskDetail.mockResolvedValue({ taskId: "task-1", status: "new", doneArtifacts: [], history: [] });
+    const result = await dispatchNemoAction("synx_create_task", {
+      title: "Build feature",
+      rawRequest: "Implement the login flow",
+      typeHint: "Feature",
+      relatedFiles: ["src/auth.ts"],
+      notes: ["Keep it simple"],
+    }, { enableMutations: true });
+
+    expect(mocks.createTaskService).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Build feature",
+      rawRequest: "Implement the login flow",
+    }));
+    expect(result.output_data).toBeDefined();
+  });
+
+  it("dispatches synx_list_tasks and filters by query", async () => {
+    mocks.listTaskSummaries.mockResolvedValue([
+      { taskId: "t-1", title: "Fix login bug", status: "in_progress", project: "web" },
+      { taskId: "t-2", title: "Add dashboard", status: "new", project: "web" },
+    ] as any);
+
+    const result = await dispatchNemoAction("synx_list_tasks", { q: "login" }, { enableMutations: true });
+    expect((result.output_data as any).data).toHaveLength(1);
+    expect((result.output_data as any).data[0].taskId).toBe("t-1");
+  });
+
+  it("dispatches synx_get_task and handles missing taskId", async () => {
+    const result = await dispatchNemoAction("synx_get_task", {}, { enableMutations: true });
+    expect(result.output_data.ok).toBe(false);
+    expect(result.output_data.error).toBe("taskId is required.");
+  });
+
+  it("dispatches synx_list_tasks with status and project filters", async () => {
+    mocks.listTaskSummaries.mockResolvedValue([
+      { taskId: "t-1", status: "new", project: "p1" },
+      { taskId: "t-2", status: "done", project: "p1" },
+      { taskId: "t-3", status: "new", project: "p2" },
+    ] as any);
+
+    const res1 = await dispatchNemoAction("synx_list_tasks", { status: "new" }, { enableMutations: true });
+    expect((res1.output_data as any).data).toHaveLength(2);
+
+    const res2 = await dispatchNemoAction("synx_list_tasks", { project: "p2" }, { enableMutations: true });
+    expect((res2.output_data as any).data).toHaveLength(1);
+  });
+
+  it("dispatches synx_approve_task and synx_reprove_task", async () => {
+    mocks.getTaskDetail.mockResolvedValue({ 
+      taskId: "task-1", 
+      status: "waiting_human", 
+      doneArtifacts: [], 
+      history: [] 
+    });
+    
+    await dispatchNemoAction("synx_approve_task", { taskId: "task-1" }, { enableMutations: true });
+    expect(mocks.approveTaskService).toHaveBeenCalledWith("task-1");
+
+    await dispatchNemoAction("synx_reprove_task", { taskId: "task-1", reason: "fix it" }, { enableMutations: true });
+    expect(mocks.reproveTaskService).toHaveBeenCalledWith({ taskId: "task-1", reason: "fix it" });
+  });
+
+  it("dispatches synx_list_pending_review", async () => {
+    mocks.listReviewQueue.mockResolvedValue([{ taskId: "t-q" }]);
+    const result = await dispatchNemoAction("synx_list_pending_review", {}, { enableMutations: true });
+    expect((result.output_data as any).data).toHaveLength(1);
+  });
 });

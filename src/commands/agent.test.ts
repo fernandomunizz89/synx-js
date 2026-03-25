@@ -378,5 +378,62 @@ describe("commands/agent", () => {
         }),
       );
     });
+
+    it("handles interactive openai-compatible overrides", async () => {
+      vi.mocked(selectOption)
+        .mockResolvedValueOnce("generic") // Output schema
+        .mockResolvedValueOnce("openai-compatible"); // Provider
+      vi.mocked(promptTextWithDefault)
+        .mockResolvedValueOnce("Custom Name") // Display name
+        .mockResolvedValueOnce("gpt-custom") // Model
+        .mockResolvedValueOnce("https://custom.api/v1") // Base URL
+        .mockResolvedValueOnce("CUSTOM_API_KEY"); // API key env
+
+      await runAgent(["create", "--id", "custom-openai"]);
+
+      expect(writeJson).toHaveBeenCalledWith(
+        expect.stringContaining("custom-openai.json"),
+        expect.objectContaining({
+          provider: expect.objectContaining({
+            baseUrl: "https://custom.api/v1",
+            apiKeyEnv: "CUSTOM_API_KEY",
+          }),
+        })
+      );
+    });
+
+    it("aborts when agent exists and user chooses not to overwrite", async () => {
+      vi.mocked(exists).mockResolvedValue(true);
+      const { confirmAction } = await import("../lib/interactive.js");
+      vi.mocked(confirmAction).mockResolvedValueOnce(false);
+
+      await runAgent(["create", "--id", "existing-agent"]);
+
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Aborted"));
+      expect(writeJson).not.toHaveBeenCalled();
+    });
+
+    it("skips prompt creation if it already exists", async () => {
+      vi.mocked(exists)
+        .mockResolvedValueOnce(false) // Agent JSON does not exist
+        .mockResolvedValueOnce(true); // Prompt file EXISTS
+
+      await runAgent(["create", "--id", "existing-prompt", "--name", "Test"]);
+
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Prompt already exists, skipped"));
+      expect(writeText).not.toHaveBeenCalled();
+    });
+
+    it("throws error for invalid task types", async () => {
+      await expect(runAgent(["create", "--id", "v1", "--task-types", "InvalidType"])).rejects.toThrow(/invalid --task-types/i);
+    });
+
+    it("throws error for invalid risk profile", async () => {
+      await expect(runAgent(["create", "--id", "v2", "--risk-profile", "extreme"])).rejects.toThrow(/invalid --risk-profile/i);
+    });
+
+    it("throws error for invalid verification modes", async () => {
+      await expect(runAgent(["create", "--id", "v3", "--verification-modes", "none"])).rejects.toThrow(/invalid --verification-modes/i);
+    });
   });
 });
