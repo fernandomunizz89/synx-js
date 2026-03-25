@@ -40,6 +40,8 @@ const WAITING_HUMAN_TARGETS: Partial<Record<TaskStatus, "approve" | "reprove">> 
   in_progress: "reprove",
 };
 
+const TERMINAL_STATUSES = new Set<TaskStatus>(["done", "archived"]);
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDuration(ms: number): string {
@@ -245,7 +247,7 @@ function DraggableCard(props: {
   onCancel: (id: string) => void;
 }) {
   const { card } = props;
-  const draggable = card.status === "waiting_human";
+  const draggable = !TERMINAL_STATUSES.has(card.status);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: card.taskId,
@@ -406,6 +408,37 @@ function Column({
   );
 }
 
+// ── Trash zone ────────────────────────────────────────────────────────────────
+
+function TrashZone({ visible }: { visible: boolean }) {
+  const { isOver, setNodeRef } = useDroppable({ id: "trash" });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        margin: "0 20px 16px",
+        padding: "10px 20px",
+        borderRadius: 8,
+        border: `2px dashed ${isOver ? "var(--red)" : visible ? "color-mix(in srgb, var(--red) 40%, transparent)" : "transparent"}`,
+        background: isOver ? "color-mix(in srgb, var(--red) 10%, transparent)" : "transparent",
+        color: isOver ? "var(--red)" : visible ? "color-mix(in srgb, var(--red) 50%, transparent)" : "transparent",
+        fontSize: 12,
+        fontWeight: 500,
+        transition: "border-color 0.15s, background 0.15s, color 0.15s",
+        pointerEvents: visible ? "auto" : "none",
+        flexShrink: 0,
+      }}
+    >
+      🗑 Drop here to cancel task
+    </div>
+  );
+}
+
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 
 type GroupBy = "status" | "project" | "milestone";
@@ -538,10 +571,18 @@ export function KanbanPage() {
     if (!over || !active.data.current) return;
 
     const card = active.data.current.card as KanbanCard;
-    const targetStatus = over.id as TaskStatus;
-    const action = WAITING_HUMAN_TARGETS[targetStatus];
+    const target = over.id as string;
 
-    if (card.status !== "waiting_human" || !action) return;
+    // Trash zone: cancel any non-terminal card
+    if (target === "trash") {
+      void handle(() => cancelTask(card.taskId));
+      return;
+    }
+
+    // Column targets: only waiting_human cards
+    if (card.status !== "waiting_human") return;
+    const action = WAITING_HUMAN_TARGETS[target as TaskStatus];
+    if (!action) return;
 
     if (action === "approve") {
       void handle(() => approveTask(card.taskId));
@@ -601,17 +642,15 @@ export function KanbanPage() {
 
   const totalCards = filteredCards.length;
 
-  // Determine per-column drag state (only relevant in status groupBy)
+  // Teal highlight: only waiting_human cards dragged over valid column targets
   const isDragTarget = (colId: string) =>
     draggingCard?.status === "waiting_human" &&
     groupBy === "status" &&
     Object.prototype.hasOwnProperty.call(WAITING_HUMAN_TARGETS, colId);
 
-  const isInvalidTarget = (colId: string) =>
-    draggingCard?.status === "waiting_human" &&
-    groupBy === "status" &&
-    !Object.prototype.hasOwnProperty.call(WAITING_HUMAN_TARGETS, colId) &&
-    colId !== "waiting_human";
+  const isInvalidTarget = (_colId: string) => false; // columns don't show red — trash zone handles that
+
+  const trashVisible = draggingCard !== null && !TERMINAL_STATUSES.has(draggingCard.status);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -692,6 +731,8 @@ export function KanbanPage() {
               />
             ))}
           </div>
+
+          <TrashZone visible={trashVisible} />
 
           <DragOverlay dropAnimation={null}>
             {draggingCard && (

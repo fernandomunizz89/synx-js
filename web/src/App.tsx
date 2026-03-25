@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Header } from "./components/layout/Header.js";
 import { TabBar, type TabId } from "./components/layout/TabBar.js";
+import { ErrorBoundary } from "./components/layout/ErrorBoundary.js";
 import { TasksPage } from "./pages/TasksPage.js";
 import { KanbanPage } from "./pages/KanbanPage.js";
 import { StreamPage } from "./pages/StreamPage.js";
@@ -65,18 +66,20 @@ export function App() {
       <Header taskCount={taskCount} runtimeStatus={runtimeStatus} />
       <TabBar active={tab} onChange={changeTab} reviewCount={reviewCount} />
       <main style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-        {tab === "tasks"   && <TasksPage />}
-        {tab === "kanban"  && <KanbanPage />}
+        {tab === "tasks"   && <ErrorBoundary label="Tasks"><TasksPage /></ErrorBoundary>}
+        {tab === "kanban"  && <ErrorBoundary label="Kanban"><KanbanPage /></ErrorBoundary>}
         {tab === "metrics" && (
-          <Suspense fallback={
-            <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 13 }}>
-              Loading metrics…
-            </div>
-          }>
-            <MetricsPage />
-          </Suspense>
+          <ErrorBoundary label="Metrics">
+            <Suspense fallback={
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 13 }}>
+                Loading metrics…
+              </div>
+            }>
+              <MetricsPage />
+            </Suspense>
+          </ErrorBoundary>
         )}
-        {tab === "stream"  && <StreamPage />}
+        {tab === "stream"  && <ErrorBoundary label="Stream"><StreamPage /></ErrorBoundary>}
       </main>
     </div>
   );
