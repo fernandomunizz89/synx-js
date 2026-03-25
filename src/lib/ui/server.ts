@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { URL } from "node:url";
 import { approveTaskService, cancelTaskService, reproveTaskService, createTaskService } from "../services/task-services.js";
-import { getKanbanBoard, getMetricsOverview, getOverview, getTaskDetail, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
+import { getKanbanBoard, getMetricsOverview, getOverview, getTaskDetail, invalidateQueryCache, listReviewQueue, listTaskSummaries } from "../observability/queries.js";
 import { applyTaskRollback } from "../services/task-rollback.js";
 import { loadTaskMeta } from "../task.js";
 import { createUiRealtime, type UiStreamEvent } from "./realtime.js";
@@ -409,6 +409,7 @@ export function createUiRequestHandler(options: {
         const taskId = decodeURIComponent(approveMatch[1]);
         await assertTaskExists(taskId);
         await approveTaskService(taskId);
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId, status: "approved" } });
         return;
       }
@@ -422,6 +423,7 @@ export function createUiRequestHandler(options: {
         const rollbackMode = normalizeString(body.rollbackMode) === "task" ? "task" : "none";
         const rollbackSummary = rollbackMode === "task" ? await applyTaskRollback(taskId) : null;
         const result = await reproveTaskService({ taskId, reason, rollbackMode, rollbackStep, rollbackSummary });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { ...result, status: "reproved", rollbackSummary, rollbackStep } });
         return;
       }
@@ -445,6 +447,7 @@ export function createUiRequestHandler(options: {
           taskId,
           reason: normalizeString(body.reason),
         });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId, status: "cancel_requested" } });
         return;
       }
@@ -844,6 +847,7 @@ export function createUiRequestHandler(options: {
             qaPreferences: { e2ePolicy: e2ePolicy as "auto" | "required" | "skip", e2eFramework: "auto", objective: "" },
           },
         });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId: created.taskId, taskPath: created.taskPath } });
         return;
       }
@@ -870,6 +874,7 @@ export function createUiRequestHandler(options: {
             qaPreferences: { e2ePolicy: "auto", e2eFramework: "auto", objective: "" },
           },
         });
+        invalidateQueryCache();
         sendJson(res, 200, { ok: true, data: { taskId: created.taskId, taskPath: created.taskPath } });
         return;
       }

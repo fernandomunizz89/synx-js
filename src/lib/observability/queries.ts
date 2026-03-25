@@ -22,6 +22,34 @@ import type {
   TaskSummaryDto,
 } from "./dto.js";
 
+// ── TTL cache ──────────────────────────────────────────────────────────────────
+//
+// Simple in-memory cache to avoid re-reading all task files on every HTTP request.
+// Bypassed entirely in test environments to prevent cross-test pollution.
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
+const _cache = new Map<string, CacheEntry<unknown>>();
+
+async function withTTL<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  if (process.env.NODE_ENV === "test") return fn();
+  const entry = _cache.get(key) as CacheEntry<T> | undefined;
+  if (entry && entry.expiresAt > Date.now()) return entry.data;
+  const data = await fn();
+  _cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  return data;
+}
+
+/** Call after any mutation so the next read reflects the new state. */
+export function invalidateQueryCache(): void {
+  _cache.clear();
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
 function sumTaskConsumption(meta: TaskMeta): TaskConsumptionDto {
   const estimatedInputTokens = meta.history.reduce((sum, item) => sum + Number(item.estimatedInputTokens || 0), 0);
   const estimatedOutputTokens = meta.history.reduce((sum, item) => sum + Number(item.estimatedOutputTokens || 0), 0);
@@ -110,26 +138,28 @@ async function readLastLinesSafe(filePath: string, maxLines: number): Promise<st
 }
 
 export async function listTaskSummaries(): Promise<TaskSummaryDto[]> {
-  const taskIds = await allTaskIds();
-  const settled = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
-  const metas = settled
-    .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
-    .map((item) => item.value);
+  return withTTL("listTaskSummaries", 3_000, async () => {
+    const taskIds = await allTaskIds();
+    const settled = await Promise.allSettled(taskIds.map((taskId) => loadTaskMeta(taskId)));
+    const metas = settled
+      .filter((item): item is PromiseFulfilledResult<TaskMeta> => item.status === "fulfilled")
+      .map((item) => item.value);
 
-  const lockMap = await listFileLocks().catch(() => ({ version: 1 as const, locks: {}, byTask: {}, updatedAt: nowIso() }));
-  const snapshot = buildProjectGraphSnapshot(metas, { lockMap });
+    const lockMap = await listFileLocks().catch(() => ({ version: 1 as const, locks: {}, byTask: {}, updatedAt: nowIso() }));
+    const snapshot = buildProjectGraphSnapshot(metas, { lockMap });
 
-  return metas
-    .map((meta) => mapTaskSummary({
-      meta,
-      childTaskIds: snapshot.childTaskIdsByParent.get(meta.taskId) || [],
-      blockedBy: snapshot.nodeByTaskId.get(meta.taskId)?.blockedBy || [],
-      ready: snapshot.nodeByTaskId.get(meta.taskId)?.ready || false,
-      ownershipBoundaries: snapshot.nodeByTaskId.get(meta.taskId)?.ownershipBoundaries || [],
-      mergeStrategy: snapshot.nodeByTaskId.get(meta.taskId)?.mergeStrategy || "auto-rebase",
-      projectProgress: snapshot.projectProgressByParent.get(meta.taskId) || null,
-    }))
-    .sort(byUpdatedDesc);
+    return metas
+      .map((meta) => mapTaskSummary({
+        meta,
+        childTaskIds: snapshot.childTaskIdsByParent.get(meta.taskId) || [],
+        blockedBy: snapshot.nodeByTaskId.get(meta.taskId)?.blockedBy || [],
+        ready: snapshot.nodeByTaskId.get(meta.taskId)?.ready || false,
+        ownershipBoundaries: snapshot.nodeByTaskId.get(meta.taskId)?.ownershipBoundaries || [],
+        mergeStrategy: snapshot.nodeByTaskId.get(meta.taskId)?.mergeStrategy || "auto-rebase",
+        projectProgress: snapshot.projectProgressByParent.get(meta.taskId) || null,
+      }))
+      .sort(byUpdatedDesc);
+  });
 }
 
 export async function listReviewQueue(): Promise<ReviewQueueItemDto[]> {
@@ -307,8 +337,10 @@ export async function getKanbanBoard(): Promise<KanbanBoardDto> {
 }
 
 export async function getMetricsOverview(hours = 24): Promise<CollaborationMetricsReport> {
-  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : 24;
-  const untilMs = Date.now();
-  const sinceMs = untilMs - Math.round(safeHours * 60 * 60 * 1000);
-  return buildCollaborationMetricsReport({ sinceMs, untilMs });
+  return withTTL(`getMetricsOverview:${hours}`, 15_000, async () => {
+    const safeHours = Number.isFinite(hours) && hours > 0 ? hours : 24;
+    const untilMs = Date.now();
+    const sinceMs = untilMs - Math.round(safeHours * 60 * 60 * 1000);
+    return buildCollaborationMetricsReport({ sinceMs, untilMs });
+  });
 }
