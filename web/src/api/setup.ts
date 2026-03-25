@@ -43,9 +43,11 @@ export interface SaveSetupInput {
   humanReviewer: string;
   providerType: ProviderType;
   model: string;
+  apiKey?: string;
   plannerSeparate: boolean;
   plannerProviderType: ProviderType;
   plannerModel: string;
+  plannerApiKey?: string;
   agentProviders: AgentProviderInput[];
 }
 
@@ -53,11 +55,11 @@ export async function fetchUiConfig(): Promise<UiConfigResponse> {
   return apiFetch<UiConfigResponse>("/api/config");
 }
 
-export async function discoverModels(providerType: ProviderType): Promise<DiscoverModelsResponse> {
+export async function discoverModels(providerType: ProviderType, apiKey?: string): Promise<DiscoverModelsResponse> {
   return apiFetch<DiscoverModelsResponse>("/api/setup/discover-models", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ providerType }),
+    body: JSON.stringify({ providerType, ...(apiKey ? { apiKey } : {}) }),
   });
 }
 

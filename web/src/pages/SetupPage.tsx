@@ -70,10 +70,13 @@ export function SetupPage() {
   const [humanReviewer, setHumanReviewer] = useState("");
   const [providerType, setProviderType] = useState<ProviderType>("openai-compatible");
   const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [plannerSeparate, setPlannerSeparate] = useState(true);
   const [plannerProviderType, setPlannerProviderType] = useState<ProviderType>("openai-compatible");
   const [plannerModel, setPlannerModel] = useState("");
+  const [plannerApiKey, setPlannerApiKey] = useState("");
   const [agentState, setAgentState] = useState<Record<string, AgentState>>({});
+  const [apiKeyByProvider, setApiKeyByProvider] = useState<Record<string, string>>({});
   const [modelsByProvider, setModelsByProvider] = useState<Record<string, string[]>>({});
   const [discoveryErrorByProvider, setDiscoveryErrorByProvider] = useState<Record<string, string>>({});
   const discoveryAttemptedRef = useRef<Record<string, boolean>>({});
@@ -119,14 +122,14 @@ export function SetupPage() {
     void init();
   }, [init]);
 
-  const discover = useCallback(async (pType: ProviderType, force = false) => {
+  const discover = useCallback(async (pType: ProviderType, force = false, key?: string) => {
     if (pType === "mock") return;
     if (discoveryInFlightRef.current[pType]) return;
     if (!force && discoveryAttemptedRef.current[pType]) return;
     discoveryInFlightRef.current[pType] = true;
     discoveryAttemptedRef.current[pType] = true;
     try {
-      const data = await discoverModels(pType);
+      const data = await discoverModels(pType, key);
       setModelsByProvider((prev) => ({ ...prev, [pType]: data.models || [] }));
       const nextMessage = !data.reachable
         ? (data.message || "Provider is unreachable.")
@@ -178,9 +181,11 @@ export function SetupPage() {
         humanReviewer: humanReviewer.trim(),
         providerType,
         model: model.trim(),
+        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
         plannerSeparate,
         plannerProviderType,
         plannerModel: plannerModel.trim(),
+        ...(plannerApiKey.trim() ? { plannerApiKey: plannerApiKey.trim() } : {}),
         agentProviders: AGENTS.map((agentName) => ({
           agentName,
           providerType: agentState[agentName]?.providerType ?? providerType,
@@ -222,6 +227,21 @@ export function SetupPage() {
         >
           {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
+        {providerType !== "mock" && providerType !== "lmstudio" && (
+          <>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>API key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setApiKeyByProvider((prev) => ({ ...prev, [providerType]: e.target.value }));
+              }}
+              style={{ ...inputStyle(), minWidth: 220 }}
+              placeholder="sk-… (leave blank to keep stored)"
+            />
+          </>
+        )}
         <label style={{ fontSize: 12, color: "var(--muted)" }}>Model</label>
         <input
           value={model}
@@ -234,7 +254,7 @@ export function SetupPage() {
         <datalist id={`models-dispatcher-${providerType}`}>
           {modelOptionsWithCurrent(providerType, modelsByProvider, model).map((m) => <option key={m} value={m} />)}
         </datalist>
-        <button type="button" onClick={() => void discover(providerType, true)} style={selectStyle()}>
+        <button type="button" onClick={() => void discover(providerType, true, apiKeyByProvider[providerType] || apiKey || undefined)} style={selectStyle()}>
           Refresh models
         </button>
       </div>
@@ -260,6 +280,18 @@ export function SetupPage() {
             >
               {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
+            {plannerProviderType !== "mock" && plannerProviderType !== "lmstudio" && (
+              <input
+                type="password"
+                value={plannerApiKey}
+                onChange={(e) => {
+                  setPlannerApiKey(e.target.value);
+                  setApiKeyByProvider((prev) => ({ ...prev, [plannerProviderType]: e.target.value }));
+                }}
+                style={{ ...inputStyle(), minWidth: 220 }}
+                placeholder="API key (leave blank to keep stored)"
+              />
+            )}
             <input
               value={plannerModel}
               onChange={(e) => setPlannerModel(e.target.value)}
@@ -271,7 +303,7 @@ export function SetupPage() {
             <datalist id={`models-planner-${plannerProviderType}`}>
               {modelOptionsWithCurrent(plannerProviderType, modelsByProvider, plannerModel).map((m) => <option key={m} value={m} />)}
             </datalist>
-            <button type="button" onClick={() => void discover(plannerProviderType, true)} style={selectStyle()}>
+            <button type="button" onClick={() => void discover(plannerProviderType, true, apiKeyByProvider[plannerProviderType] || plannerApiKey || undefined)} style={selectStyle()}>
               Refresh models
             </button>
           </>
@@ -321,7 +353,7 @@ export function SetupPage() {
               <datalist id={`models-agent-${agentName}-${row.providerType}`}>
                 {modelOptionsWithCurrent(row.providerType, modelsByProvider, row.model).map((m) => <option key={m} value={m} />)}
               </datalist>
-              <button type="button" onClick={() => void discover(row.providerType, true)} style={selectStyle()}>
+              <button type="button" onClick={() => void discover(row.providerType, true, apiKeyByProvider[row.providerType] || undefined)} style={selectStyle()}>
                 Refresh models
               </button>
             </div>
